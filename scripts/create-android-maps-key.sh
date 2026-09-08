@@ -35,13 +35,20 @@ echo "  package: ${PACKAGE_NAME}"
 echo "  SHA-1:   ${SHA1_INPUT}"
 echo "  APIs:    Maps SDK for Android + Places API (New)"
 
-gcloud services api-keys create \
+CREATE_LOG="$(mktemp)"
+if ! gcloud services api-keys create \
   --display-name="${DISPLAY_NAME}" \
   --allowed-application="sha1_fingerprint=${SHA1},package_name=${PACKAGE_NAME}" \
   --api-target='service=maps-android-backend.googleapis.com' \
   --api-target='service=places.googleapis.com' \
   --project="${PROJECT_ID}" \
-  --quiet >/dev/null
+  --quiet >"${CREATE_LOG}" 2>&1; then
+  echo "API key creation failed:" >&2
+  cat "${CREATE_LOG}" >&2
+  rm -f "${CREATE_LOG}"
+  exit 1
+fi
+rm -f "${CREATE_LOG}"
 
 # `gcloud services api-keys create` is backed by a long-running operation. Some
 # Cloud SDK versions return the operation resource from --format output instead

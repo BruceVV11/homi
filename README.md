@@ -15,11 +15,14 @@ Homi surfaces what needs attention when it becomes relevant: household routines,
 ## Permanent identifiers
 
 - Android application ID: `za.co.theconceptlab.homi`
-- Google Cloud / Firebase project: `homi-508000`
+- Google Cloud / Firebase project ID: `homi-ee80a`
+- Google Cloud / Firebase project number: `883068189841`
 - Local project root: `C:\ConceptLab\Projects\homi`
 - Repository: `BruceVV11/homi`
 
-These identifiers should be used consistently for Firebase Android registration, Google sign-in, Maps restrictions, App Check, Play Console and signing configuration.
+These identifiers are the source of truth for Firebase Android registration, Google sign-in, Maps restrictions, App Check, Play Console and signing configuration.
+
+The previously created Google Cloud project `homi-508000` is not used by Homi and must not be referenced by new configuration.
 
 ## Platform and development
 
@@ -31,7 +34,7 @@ Do not open only the generated `android/` subfolder for normal Flutter developme
 
 ## Cloud architecture
 
-The first implementation uses Firebase Authentication, Cloud Firestore, Firebase Cloud Messaging and App Check. User-owned documents/media use Google Drive. Trusted-person maps use Google Maps Platform and Android location services.
+The first implementation uses Firebase Authentication, Cloud Firestore, Firebase Cloud Messaging and App Check in `homi-ee80a`. User-owned documents/media use Google Drive. Trusted-person maps use Google Maps Platform and Android location services.
 
 Realtime Database is not required for the first implementation. Homi will first validate Firestore real-time listeners and actual location write volume before introducing another live-state database.
 
@@ -39,6 +42,7 @@ Realtime Database is not required for the first implementation. Homi will first 
 
 Start with:
 
+- [`documentation/START-HERE-v0.1.0.md`](documentation/START-HERE-v0.1.0.md)
 - [`documentation/FIREBASE-CLOUD-SETUP.md`](documentation/FIREBASE-CLOUD-SETUP.md)
 - [`documentation/ARCHITECTURE.md`](documentation/ARCHITECTURE.md)
 - [`documentation/LOCATION_SAFETY.md`](documentation/LOCATION_SAFETY.md)

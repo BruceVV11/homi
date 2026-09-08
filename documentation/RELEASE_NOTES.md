@@ -51,8 +51,9 @@
 - Added `scripts/register-firebase-android-certs.sh` to register both fingerprints against the correct Firebase Android app and refresh `google-services.json` automatically from Cloud Shell.
 - Firebase Android certificate registration completed successfully and refreshed `/home/brucevanvliet5/homi-google-services.json`.
 - The first Maps/Places key was created with the correct Android package, SHA-1 and API restrictions, but the helper then incorrectly treated the create operation resource name as the key resource name when calling `get-key-string`.
-- Fixed `scripts/create-android-maps-key.sh` to resolve the final key resource after the long-running operation, retrieve the key by actual key ID, avoid printing the secret value to the terminal, and instead write a mode-600 `~/homi-secrets.properties` file for download to the local project.
-- The initially printed development Maps key must be rotated before local use because its value was exposed during troubleshooting.
+- Fixed `scripts/create-android-maps-key.sh` to resolve the final key resource after the long-running operation and retrieve the key by actual key ID.
+- A second troubleshooting run showed that this Cloud SDK writes the create operation result, including the generated key string, to stderr even when stdout is redirected. The helper now captures both stdout and stderr into a temporary file, prints that log only on failure, and deletes the log immediately on success.
+- Any Maps key whose value appeared in troubleshooting output must be deleted before local use. The next recreated key should only be written to mode-600 `~/homi-secrets.properties` and must not appear in terminal output.
 
 ### Compile/device checkpoint still required
 
@@ -60,8 +61,9 @@ The source pass is not yet claimed as an installed device build.
 
 Next checkpoint:
 
-1. delete the exposed first development Maps key and recreate it with the corrected helper;
-2. download the fresh `~/homi-secrets.properties` and refreshed `homi-google-services.json` to the local project;
-3. run `scripts\enable-firebase-android.ps1` and sync the Maps secret;
-4. run `flutter analyze`, `flutter test`, and `flutter run` on the real Android device;
-5. register the App Check debug token after the first debug launch.
+1. delete the currently exposed development Maps key and recreate it with the latest helper;
+2. confirm the recreated key value is not printed anywhere in Cloud Shell;
+3. download the fresh `~/homi-secrets.properties` and refreshed `homi-google-services.json` to the local project;
+4. run `scripts\enable-firebase-android.ps1` and sync the Maps secret;
+5. run `flutter analyze`, `flutter test`, and `flutter run` on the real Android device;
+6. register the App Check debug token after the first debug launch.

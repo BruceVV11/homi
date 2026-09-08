@@ -8,80 +8,131 @@ These identifiers are authoritative for Homi:
 
 - Local root: `C:\ConceptLab\Projects\homi`
 - GitHub: `BruceVV11/homi`
-- Google Cloud / Firebase project ID: `homi-508000`
-- Google Cloud project number: `429164377824`
+- Google Cloud / Firebase project ID: `homi-ee80a`
+- Google Cloud / Firebase project number: `883068189841`
 - Android package: `za.co.theconceptlab.homi`
 
-Do not configure a different Firebase project merely because its display name is also `homi`. In particular, `homi-ee80a` is not the Homi backend used by this repository. The bootstrap script now verifies both the project ID and project number before making cloud changes.
+The previously created Google Cloud project `homi-508000` is not used. Do not configure credentials, OAuth clients, Maps keys, Firebase apps or App Check against it.
 
-## Stage A - Get the repository locally
+## Stage A - Update the local repository
 
-The local Homi folder is intended to be the repository root.
-
-If `C:\ConceptLab\Projects\homi` is empty, open PowerShell and run:
+Open PowerShell:
 
 ```powershell
-cd C:\ConceptLab\Projects
-git clone https://github.com/BruceVV11/homi.git homi
-cd .\homi
+cd C:\ConceptLab\Projects\homi
+git pull
 ```
-
-Git can use the existing target directory when it is empty. If the folder is no longer empty, stop rather than deleting anything and inspect its contents first.
 
 For normal development, open `C:\ConceptLab\Projects\homi` in Android Studio.
 
-## Stage B - Automate Google Cloud/Firebase provisioning
+## Stage B - Prepare Cloud Shell for the correct Firebase project
 
-Open Google Cloud Shell while `homi-508000` is selected and run:
+Open Google Cloud Shell and run:
 
 ```bash
-gcloud billing accounts list
-git clone https://github.com/BruceVV11/homi.git
-cd homi
-HOMI_BILLING_ACCOUNT=YOUR-BILLING-ACCOUNT-ID bash scripts/bootstrap-google-cloud.sh
+gcloud config set project homi-ee80a
+gcloud projects describe homi-ee80a --format='table(projectId,projectNumber,name)'
 ```
 
-If the Cloud Shell clone already exists, update it before rerunning:
+Expected identity:
+
+```text
+PROJECT_ID   PROJECT_NUMBER   NAME
+homi-ee80a   883068189841     homi
+```
+
+If those values do not match, stop.
+
+If the existing Cloud Shell clone is present:
 
 ```bash
 cd ~/homi
 git pull
-HOMI_BILLING_ACCOUNT=YOUR-BILLING-ACCOUNT-ID bash scripts/bootstrap-google-cloud.sh
 ```
 
-The bootstrap is designed to be safely rerunnable. A prior run that linked billing and then stopped during API enablement does not need to be manually undone.
+If it is not present:
 
-### Recovery from the September 2026 API batch-limit error
+```bash
+cd ~
+git clone https://github.com/BruceVV11/homi.git
+cd homi
+```
 
-Google Service Usage accepts a maximum of 20 services in one enable request. The original Homi bootstrap attempted 24 services in a single request and stopped with `SU_MAX_BATCH_SIZE_EXCEEDED` before Firebase was attached. The script was corrected to enable services in two batches.
+## Stage C - Run the automated Firebase/Google Cloud bootstrap
 
-After pulling the corrected repository, simply rerun the bootstrap. Do not create a replacement Google Cloud or Firebase project.
+The selected billing account for Homi is Concept Lab Internal:
+
+`019579-54789E-55B8AF`
+
+Run:
+
+```bash
+HOMI_BILLING_ACCOUNT=019579-54789E-55B8AF bash scripts/bootstrap-google-cloud.sh
+```
+
+The script is safe to rerun. It verifies both the project ID and project number before making changes.
 
 Expected successful end-state:
 
-- Firebase attached to `homi-508000` / project number `429164377824`
-- required APIs enabled
-- Firebase Android app `za.co.theconceptlab.homi` registered
-- Firestore `(default)` created in Johannesburg
-- keyless runtime service account created
-- initial Firebase Android config exported to `~/homi-google-services.json`
+- the existing Firebase project `homi-ee80a` is confirmed;
+- required APIs are enabled in two batches;
+- billing is linked to Concept Lab Internal;
+- Firebase Android app `za.co.theconceptlab.homi` is registered;
+- initial Android Firebase config is exported to `~/homi-google-services.json`;
+- Firestore `(default)` exists in `africa-south1`;
+- keyless runtime service account `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com` exists;
+- initial runtime IAM roles are applied;
+- no service-account JSON private key is created.
 
-## Stage C - Manual console switches
+The final line should include:
 
-Only do the Firebase steps inside the project whose **Project ID is `homi-508000`**.
+```text
+==> Bootstrap complete
+```
 
-Complete the steps in `documentation/FIREBASE-CLOUD-SETUP.md`:
+## Stage D - Firebase Authentication
 
-1. Firebase Authentication -> enable Email/Password.
-2. Firebase Authentication -> enable Google.
-3. Google Auth Platform -> configure Homi branding/audience/test users.
-4. Confirm Firestore exists in `africa-south1`.
-5. Confirm Cloud Messaging HTTP v1 is enabled.
-6. Leave App Check enforcement OFF for now.
+In Firebase Console, confirm **Project settings -> General -> Project ID** shows:
 
-Google Auth Platform can be configured directly on `homi-508000` before the Firebase attachment completes, but Firebase Authentication settings made in another Firebase project do not carry across.
+`homi-ee80a`
 
-## Stage D - First Android host
+Then go to:
+
+**Security -> Authentication -> Get started -> Sign-in method**
+
+Enable:
+
+1. Email/Password
+2. Google
+
+For Email/Password, leave Email Link disabled for now.
+
+For Google, select the support email and save.
+
+Do not enable Phone, Anonymous or other providers yet.
+
+## Stage E - Google Auth Platform
+
+Open Google Cloud Console with project `homi-ee80a` selected, then open **Google Auth Platform**.
+
+Configure:
+
+- App name: `Homi`
+- Audience: `External`
+- User support email: your Homi/Concept Lab support email
+- Developer contact email: your Homi/Concept Lab development/support email
+- Publishing status: Testing during development
+- Test users: add the Google accounts used for development
+
+The OAuth setup that may previously have been created under `homi-508000` does not carry over. Configure it again under `homi-ee80a`.
+
+For Drive, Homi will later request only:
+
+`https://www.googleapis.com/auth/drive.file`
+
+Do not request full Drive access.
+
+## Stage F - First Android host
 
 The first installable code pass will create/maintain the Flutter Android host with package:
 
@@ -89,15 +140,15 @@ The first installable code pass will create/maintain the Flutter Android host wi
 
 It must already contain the approved Homi branding:
 
-- exact master logo
-- adaptive launcher icon
-- monochrome/themed launcher icon
-- splash/loading branding
-- in-app Homi mark
+- exact master logo;
+- adaptive launcher icon;
+- monochrome/themed launcher icon;
+- splash/loading branding;
+- in-app Homi mark.
 
 No placeholder Flutter launcher artwork should ship in the first installable build.
 
-## Stage E - Get certificate fingerprints
+## Stage G - Get certificate fingerprints
 
 After the Android host exists:
 
@@ -108,15 +159,15 @@ cd C:\ConceptLab\Projects\homi\android
 
 Record the debug SHA-1 and SHA-256.
 
-Add both in Firebase Console:
+Add both in:
 
-**Project settings -> General -> Homi Android -> SHA certificate fingerprints**
+**Firebase Console -> Project settings -> General -> Homi Android -> SHA certificate fingerprints**
 
-Then download a fresh `google-services.json` to:
+Then download a fresh `google-services.json` into:
 
 `C:\ConceptLab\Projects\homi\android\app\google-services.json`
 
-## Stage F - Maps/Places development key
+## Stage H - Maps/Places development key
 
 Back in Cloud Shell:
 
@@ -126,7 +177,7 @@ git pull
 bash scripts/create-android-maps-key.sh 'YOUR:DEBUG:SHA1'
 ```
 
-Store the returned value locally in:
+Store the returned key locally in:
 
 `C:\ConceptLab\Projects\homi\secrets.properties`
 
@@ -137,26 +188,26 @@ PLACES_API_KEY=...
 
 This file is ignored by Git.
 
-## Stage G - App Check debug registration
+## Stage I - App Check
 
-After the first debug build launches and App Check is integrated:
+After the first debug build launches:
 
 1. obtain the App Check debug token from Android Studio Logcat;
-2. add it in Firebase Console -> App Check -> Homi Android -> Manage debug tokens;
+2. register it in Firebase Console -> App Check -> Homi Android;
 3. verify valid Firebase traffic;
-4. keep enforcement OFF until all expected debug/release requests are known-good.
+4. keep enforcement OFF until expected debug/release traffic is known-good.
 
-## What not to create
+## Do not create
 
 Do not create or commit:
 
-- Firebase Admin/service-account JSON keys for the Android app
-- unrestricted Google Maps keys
-- signing keystores inside GitHub
-- `key.properties`
-- `secrets.properties`
-- long-lived OAuth access tokens
+- Firebase Admin/service-account JSON keys for the Android app;
+- unrestricted Google Maps keys;
+- signing keystores inside GitHub;
+- `key.properties`;
+- `secrets.properties`;
+- long-lived OAuth access tokens.
 
-## Checkpoint before application feature implementation
+## Current checkpoint
 
-When Stages B and C are complete, capture the final Cloud Shell output and the Firebase Project settings/Authentication screen showing Project ID `homi-508000`. The Android host can then be finished, fingerprints registered, and the first installable Homi build completed.
+Run Stage C and send the Cloud Shell output from the project identity check through `Bootstrap complete`. After that, finish Stages D and E, then the Android host/fingerprint/Maps/App Check work can proceed.

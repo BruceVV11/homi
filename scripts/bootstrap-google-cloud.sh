@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 PROJECT_ID="homi-508000"
+EXPECTED_PROJECT_NUMBER="429164377824"
 PACKAGE_NAME="za.co.theconceptlab.homi"
 FIRESTORE_LOCATION="africa-south1"
 RUNTIME_SA_NAME="homi-backend-runtime"
@@ -22,6 +23,7 @@ wait_firebase_operation() {
   local operation_name="$1"
   local url="https://firebase.googleapis.com/v1beta1/${operation_name}"
   local token
+  local response
 
   for _ in $(seq 1 60); do
     token="$(gcloud auth print-access-token)"
@@ -48,6 +50,13 @@ require_command base64
 
 log "Selecting Google Cloud project ${PROJECT_ID}"
 gcloud config set project "${PROJECT_ID}" >/dev/null
+ACTUAL_PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+if [ "${ACTUAL_PROJECT_NUMBER}" != "${EXPECTED_PROJECT_NUMBER}" ]; then
+  echo "Project identity guard failed." >&2
+  echo "Expected ${PROJECT_ID} to have project number ${EXPECTED_PROJECT_NUMBER}, got ${ACTUAL_PROJECT_NUMBER}." >&2
+  echo "Stopping before any cloud changes are made." >&2
+  exit 1
+fi
 gcloud projects describe "${PROJECT_ID}" --format='table(projectId,projectNumber,name)'
 
 if [ -n "${HOMI_BILLING_ACCOUNT:-}" ]; then
@@ -60,8 +69,17 @@ else
   echo "  HOMI_BILLING_ACCOUNT=XXXXXX-XXXXXX-XXXXXX bash scripts/bootstrap-google-cloud.sh"
 fi
 
-log "Enabling Homi Google/Firebase APIs"
+gcloud billing projects describe "${PROJECT_ID}" --format='table(projectId,billingEnabled,billingAccountName)'
+
+log "Enabling Homi Google/Firebase APIs - batch 1 of 2"
+# Google Service Usage accepts at most 20 services in one enable request.
+# Keep this batch at 20 or fewer so the bootstrap remains rerunnable/idempotent.
 gcloud services enable \
+  serviceusage.googleapis.com \
+  cloudresourcemanager.googleapis.com \
+  cloudbilling.googleapis.com \
+  iam.googleapis.com \
+  iamcredentials.googleapis.com \
   firebase.googleapis.com \
   firestore.googleapis.com \
   firebaserules.googleapis.com \
@@ -74,14 +92,13 @@ gcloud services enable \
   maps-android-backend.googleapis.com \
   places.googleapis.com \
   apikeys.googleapis.com \
-  iam.googleapis.com \
-  iamcredentials.googleapis.com \
-  serviceusage.googleapis.com \
-  cloudresourcemanager.googleapis.com \
-  cloudbilling.googleapis.com \
   secretmanager.googleapis.com \
   cloudfunctions.googleapis.com \
   run.googleapis.com \
+  --project="${PROJECT_ID}"
+
+log "Enabling Homi Google/Firebase APIs - batch 2 of 2"
+gcloud services enable \
   cloudbuild.googleapis.com \
   artifactregistry.googleapis.com \
   eventarc.googleapis.com \
@@ -105,8 +122,22 @@ else
     "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}:addFirebase")"
   OPERATION_NAME="$(printf '%s' "${ADD_RESPONSE}" | jq -r '.name')"
   wait_firebase_operation "${OPERATION_NAME}" >/dev/null
-  echo "Firebase enabled."
+  echo "Firebase enabled for ${PROJECT_ID}."
 fi
+
+log "Verifying Firebase project identity"
+TOKEN="$(gcloud auth print-access-token)"
+FIREBASE_PROJECT="$(curl -fsS \
+  -H "Authorization: Bearer ${TOKEN}" \
+  "https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}")"
+FIREBASE_PROJECT_ID="$(printf '%s' "${FIREBASE_PROJECT}" | jq -r '.projectId')"
+FIREBASE_PROJECT_NUMBER="$(printf '%s' "${FIREBASE_PROJECT}" | jq -r '.projectNumber')"
+if [ "${FIREBASE_PROJECT_ID}" != "${PROJECT_ID}" ] || [ "${FIREBASE_PROJECT_NUMBER}" != "${EXPECTED_PROJECT_NUMBER}" ]; then
+  echo "Firebase identity verification failed." >&2
+  printf '%s\n' "${FIREBASE_PROJECT}" | jq . >&2
+  exit 1
+fi
+echo "Firebase project: ${FIREBASE_PROJECT_ID} (${FIREBASE_PROJECT_NUMBER})"
 
 log "Registering the permanent Homi Android app if needed"
 TOKEN="$(gcloud auth print-access-token)"
@@ -182,5 +213,5 @@ echo "Runtime service account: ${RUNTIME_SA_EMAIL}"
 echo "No JSON private key was created. Google-hosted workloads should use the attached service account/ADC."
 
 log "Bootstrap complete"
-echo "Automated: API enablement, Firebase attachment, Android app registration, initial Firebase config, Firestore creation, backend runtime identity."
+echo "Automated: API enablement, Firebase attachment, Firebase identity verification, Android app registration, initial Firebase config, Firestore creation, backend runtime identity."
 echo "Still manual: Authentication providers, Google Auth/OAuth consent branding, billing confirmation, SHA fingerprints, Maps key creation, App Check registration/enforcement, Play Console declarations."

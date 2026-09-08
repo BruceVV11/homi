@@ -2,12 +2,15 @@
 
 ## Permanent project identifiers
 
-- Google Cloud / Firebase project: `homi-508000`
+- Google Cloud / Firebase project ID: `homi-ee80a`
+- Google Cloud / Firebase project number: `883068189841`
 - Android application ID: `za.co.theconceptlab.homi`
 - Local project root: `C:\ConceptLab\Projects\homi`
 - GitHub repository: `BruceVV11/homi`
 
 These identifiers are locked for the Android/Firebase/Play lifecycle.
+
+The existing Firebase project `homi-ee80a` is the backend source of truth. The previously created Google Cloud project `homi-508000` is not part of the Homi architecture.
 
 ## Stack
 
@@ -23,11 +26,9 @@ These identifiers are locked for the Android/Firebase/Play lifecycle.
 
 ## Cloud project
 
-Google Cloud project ID: `homi-508000`
+The underlying Google Cloud project for Firebase is also `homi-ee80a`, project number `883068189841`.
 
-Firebase is added to this existing Google Cloud project rather than creating a second backend project.
-
-The default Firestore database should be provisioned in `africa-south1` (Johannesburg).
+The default Firestore database should be provisioned in `africa-south1` (Johannesburg). If an existing default Firestore database is already provisioned in another region, stop and resolve that before putting production data into it because Firestore location is not a casual runtime setting.
 
 ## Why Firestore first
 
@@ -64,10 +65,10 @@ scripts/
 ## Data boundaries
 
 ### Local-first data
-Household preferences, local task state, cached home records, and UI preferences should remain usable without connectivity.
+Household preferences, local task state, cached home records and UI preferences should remain usable without connectivity.
 
 ### Shared cloud state
-Only data requiring collaboration should be synchronized: household memberships, shared routines, trusted-circle membership, location-sharing authorization, current location/battery snapshots, and notification state.
+Only data requiring collaboration should be synchronized: household memberships, shared routines, trusted-circle membership, location-sharing authorization, current location/battery snapshots and notification state.
 
 ### User-owned media
 Receipts, manuals, incident photos, meter evidence and backup files should be stored in the user's own Google Drive where feasible. Homi stores references/metadata rather than becoming the permanent owner of those files.
@@ -94,7 +95,7 @@ The location system is consent-first:
 
 ## Entitlements
 
-Paid functionality is not yet defined, but the architecture distinguishes capabilities from UI from the beginning. Future entitlement checks must be additive and must never make account deletion, location-sharing controls, privacy controls, or emergency opt-out behavior dependent on payment.
+Paid functionality is not yet defined, but the architecture distinguishes capabilities from UI from the beginning. Future entitlement checks must be additive and must never make account deletion, location-sharing controls, privacy controls or emergency opt-out behavior dependent on payment.
 
 ## Brand asset rule
 

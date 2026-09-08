@@ -58,6 +58,9 @@
 - `flutter test` completed successfully.
 - `flutter analyze` identified the deprecated App Check `androidProvider` argument. The first migration changed only the parameter name and exposed a provider-type mismatch during the first Android Studio compile.
 - Corrected App Check activation to use typed `AndroidDebugProvider()` in debug builds and `AndroidPlayIntegrityProvider()` in release builds with the new `providerAndroid` API.
+- The next Android Studio debug build reached `:app:mergeExtDexDebug` but D8 failed with `java.lang.OutOfMemoryError: Java heap space`.
+- The development PC has approximately 11.9 GB RAM while Flutter 3.41.5 generated an 8 GB Gradle heap. No global Gradle override exists.
+- Added `scripts/tune-gradle-memory.ps1` to apply a RAM-aware Gradle profile, reduce heap pressure on sub-16 GB development machines, limit worker concurrency, disable parallel project execution and stop stale Gradle daemons before retrying the build.
 
 ### Compile/device checkpoint still required
 
@@ -65,7 +68,8 @@ The source pass is not yet claimed as an installed device build.
 
 Next checkpoint:
 
-1. pull the typed App Check provider fix;
-2. run Homi again from Android Studio on the real Android device;
-3. capture/register the Firebase App Check debug token from the first successful debug launch;
-4. verify onboarding, launcher icon/splash, email/password auth, Google sign-in, navigation, location permission and foreground location/battery sync on the real device.
+1. pull the RAM-aware Gradle tuning helper;
+2. run `scripts\tune-gradle-memory.ps1` once on the local development machine;
+3. run Homi again from Android Studio on the real Android device;
+4. capture/register the Firebase App Check debug token from the first successful debug launch;
+5. verify onboarding, launcher icon/splash, email/password auth, Google sign-in, navigation, location permission and foreground location/battery sync on the real device.

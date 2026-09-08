@@ -12,6 +12,19 @@ if (-not (Test-Path $AndroidDir)) {
     throw "Android host not found at $AndroidDir. Run scripts\bootstrap-android.ps1 first."
 }
 
+function Write-Utf8NoBom {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string[]]$Lines
+    )
+
+    # Windows PowerShell 5.1 writes a UTF-8 BOM with Set-Content -Encoding UTF8.
+    # A BOM on the first gradle.properties key can make Gradle ignore that key,
+    # including org.gradle.jvmargs. Always keep this file UTF-8 without BOM.
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllLines($Path, $Lines, $encoding)
+}
+
 function Get-JavaMajor {
     param([Parameter(Mandatory = $true)][string]$JavaHome)
 
@@ -134,7 +147,7 @@ $filtered = $existing | Where-Object { $_ -notmatch '^\s*org\.gradle\.java\.home
 $updated = @($filtered)
 if ($updated.Count -gt 0 -and $updated[-1] -ne '') { $updated += '' }
 $updated += "org.gradle.java.home=$javaHomeForGradle"
-Set-Content -Path $GradleProperties -Value $updated -Encoding UTF8
+Write-Utf8NoBom -Path $GradleProperties -Lines $updated
 
 # Make the same JDK active for this PowerShell process so gradlew.bat itself
 # is not launched by an unsupported Java 25 installation.

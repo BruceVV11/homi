@@ -65,6 +65,8 @@
 - Root cause investigation identified the UTF-8 BOM risk on the first Gradle property, but the first BOM-safe helper revision itself failed in Windows PowerShell because its mandatory string-array parameter rejected an empty line already present in `gradle.properties`; therefore the file was never rewritten and the fresh daemon correctly remained at `-Xmx512m`.
 - Reworked both `scripts/tune-gradle-memory.ps1` and `scripts/configure-gradle-jdk.ps1` to write the complete file directly with `.NET WriteAllText` using UTF-8 without BOM, avoiding PowerShell array binding entirely.
 - The memory tuner now removes irrelevant blank lines, verifies the file does not start with BOM bytes, stops stale daemons, starts a fresh Gradle daemon itself, reads the newest daemon log, and fails unless the real daemon reports the requested heap such as `-Xmx4G`.
+- The corrected tuner has now completed successfully on the development PC. `gradle.properties` begins with bytes `6F 72 67`, confirming no UTF-8 BOM, and a fresh Gradle 8.14 daemon started on JDK 21 with `-Xmx4G`, 2 GB metaspace, one worker and parallel project execution disabled.
+- The verification build completed successfully and the daemon log explicitly reported `Starting build in new daemon [memory: 4 GiB]`.
 
 ### Compile/device checkpoint still required
 
@@ -72,8 +74,7 @@ The source pass is not yet claimed as an installed device build.
 
 Next checkpoint:
 
-1. pull the self-verifying Gradle helper update;
-2. rerun `scripts\tune-gradle-memory.ps1` and require `Gradle memory verification PASSED` with `Effective daemon heap: -Xmx4G` before reopening Android Studio;
-3. run Homi again from Android Studio on the real Android device;
-4. capture/register the Firebase App Check debug token from the first successful debug launch;
-5. verify onboarding, launcher icon/splash, email/password auth, Google sign-in, navigation, location permission and foreground location/battery sync on the real device.
+1. reopen Android Studio with the S25 Ultra selected;
+2. run Homi again and confirm the previous D8 `Java heap space` failure is gone;
+3. capture/register the Firebase App Check debug token from the first successful debug launch;
+4. verify onboarding, launcher icon/splash, email/password auth, Google sign-in, navigation, location permission and foreground location/battery sync on the real device.

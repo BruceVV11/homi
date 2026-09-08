@@ -4,16 +4,21 @@ Use this sequence to prepare the first installable Android build.
 
 ## Project identities
 
+These identifiers are authoritative for Homi:
+
 - Local root: `C:\ConceptLab\Projects\homi`
 - GitHub: `BruceVV11/homi`
-- Google Cloud / Firebase: `homi-508000`
+- Google Cloud / Firebase project ID: `homi-508000`
+- Google Cloud project number: `429164377824`
 - Android package: `za.co.theconceptlab.homi`
+
+Do not configure a different Firebase project merely because its display name is also `homi`. In particular, `homi-ee80a` is not the Homi backend used by this repository. The bootstrap script now verifies both the project ID and project number before making cloud changes.
 
 ## Stage A - Get the repository locally
 
 The local Homi folder is intended to be the repository root.
 
-Your screenshot shows `C:\ConceptLab\Projects\homi` as empty. Open PowerShell and run:
+If `C:\ConceptLab\Projects\homi` is empty, open PowerShell and run:
 
 ```powershell
 cd C:\ConceptLab\Projects
@@ -36,15 +41,25 @@ cd homi
 HOMI_BILLING_ACCOUNT=YOUR-BILLING-ACCOUNT-ID bash scripts/bootstrap-google-cloud.sh
 ```
 
-If billing is already linked and you do not want the script to change it:
+If the Cloud Shell clone already exists, update it before rerunning:
 
 ```bash
-bash scripts/bootstrap-google-cloud.sh
+cd ~/homi
+git pull
+HOMI_BILLING_ACCOUNT=YOUR-BILLING-ACCOUNT-ID bash scripts/bootstrap-google-cloud.sh
 ```
+
+The bootstrap is designed to be safely rerunnable. A prior run that linked billing and then stopped during API enablement does not need to be manually undone.
+
+### Recovery from the September 2026 API batch-limit error
+
+Google Service Usage accepts a maximum of 20 services in one enable request. The original Homi bootstrap attempted 24 services in a single request and stopped with `SU_MAX_BATCH_SIZE_EXCEEDED` before Firebase was attached. The script was corrected to enable services in two batches.
+
+After pulling the corrected repository, simply rerun the bootstrap. Do not create a replacement Google Cloud or Firebase project.
 
 Expected successful end-state:
 
-- Firebase attached to `homi-508000`
+- Firebase attached to `homi-508000` / project number `429164377824`
 - required APIs enabled
 - Firebase Android app `za.co.theconceptlab.homi` registered
 - Firestore `(default)` created in Johannesburg
@@ -52,6 +67,8 @@ Expected successful end-state:
 - initial Firebase Android config exported to `~/homi-google-services.json`
 
 ## Stage C - Manual console switches
+
+Only do the Firebase steps inside the project whose **Project ID is `homi-508000`**.
 
 Complete the steps in `documentation/FIREBASE-CLOUD-SETUP.md`:
 
@@ -61,6 +78,8 @@ Complete the steps in `documentation/FIREBASE-CLOUD-SETUP.md`:
 4. Confirm Firestore exists in `africa-south1`.
 5. Confirm Cloud Messaging HTTP v1 is enabled.
 6. Leave App Check enforcement OFF for now.
+
+Google Auth Platform can be configured directly on `homi-508000` before the Firebase attachment completes, but Firebase Authentication settings made in another Firebase project do not carry across.
 
 ## Stage D - First Android host
 
@@ -103,6 +122,7 @@ Back in Cloud Shell:
 
 ```bash
 cd ~/homi
+git pull
 bash scripts/create-android-maps-key.sh 'YOUR:DEBUG:SHA1'
 ```
 
@@ -139,4 +159,4 @@ Do not create or commit:
 
 ## Checkpoint before application feature implementation
 
-When Stages B and C are complete, capture the final Cloud Shell output and Firebase Authentication screen. The Android host can then be finished, fingerprints registered, and the first installable Homi build completed.
+When Stages B and C are complete, capture the final Cloud Shell output and the Firebase Project settings/Authentication screen showing Project ID `homi-508000`. The Android host can then be finished, fingerprints registered, and the first installable Homi build completed.

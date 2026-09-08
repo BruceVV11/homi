@@ -11,19 +11,17 @@ Use this sequence to prepare the first installable Android build.
 
 ## Stage A - Get the repository locally
 
-The local Homi folder is currently intended to be the repository root.
+The local Homi folder is intended to be the repository root.
 
-If `C:\ConceptLab\Projects\homi` is empty, open PowerShell and run:
+Your screenshot shows `C:\ConceptLab\Projects\homi` as empty. Open PowerShell and run:
 
 ```powershell
 cd C:\ConceptLab\Projects
-Remove-Item -Path .\homi -Force -Recurse
-
 git clone https://github.com/BruceVV11/homi.git homi
 cd .\homi
 ```
 
-Do not run the removal command if the folder contains files you need to preserve.
+Git can use the existing target directory when it is empty. If the folder is no longer empty, stop rather than deleting anything and inspect its contents first.
 
 For normal development, open `C:\ConceptLab\Projects\homi` in Android Studio.
 

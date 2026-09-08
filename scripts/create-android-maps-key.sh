@@ -3,22 +3,30 @@ set -Eeuo pipefail
 
 PROJECT_ID="homi-508000"
 PACKAGE_NAME="za.co.theconceptlab.homi"
-SHA1="${1:-}"
+SHA1_INPUT="${1:-}"
 DISPLAY_NAME="${2:-Homi Android Development}"
 
-if [ -z "${SHA1}" ]; then
+if [ -z "${SHA1_INPUT}" ]; then
   echo "Usage: bash scripts/create-android-maps-key.sh 'AA:BB:CC:...' ['Display name']" >&2
   exit 1
 fi
 
-# Normalize common keytool output while preserving Google's accepted colon format.
-SHA1="${SHA1#SHA1:}"
+# keytool/Android Studio normally show a colon-delimited SHA-1. The API Keys
+# API/gcloud expects the hexadecimal fingerprint without delimiters.
+SHA1="$(printf '%s' "${SHA1_INPUT}" \
+  | sed -e 's/^SHA1:[[:space:]]*//' -e 's/://g' -e 's/[[:space:]]//g' \
+  | tr '[:lower:]' '[:upper:]')"
+
+if ! printf '%s' "${SHA1}" | grep -Eq '^[0-9A-F]{40}$'; then
+  echo "Invalid SHA-1 fingerprint. Expected 40 hexadecimal characters (colon-delimited input is accepted)." >&2
+  exit 1
+fi
 
 gcloud config set project "${PROJECT_ID}" >/dev/null
 
 echo "Creating a Google Maps Platform API key restricted to:"
 echo "  package: ${PACKAGE_NAME}"
-echo "  SHA-1:   ${SHA1}"
+echo "  SHA-1:   ${SHA1_INPUT}"
 echo "  APIs:    Maps SDK for Android + Places API (New)"
 
 CREATE_JSON="$(gcloud services api-keys create \

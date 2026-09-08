@@ -21,6 +21,7 @@ firebase-debug.log
 secrets.properties
 secrets-release.properties
 local.defaults.properties
+android/app/src/main/res/values/homi_secrets.xml
 
 # Credentials / private keys
 *.jks

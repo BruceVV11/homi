@@ -1,8 +1,30 @@
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'src/app.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const HomiApp());
+
+  var firebaseReady = false;
+  Object? firebaseError;
+
+  try {
+    await Firebase.initializeApp();
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+    );
+    firebaseReady = true;
+  } catch (error) {
+    firebaseError = error;
+  }
+
+  runApp(
+    HomiApp(
+      firebaseReady: firebaseReady,
+      firebaseError: firebaseError,
+    ),
+  );
 }

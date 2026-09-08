@@ -1,6 +1,6 @@
 # Homi Release Notes
 
-## 0.1.0 - Foundation in progress
+## 0.1.0 - First installable source pass
 
 ### Cloud foundation complete - 2026-09-08
 
@@ -12,15 +12,39 @@
 - Verified Firestore `(default)` in `africa-south1` (Johannesburg).
 - Created keyless backend runtime identity `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`.
 - Applied initial Firestore and FCM runtime roles.
-- Exported the initial Android Firebase configuration to Cloud Shell.
 - Created no downloadable service-account private key.
+- Firebase Email/Password and Google sign-in providers configured.
+- Google Auth Platform remains in External / Testing state with the development account added.
 
-### Next
+### Application source pass - 2026-09-08
 
-- Enable Firebase Email/Password and Google authentication providers.
-- Configure Google Auth Platform branding/audience for `homi-ee80a`.
-- Generate the permanent Flutter Android host and approved Homi launcher/splash assets.
-- Add debug SHA-1/SHA-256 to Firebase.
-- Create the restricted Maps/Places Android API key.
-- Integrate Firebase Auth, Firestore and App Check debug provider.
-- Produce and device-test the first installable Homi build.
+- Locked the approved Option 4 Homi logo and app icon as the brand source of truth.
+- Added launcher-icon generation for legacy, adaptive and monochrome/themed Android icons.
+- Added branded native splash generation.
+- Applied the approved coral / peach / sage / cream / slate design system and Nunito typography.
+- Added three-step onboarding with home name and home type.
+- Preserved local-only use without forcing account creation.
+- Added email/password sign-in, account creation, verification email trigger and password reset.
+- Added Google sign-in integration.
+- Added branded loading/auth states and explicit local validation/error placement.
+- Added the five-destination Homi shell: Today, Home, Routines, Supplies, People.
+- Added predictive-back behavior from secondary tabs back to Today.
+- Added foreground location and battery capture on the People page.
+- Added private signed-in Firestore sync for the user's current location/battery snapshot.
+- Added App Check debug provider for debug builds and Play Integrity for release builds.
+- Added local Android-host bootstrap and Firebase Gradle integration scripts.
+- Added first-installable setup documentation and a basic location model test.
+
+### Compile/device checkpoint still required
+
+The execution environment used for this source pass does not contain Flutter/Android SDK, so no APK is claimed as compiled yet.
+
+Next local checkpoint:
+
+1. extract the v0.1.0 patch into `C:\ConceptLab\Projects\homi`;
+2. run `scripts\bootstrap-android.ps1`;
+3. run `android\.\gradlew signingReport`;
+4. register SHA-1/SHA-256 in Firebase;
+5. download the refreshed `google-services.json`;
+6. run `scripts\enable-firebase-android.ps1`;
+7. run `flutter analyze`, `flutter test`, and `flutter run` on the real Android device.

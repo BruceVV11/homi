@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 abstract final class HomiColors {
   static const coral = Color(0xFFFF6B5E);
@@ -20,43 +21,46 @@ abstract final class HomiTheme {
       onSecondary: HomiColors.slate,
       surface: HomiColors.surface,
       onSurface: HomiColors.slate,
-      error: Color(0xFFBA1A1A),
+      error: Color(0xFFB3261E),
     );
 
-    return ThemeData(
+    final base = ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: HomiColors.cream,
-      fontFamily: 'Nunito',
-      textTheme: const TextTheme(
-        displaySmall: TextStyle(
-          fontSize: 34,
-          fontWeight: FontWeight.w800,
-          height: 1.05,
-          color: HomiColors.slate,
-        ),
-        headlineSmall: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.w800,
-          height: 1.15,
-          color: HomiColors.slate,
-        ),
-        titleLarge: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w800,
-          color: HomiColors.slate,
-        ),
-        bodyLarge: TextStyle(
-          fontSize: 16,
-          height: 1.4,
-          color: HomiColors.slate,
-        ),
-        bodyMedium: TextStyle(
-          fontSize: 14,
-          height: 1.4,
-          color: HomiColors.muted,
-        ),
+    );
+    final textTheme = GoogleFonts.nunitoTextTheme(base.textTheme).copyWith(
+      displaySmall: GoogleFonts.nunito(
+        fontSize: 34,
+        fontWeight: FontWeight.w800,
+        height: 1.05,
+        color: HomiColors.slate,
       ),
+      headlineSmall: GoogleFonts.nunito(
+        fontSize: 24,
+        fontWeight: FontWeight.w800,
+        height: 1.15,
+        color: HomiColors.slate,
+      ),
+      titleLarge: GoogleFonts.nunito(
+        fontSize: 18,
+        fontWeight: FontWeight.w800,
+        color: HomiColors.slate,
+      ),
+      bodyLarge: GoogleFonts.nunito(
+        fontSize: 16,
+        height: 1.4,
+        color: HomiColors.slate,
+      ),
+      bodyMedium: GoogleFonts.nunito(
+        fontSize: 14,
+        height: 1.4,
+        color: HomiColors.muted,
+      ),
+    );
+
+    return base.copyWith(
+      textTheme: textTheme,
       cardTheme: CardThemeData(
         color: HomiColors.surface,
         elevation: 0,
@@ -71,18 +75,23 @@ abstract final class HomiTheme {
           backgroundColor: HomiColors.coral,
           foregroundColor: Colors.white,
           minimumSize: const Size(0, 54),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          textStyle: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          textStyle: GoogleFonts.nunito(fontSize: 15, fontWeight: FontWeight.w800),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: HomiColors.slate,
+          minimumSize: const Size(0, 54),
+          side: const BorderSide(color: HomiColors.border),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          textStyle: GoogleFonts.nunito(fontSize: 15, fontWeight: FontWeight.w800),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: const BorderSide(color: HomiColors.border),
@@ -94,6 +103,10 @@ abstract final class HomiTheme {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: const BorderSide(color: HomiColors.coral, width: 1.6),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: Color(0xFFB3261E)),
         ),
       ),
     );

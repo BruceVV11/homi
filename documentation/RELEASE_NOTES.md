@@ -49,6 +49,10 @@
 - Debug SHA-1: `9D:D7:92:98:5C:1C:88:88:97:E7:E4:AC:6F:FD:1B:E4:09:BE:EE:19`.
 - Debug SHA-256: `F3:F8:12:F2:B0:16:6B:C1:53:07:76:0C:CE:FC:56:92:25:36:77:D5:24:24:D9:C3:58:1D:23:7C:06:55:46:80`.
 - Added `scripts/register-firebase-android-certs.sh` to register both fingerprints against the correct Firebase Android app and refresh `google-services.json` automatically from Cloud Shell.
+- Firebase Android certificate registration completed successfully and refreshed `/home/brucevanvliet5/homi-google-services.json`.
+- The first Maps/Places key was created with the correct Android package, SHA-1 and API restrictions, but the helper then incorrectly treated the create operation resource name as the key resource name when calling `get-key-string`.
+- Fixed `scripts/create-android-maps-key.sh` to resolve the final key resource after the long-running operation, retrieve the key by actual key ID, avoid printing the secret value to the terminal, and instead write a mode-600 `~/homi-secrets.properties` file for download to the local project.
+- The initially printed development Maps key must be rotated before local use because its value was exposed during troubleshooting.
 
 ### Compile/device checkpoint still required
 
@@ -56,9 +60,8 @@ The source pass is not yet claimed as an installed device build.
 
 Next checkpoint:
 
-1. run the Firebase certificate registration script in Cloud Shell;
-2. create the restricted Android Maps/Places key;
-3. place the refreshed `google-services.json` into `android/app/`;
-4. run `scripts\enable-firebase-android.ps1` and sync the Maps secret;
-5. run `flutter analyze`, `flutter test`, and `flutter run` on the real Android device;
-6. register the App Check debug token after the first debug launch.
+1. delete the exposed first development Maps key and recreate it with the corrected helper;
+2. download the fresh `~/homi-secrets.properties` and refreshed `homi-google-services.json` to the local project;
+3. run `scripts\enable-firebase-android.ps1` and sync the Maps secret;
+4. run `flutter analyze`, `flutter test`, and `flutter run` on the real Android device;
+5. register the App Check debug token after the first debug launch.

@@ -53,7 +53,11 @@
 - The first Maps/Places key was created with the correct Android package, SHA-1 and API restrictions, but the helper then incorrectly treated the create operation resource name as the key resource name when calling `get-key-string`.
 - Fixed `scripts/create-android-maps-key.sh` to resolve the final key resource after the long-running operation and retrieve the key by actual key ID.
 - A second troubleshooting run showed that this Cloud SDK writes the create operation result, including the generated key string, to stderr even when stdout is redirected. The helper now captures both stdout and stderr into a temporary file, prints that log only on failure, and deletes the log immediately on success.
-- Any Maps key whose value appeared in troubleshooting output must be deleted before local use. The next recreated key should only be written to mode-600 `~/homi-secrets.properties` and must not appear in terminal output.
+- Any Maps key whose value appeared in troubleshooting output was rotated before local use.
+- A fresh Android-restricted Maps/Places development key is now stored only in the local `secrets.properties` flow.
+- Refreshed Firebase `google-services.json` is now in `android/app/`.
+- `scripts/enable-firebase-android.ps1` completed successfully and enabled the Google Services Gradle plugin.
+- `scripts/sync-android-secrets.ps1` completed successfully and generated the Android Maps key resource from the ignored local secret file.
 
 ### Compile/device checkpoint still required
 
@@ -61,9 +65,9 @@ The source pass is not yet claimed as an installed device build.
 
 Next checkpoint:
 
-1. delete the currently exposed development Maps key and recreate it with the latest helper;
-2. confirm the recreated key value is not printed anywhere in Cloud Shell;
-3. download the fresh `~/homi-secrets.properties` and refreshed `homi-google-services.json` to the local project;
-4. run `scripts\enable-firebase-android.ps1` and sync the Maps secret;
-5. run `flutter analyze`, `flutter test`, and `flutter run` on the real Android device;
-6. register the App Check debug token after the first debug launch.
+1. run `flutter clean` and `flutter pub get` from the Homi project root;
+2. run `flutter analyze` and resolve all analyzer errors before device compilation;
+3. run `flutter test` and resolve failing tests;
+4. confirm the real Android device appears in `flutter devices`;
+5. run Homi on the device and capture/register the Firebase App Check debug token;
+6. verify onboarding, launcher icon/splash, email/password auth, Google sign-in, navigation, location permission and foreground location/battery sync on the real device.

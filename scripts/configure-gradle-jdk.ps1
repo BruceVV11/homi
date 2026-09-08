@@ -20,7 +20,31 @@ function Get-JavaMajor {
         return $null
     }
 
-    $Output = (& $JavaExe -version 2>&1 | Out-String)
+    # java -version writes its version text to STDERR even when it succeeds.
+    # Calling it directly while $ErrorActionPreference='Stop' can therefore be
+    # surfaced by Windows PowerShell as NativeCommandError. Use Process APIs so
+    # STDERR is captured as normal probe output instead of becoming a script
+    # failure.
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $JavaExe
+    $startInfo.Arguments = '-version'
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.CreateNoWindow = $true
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    [void]$process.Start()
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+
+    if ($process.ExitCode -ne 0) {
+        return $null
+    }
+
+    $Output = "$stdout`n$stderr"
     $Match = [regex]::Match($Output, 'version\s+"(?<major>\d+)')
     if (-not $Match.Success) {
         $Match = [regex]::Match($Output, 'openjdk\s+(?<major>\d+)')

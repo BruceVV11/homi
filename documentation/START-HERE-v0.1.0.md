@@ -23,6 +23,18 @@ The cloud bootstrap has completed successfully:
 - Email/Password and Google Firebase Authentication are enabled;
 - Google Auth Platform is External / Testing with the development account added.
 
+## Deploy the current Firestore rules
+
+In Cloud Shell:
+
+```bash
+cd ~/homi
+git pull
+bash scripts/deploy-firestore-rules.sh
+```
+
+This is required before signed-in location status can sync to Firestore.
+
 ## Current step - create the real Android host
 
 First update the repository and extract the supplied `homi-v0.1.0-installable-pass-patch.zip` directly into:
@@ -146,5 +158,6 @@ Expected APK location:
 - optional local-only mode;
 - email/password and Google account flow;
 - branded Today/Home/Routines/Supplies/People navigation;
+- persistent Quick Add reminders and time-boxed task suggestions on Today;
 - current foreground location and battery status on People;
 - private current-status Firestore sync when signed in.

@@ -28,6 +28,9 @@
 - Added Google sign-in integration.
 - Added branded loading/auth states and explicit local validation/error placement.
 - Added the five-destination Homi shell: Today, Home, Routines, Supplies, People.
+- Added persistent local Quick Add reminders on Today.
+- Added working 10-minute and 30-minute time-boxed chore suggestion sheets.
+- Added guarded Firestore-rules deployment tooling.
 - Added predictive-back behavior from secondary tabs back to Today.
 - Added foreground location and battery capture on the People page.
 - Added private signed-in Firestore sync for the user's current location/battery snapshot.
@@ -42,9 +45,10 @@ The execution environment used for this source pass does not contain Flutter/And
 Next local checkpoint:
 
 1. extract the v0.1.0 patch into `C:\ConceptLab\Projects\homi`;
-2. run `scripts\bootstrap-android.ps1`;
-3. run `android\.\gradlew signingReport`;
-4. register SHA-1/SHA-256 in Firebase;
-5. download the refreshed `google-services.json`;
-6. run `scripts\enable-firebase-android.ps1`;
-7. run `flutter analyze`, `flutter test`, and `flutter run` on the real Android device.
+2. deploy the current Firestore rules from Cloud Shell;
+3. run `scripts\bootstrap-android.ps1`;
+4. run `android\.\gradlew signingReport`;
+5. register SHA-1/SHA-256 in Firebase;
+6. download the refreshed `google-services.json`;
+7. run `scripts\enable-firebase-android.ps1`;
+8. run `flutter analyze`, `flutter test`, and `flutter run` on the real Android device.

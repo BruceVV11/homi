@@ -17,6 +17,8 @@ Implemented:
 - Google sign-in integration;
 - password reset and email verification trigger on account creation;
 - five-destination app shell: Today, Home, Routines, Supplies, People;
+- persistent local Quick Add reminders on Today;
+- working 10-minute and 30-minute time-boxed chore suggestion sheets;
 - Android predictive-back behavior from secondary tabs to Today;
 - foreground device location + battery status capture in People;
 - private sync of the signed-in user's latest foreground location snapshot to Firestore;
@@ -47,6 +49,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-android.ps1
 ```
 
 The script keeps the approved app source and assets intact, creates only the missing Android host, installs packages, generates launcher resources and generates the native splash.
+
+## Firestore rules checkpoint
+
+Before testing signed-in location sync, deploy the repository rules from Cloud Shell:
+
+```bash
+cd ~/homi
+git pull
+bash scripts/deploy-firestore-rules.sh
+```
+
+The script verifies `homi-ee80a` / `883068189841` before deploying.
 
 ## Fingerprint checkpoint
 

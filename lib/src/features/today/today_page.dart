@@ -12,7 +12,7 @@ class TodayPage extends StatelessWidget {
       title: 'Good morning',
       subtitle: 'Your home is on track.',
       children: [
-        _SectionLabel(label: 'Today'),
+        const _SectionLabel(label: 'Today'),
         const SizedBox(height: 10),
         const _AttentionCard(
           icon: Icons.pets_rounded,
@@ -32,7 +32,7 @@ class TodayPage extends StatelessWidget {
           detail: 'Last reading was 29 days ago',
         ),
         const SizedBox(height: 28),
-        _SectionLabel(label: 'When you have time'),
+        const _SectionLabel(label: 'When you have time'),
         const SizedBox(height: 10),
         Row(
           children: [
@@ -103,17 +103,9 @@ class _AttentionCard extends StatelessWidget {
                 color: HomiColors.peach.withValues(alpha: 0.22),
                 borderRadius: BorderRadius.circular(15),
               ),
-              child: const Icon(Icons.circle, size: 0),
+              child: Icon(icon, color: HomiColors.coral),
             ),
-            Transform.translate(
-              offset: const Offset(-44, 0),
-              child: SizedBox(
-                width: 44,
-                height: 44,
-                child: Icon(icon, color: HomiColors.coral),
-              ),
-            ),
-            const SizedBox(width: -34),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

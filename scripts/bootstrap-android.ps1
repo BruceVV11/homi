@@ -57,8 +57,17 @@ if (-not (Test-Path $SecretsXml)) {
 
 if (Test-Path $TempRoot) { Remove-Item $TempRoot -Recurse -Force }
 
+$GradleJdkHelper = Join-Path $PSScriptRoot 'configure-gradle-jdk.ps1'
+if (Test-Path $GradleJdkHelper) {
+    Write-Host '==> Checking Gradle JDK compatibility'
+    & powershell -ExecutionPolicy Bypass -File $GradleJdkHelper
+    if ($LASTEXITCODE -ne 0) {
+        throw "Gradle JDK compatibility setup failed with exit code $LASTEXITCODE"
+    }
+}
+
 Write-Host ''
 Write-Host 'Android host is ready.' -ForegroundColor Green
 Write-Host 'Next command:'
-Write-Host "  cd $AndroidDir"
-Write-Host '  .\gradlew signingReport'
+Write-Host "  cd $ProjectRoot"
+Write-Host '  powershell -ExecutionPolicy Bypass -File .\scripts\configure-gradle-jdk.ps1 -RunSigningReport'

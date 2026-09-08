@@ -38,13 +38,14 @@
 - Added local Android-host bootstrap and Firebase Gradle integration scripts.
 - Added first-installable setup documentation and a basic location model test.
 
-### Local compile checkpoint - Java 25 compatibility fix
+### Local compile checkpoint - Java 25 compatibility fixes
 
 - The first local `signingReport` attempt reached the generated Android host but failed before project evaluation because the machine launched Gradle 8.14 with Java `25.0.3`.
 - Gradle 8.14 supports running on Java up to 24; Java 25 is officially supported for running Gradle from 9.1.0 onward.
 - Homi keeps Flutter 3.41.5's generated Gradle/Android toolchain rather than forcing an unsafe Gradle 9 migration.
 - Added `scripts/configure-gradle-jdk.ps1` to discover a compatible installed JDK, prefer JDK 21, persist it for this project in `android/gradle.properties`, verify the Gradle JVM, and optionally run `signingReport`.
 - Updated `scripts/bootstrap-android.ps1` so future Android-host setup checks Gradle/JDK compatibility automatically.
+- Fixed the JDK discovery probe for Windows PowerShell: `java -version` writes normal version output to STDERR, which was being promoted to `NativeCommandError` under the script's strict error mode. The probe now captures process stdout/stderr directly and checks the real exit code instead.
 
 ### Compile/device checkpoint still required
 
@@ -52,7 +53,7 @@ The source pass is not yet claimed as an installed device build.
 
 Next local checkpoint:
 
-1. `git pull` the JDK compatibility fix;
+1. `git pull` the latest JDK compatibility fix;
 2. run `scripts\configure-gradle-jdk.ps1 -RunSigningReport`;
 3. register the resulting SHA-1/SHA-256 in Firebase;
 4. download the refreshed `google-services.json`;

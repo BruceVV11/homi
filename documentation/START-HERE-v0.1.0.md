@@ -58,37 +58,24 @@ git clone https://github.com/BruceVV11/homi.git
 cd homi
 ```
 
-## Stage C - Run the automated Firebase/Google Cloud bootstrap
+## Stage C - Automated Firebase/Google Cloud bootstrap
 
-The selected billing account for Homi is Concept Lab Internal:
+**Status: COMPLETE — 2026-09-08**
 
-`019579-54789E-55B8AF`
+Verified result:
 
-Run:
+- existing Firebase project `homi-ee80a` confirmed;
+- project number `883068189841` verified;
+- billing linked to Concept Lab Internal `019579-54789E-55B8AF`;
+- required APIs enabled successfully in two batches;
+- Firebase Android app `za.co.theconceptlab.homi` registered;
+- Android Firebase config exported to `~/homi-google-services.json`;
+- Firestore `(default)` verified in `africa-south1` / Johannesburg;
+- keyless runtime service account `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com` created;
+- initial Firestore and FCM runtime IAM roles applied;
+- no service-account JSON private key created.
 
-```bash
-HOMI_BILLING_ACCOUNT=019579-54789E-55B8AF bash scripts/bootstrap-google-cloud.sh
-```
-
-The script is safe to rerun. It verifies both the project ID and project number before making changes.
-
-Expected successful end-state:
-
-- the existing Firebase project `homi-ee80a` is confirmed;
-- required APIs are enabled in two batches;
-- billing is linked to Concept Lab Internal;
-- Firebase Android app `za.co.theconceptlab.homi` is registered;
-- initial Android Firebase config is exported to `~/homi-google-services.json`;
-- Firestore `(default)` exists in `africa-south1`;
-- keyless runtime service account `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com` exists;
-- initial runtime IAM roles are applied;
-- no service-account JSON private key is created.
-
-The final line should include:
-
-```text
-==> Bootstrap complete
-```
+The bootstrap can be safely rerun later if required.
 
 ## Stage D - Firebase Authentication
 
@@ -123,8 +110,6 @@ Configure:
 - Developer contact email: your Homi/Concept Lab development/support email
 - Publishing status: Testing during development
 - Test users: add the Google accounts used for development
-
-The OAuth setup that may previously have been created under `homi-508000` does not carry over. Configure it again under `homi-ee80a`.
 
 For Drive, Homi will later request only:
 
@@ -210,4 +195,4 @@ Do not create or commit:
 
 ## Current checkpoint
 
-Run Stage C and send the Cloud Shell output from the project identity check through `Bootstrap complete`. After that, finish Stages D and E, then the Android host/fingerprint/Maps/App Check work can proceed.
+Cloud provisioning is complete. Next: finish Firebase Authentication and Google Auth Platform configuration, then proceed to the first Android host, certificate fingerprints, restricted Maps/Places key and App Check debug registration.

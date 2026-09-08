@@ -38,17 +38,23 @@
 - Added local Android-host bootstrap and Firebase Gradle integration scripts.
 - Added first-installable setup documentation and a basic location model test.
 
+### Local compile checkpoint - Java 25 compatibility fix
+
+- The first local `signingReport` attempt reached the generated Android host but failed before project evaluation because the machine launched Gradle 8.14 with Java `25.0.3`.
+- Gradle 8.14 supports running on Java up to 24; Java 25 is officially supported for running Gradle from 9.1.0 onward.
+- Homi keeps Flutter 3.41.5's generated Gradle/Android toolchain rather than forcing an unsafe Gradle 9 migration.
+- Added `scripts/configure-gradle-jdk.ps1` to discover a compatible installed JDK, prefer JDK 21, persist it for this project in `android/gradle.properties`, verify the Gradle JVM, and optionally run `signingReport`.
+- Updated `scripts/bootstrap-android.ps1` so future Android-host setup checks Gradle/JDK compatibility automatically.
+
 ### Compile/device checkpoint still required
 
-The execution environment used for this source pass does not contain Flutter/Android SDK, so no APK is claimed as compiled yet.
+The source pass is not yet claimed as an installed device build.
 
 Next local checkpoint:
 
-1. extract the v0.1.0 patch into `C:\ConceptLab\Projects\homi`;
-2. deploy the current Firestore rules from Cloud Shell;
-3. run `scripts\bootstrap-android.ps1`;
-4. run `android\.\gradlew signingReport`;
-5. register SHA-1/SHA-256 in Firebase;
-6. download the refreshed `google-services.json`;
-7. run `scripts\enable-firebase-android.ps1`;
-8. run `flutter analyze`, `flutter test`, and `flutter run` on the real Android device.
+1. `git pull` the JDK compatibility fix;
+2. run `scripts\configure-gradle-jdk.ps1 -RunSigningReport`;
+3. register the resulting SHA-1/SHA-256 in Firebase;
+4. download the refreshed `google-services.json`;
+5. run `scripts\enable-firebase-android.ps1`;
+6. run `flutter analyze`, `flutter test`, and `flutter run` on the real Android device.

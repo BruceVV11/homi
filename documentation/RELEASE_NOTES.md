@@ -38,24 +38,27 @@
 - Added local Android-host bootstrap and Firebase Gradle integration scripts.
 - Added first-installable setup documentation and a basic location model test.
 
-### Local compile checkpoint - Java 25 compatibility fixes
+### Local compile checkpoint - Java/Gradle resolved
 
 - The first local `signingReport` attempt reached the generated Android host but failed before project evaluation because the machine launched Gradle 8.14 with Java `25.0.3`.
-- Gradle 8.14 supports running on Java up to 24; Java 25 is officially supported for running Gradle from 9.1.0 onward.
-- Homi keeps Flutter 3.41.5's generated Gradle/Android toolchain rather than forcing an unsafe Gradle 9 migration.
+- Homi keeps Flutter 3.41.5's generated Gradle/Android toolchain rather than forcing a Gradle 9 migration.
 - Added `scripts/configure-gradle-jdk.ps1` to discover a compatible installed JDK, prefer JDK 21, persist it for this project in `android/gradle.properties`, verify the Gradle JVM, and optionally run `signingReport`.
-- Updated `scripts/bootstrap-android.ps1` so future Android-host setup checks Gradle/JDK compatibility automatically.
-- Fixed the JDK discovery probe for Windows PowerShell: `java -version` writes normal version output to STDERR, which was being promoted to `NativeCommandError` under the script's strict error mode. The probe now captures process stdout/stderr directly and checks the real exit code instead.
+- Fixed the Windows PowerShell Java-version probe so normal `java -version` STDERR output is not treated as a failure.
+- Local Gradle is now verified on JDK 21 from Android Studio's bundled JetBrains Runtime.
+- `signingReport` completed successfully with Gradle 8.14.
+- Debug SHA-1: `9D:D7:92:98:5C:1C:88:88:97:E7:E4:AC:6F:FD:1B:E4:09:BE:EE:19`.
+- Debug SHA-256: `F3:F8:12:F2:B0:16:6B:C1:53:07:76:0C:CE:FC:56:92:25:36:77:D5:24:24:D9:C3:58:1D:23:7C:06:55:46:80`.
+- Added `scripts/register-firebase-android-certs.sh` to register both fingerprints against the correct Firebase Android app and refresh `google-services.json` automatically from Cloud Shell.
 
 ### Compile/device checkpoint still required
 
 The source pass is not yet claimed as an installed device build.
 
-Next local checkpoint:
+Next checkpoint:
 
-1. `git pull` the latest JDK compatibility fix;
-2. run `scripts\configure-gradle-jdk.ps1 -RunSigningReport`;
-3. register the resulting SHA-1/SHA-256 in Firebase;
-4. download the refreshed `google-services.json`;
-5. run `scripts\enable-firebase-android.ps1`;
-6. run `flutter analyze`, `flutter test`, and `flutter run` on the real Android device.
+1. run the Firebase certificate registration script in Cloud Shell;
+2. create the restricted Android Maps/Places key;
+3. place the refreshed `google-services.json` into `android/app/`;
+4. run `scripts\enable-firebase-android.ps1` and sync the Maps secret;
+5. run `flutter analyze`, `flutter test`, and `flutter run` on the real Android device;
+6. register the App Check debug token after the first debug launch.

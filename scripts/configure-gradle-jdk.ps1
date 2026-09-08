@@ -12,19 +12,6 @@ if (-not (Test-Path $AndroidDir)) {
     throw "Android host not found at $AndroidDir. Run scripts\bootstrap-android.ps1 first."
 }
 
-function Write-Utf8NoBom {
-    param(
-        [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string[]]$Lines
-    )
-
-    # Windows PowerShell 5.1 writes a UTF-8 BOM with Set-Content -Encoding UTF8.
-    # A BOM on the first gradle.properties key can make Gradle ignore that key,
-    # including org.gradle.jvmargs. Always keep this file UTF-8 without BOM.
-    $encoding = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllLines($Path, $Lines, $encoding)
-}
-
 function Get-JavaMajor {
     param([Parameter(Mandatory = $true)][string]$JavaHome)
 
@@ -142,12 +129,20 @@ $javaHomeForGradle = $javaHome.Replace('\', '/')
 Write-Host "==> Using JDK $($selected.Major) for Homi Gradle" -ForegroundColor Green
 Write-Host "    $javaHome"
 
-$existing = if (Test-Path $GradleProperties) { Get-Content $GradleProperties } else { @() }
-$filtered = $existing | Where-Object { $_ -notmatch '^\s*org\.gradle\.java\.home\s*=' }
+$existing = if (Test-Path $GradleProperties) { @(Get-Content $GradleProperties) } else { @() }
+$filtered = @($existing | Where-Object {
+    $_ -notmatch '^\s*org\.gradle\.java\.home\s*=' -and
+    $_ -notmatch '^\s*$'
+})
 $updated = @($filtered)
-if ($updated.Count -gt 0 -and $updated[-1] -ne '') { $updated += '' }
 $updated += "org.gradle.java.home=$javaHomeForGradle"
-Write-Utf8NoBom -Path $GradleProperties -Lines $updated
+
+# Write as UTF-8 without BOM. Windows PowerShell 5.1's UTF8 encoding writes a
+# BOM, which can corrupt the first gradle.properties key. WriteAllText avoids
+# that and also avoids mandatory string-array binding failures on blank lines.
+$encoding = New-Object System.Text.UTF8Encoding($false)
+$text = [string]::Join([Environment]::NewLine, [string[]]$updated) + [Environment]::NewLine
+[System.IO.File]::WriteAllText($GradleProperties, $text, $encoding)
 
 # Make the same JDK active for this PowerShell process so gradlew.bat itself
 # is not launched by an unsupported Java 25 installation.

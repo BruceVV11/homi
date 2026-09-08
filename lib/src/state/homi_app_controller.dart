@@ -6,6 +6,7 @@ class HomiAppController extends ChangeNotifier {
   static const _homeNameKey = 'homi.home.name';
   static const _homeTypeKey = 'homi.home.type';
   static const _localOnlyKey = 'homi.account.localOnly';
+  static const _quickItemsKey = 'homi.today.quickItems';
 
   SharedPreferences? _prefs;
 
@@ -14,6 +15,7 @@ class HomiAppController extends ChangeNotifier {
   bool localOnly = true;
   String homeName = 'My home';
   String homeType = 'House';
+  List<String> quickItems = <String>[];
 
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
@@ -21,6 +23,7 @@ class HomiAppController extends ChangeNotifier {
     homeName = _prefs?.getString(_homeNameKey) ?? 'My home';
     homeType = _prefs?.getString(_homeTypeKey) ?? 'House';
     localOnly = _prefs?.getBool(_localOnlyKey) ?? true;
+    quickItems = _prefs?.getStringList(_quickItemsKey) ?? <String>[];
     isReady = true;
     notifyListeners();
   }
@@ -39,6 +42,20 @@ class HomiAppController extends ChangeNotifier {
     await _prefs?.setString(_homeTypeKey, homeType);
     await _prefs?.setBool(_localOnlyKey, localOnly);
     await _prefs?.setBool(_onboardingKey, true);
+    notifyListeners();
+  }
+
+  Future<void> addQuickItem(String value) async {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return;
+    quickItems = <String>[...quickItems, trimmed];
+    await _prefs?.setStringList(_quickItemsKey, quickItems);
+    notifyListeners();
+  }
+
+  Future<void> removeQuickItem(String value) async {
+    quickItems = <String>[...quickItems]..remove(value);
+    await _prefs?.setStringList(_quickItemsKey, quickItems);
     notifyListeners();
   }
 

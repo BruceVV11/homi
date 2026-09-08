@@ -72,7 +72,14 @@ class _HomiShellState extends State<HomiShell> {
   }
 
   List<Widget> _pages(bool signedIn) => [
-        TodayPage(homeName: widget.controller.homeName, signedIn: signedIn, onAccountTap: _openAccount),
+        TodayPage(
+          homeName: widget.controller.homeName,
+          signedIn: signedIn,
+          quickItems: widget.controller.quickItems,
+          onAddQuickItem: widget.controller.addQuickItem,
+          onRemoveQuickItem: widget.controller.removeQuickItem,
+          onAccountTap: _openAccount,
+        ),
         HomePage(homeName: widget.controller.homeName, homeType: widget.controller.homeType),
         const RoutinesPage(),
         const SuppliesPage(),

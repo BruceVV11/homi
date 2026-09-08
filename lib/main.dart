@@ -14,7 +14,9 @@ Future<void> main() async {
   try {
     await Firebase.initializeApp();
     await FirebaseAppCheck.instance.activate(
-      providerAndroid: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+      providerAndroid: kDebugMode
+          ? const AndroidDebugProvider()
+          : const AndroidPlayIntegrityProvider(),
     );
     firebaseReady = true;
   } catch (error) {

@@ -62,8 +62,9 @@
 - The development PC has approximately 11.9 GB RAM while Flutter 3.41.5 generated an 8 GB Gradle heap. No global Gradle override exists.
 - Added `scripts/tune-gradle-memory.ps1` to apply a RAM-aware Gradle profile, reduce heap pressure on sub-16 GB development machines, limit worker concurrency, disable parallel project execution and stop stale Gradle daemons before retrying the build.
 - Daemon inspection then showed the actual Gradle process was still launching with the default `-Xmx512m`, despite `android/gradle.properties` displaying `-Xmx4G`.
-- Root cause: Windows PowerShell 5.1 `Set-Content -Encoding UTF8` writes a UTF-8 BOM. Because `org.gradle.jvmargs` was the first property, the BOM became part of that key and Gradle ignored it, falling back to the 512 MB default heap.
-- Updated both `scripts/tune-gradle-memory.ps1` and `scripts/configure-gradle-jdk.ps1` to write `android/gradle.properties` as UTF-8 without BOM so Gradle recognises the first property reliably.
+- Root cause investigation identified the UTF-8 BOM risk on the first Gradle property, but the first BOM-safe helper revision itself failed in Windows PowerShell because its mandatory string-array parameter rejected an empty line already present in `gradle.properties`; therefore the file was never rewritten and the fresh daemon correctly remained at `-Xmx512m`.
+- Reworked both `scripts/tune-gradle-memory.ps1` and `scripts/configure-gradle-jdk.ps1` to write the complete file directly with `.NET WriteAllText` using UTF-8 without BOM, avoiding PowerShell array binding entirely.
+- The memory tuner now removes irrelevant blank lines, verifies the file does not start with BOM bytes, stops stale daemons, starts a fresh Gradle daemon itself, reads the newest daemon log, and fails unless the real daemon reports the requested heap such as `-Xmx4G`.
 
 ### Compile/device checkpoint still required
 
@@ -71,9 +72,8 @@ The source pass is not yet claimed as an installed device build.
 
 Next checkpoint:
 
-1. pull the BOM-safe Gradle helper updates;
-2. rerun `scripts\tune-gradle-memory.ps1` so `android/gradle.properties` is rewritten without BOM and stale daemons are stopped;
+1. pull the self-verifying Gradle helper update;
+2. rerun `scripts\tune-gradle-memory.ps1` and require `Gradle memory verification PASSED` with `Effective daemon heap: -Xmx4G` before reopening Android Studio;
 3. run Homi again from Android Studio on the real Android device;
-4. if needed, verify the new Gradle daemon reports `-Xmx4G` rather than `-Xmx512m`;
-5. capture/register the Firebase App Check debug token from the first successful debug launch;
-6. verify onboarding, launcher icon/splash, email/password auth, Google sign-in, navigation, location permission and foreground location/battery sync on the real device.
+4. capture/register the Firebase App Check debug token from the first successful debug launch;
+5. verify onboarding, launcher icon/splash, email/password auth, Google sign-in, navigation, location permission and foreground location/battery sync on the real device.

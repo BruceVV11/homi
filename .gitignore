@@ -1,0 +1,38 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Android / IDE
+android/.gradle/
+android/local.properties
+.idea/
+*.iml
+
+# Firebase local configuration
+android/app/google-services.json
+firebase-debug.log
+.firebase/
+
+# Google Maps / local API configuration
+secrets.properties
+secrets-release.properties
+local.defaults.properties
+
+# Credentials / private keys
+*.jks
+*.keystore
+key.properties
+**/*service-account*.json
+**/*service_account*.json
+**/credentials.json
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db

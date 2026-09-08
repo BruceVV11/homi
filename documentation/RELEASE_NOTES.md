@@ -50,14 +50,14 @@
 - Debug SHA-256: `F3:F8:12:F2:B0:16:6B:C1:53:07:76:0C:CE:FC:56:92:25:36:77:D5:24:24:D9:C3:58:1D:23:7C:06:55:46:80`.
 - Added `scripts/register-firebase-android-certs.sh` to register both fingerprints against the correct Firebase Android app and refresh `google-services.json` automatically from Cloud Shell.
 - Firebase Android certificate registration completed successfully and refreshed `/home/brucevanvliet5/homi-google-services.json`.
-- The first Maps/Places key was created with the correct Android package, SHA-1 and API restrictions, but the helper then incorrectly treated the create operation resource name as the key resource name when calling `get-key-string`.
-- Fixed `scripts/create-android-maps-key.sh` to resolve the final key resource after the long-running operation and retrieve the key by actual key ID.
-- A second troubleshooting run showed that this Cloud SDK writes the create operation result, including the generated key string, to stderr even when stdout is redirected. The helper now captures both stdout and stderr into a temporary file, prints that log only on failure, and deletes the log immediately on success.
 - Any Maps key whose value appeared in troubleshooting output was rotated before local use.
 - A fresh Android-restricted Maps/Places development key is now stored only in the local `secrets.properties` flow.
 - Refreshed Firebase `google-services.json` is now in `android/app/`.
 - `scripts/enable-firebase-android.ps1` completed successfully and enabled the Google Services Gradle plugin.
 - `scripts/sync-android-secrets.ps1` completed successfully and generated the Android Maps key resource from the ignored local secret file.
+- `flutter test` completed successfully.
+- `flutter analyze` identified the deprecated App Check `androidProvider` argument. The first migration changed only the parameter name and exposed a provider-type mismatch during the first Android Studio compile.
+- Corrected App Check activation to use typed `AndroidDebugProvider()` in debug builds and `AndroidPlayIntegrityProvider()` in release builds with the new `providerAndroid` API.
 
 ### Compile/device checkpoint still required
 
@@ -65,9 +65,7 @@ The source pass is not yet claimed as an installed device build.
 
 Next checkpoint:
 
-1. run `flutter clean` and `flutter pub get` from the Homi project root;
-2. run `flutter analyze` and resolve all analyzer errors before device compilation;
-3. run `flutter test` and resolve failing tests;
-4. confirm the real Android device appears in `flutter devices`;
-5. run Homi on the device and capture/register the Firebase App Check debug token;
-6. verify onboarding, launcher icon/splash, email/password auth, Google sign-in, navigation, location permission and foreground location/battery sync on the real device.
+1. pull the typed App Check provider fix;
+2. run Homi again from Android Studio on the real Android device;
+3. capture/register the Firebase App Check debug token from the first successful debug launch;
+4. verify onboarding, launcher icon/splash, email/password auth, Google sign-in, navigation, location permission and foreground location/battery sync on the real device.

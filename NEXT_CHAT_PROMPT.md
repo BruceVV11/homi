@@ -63,6 +63,7 @@ App version: `0.3.0+3`.
 - An in-stock item becomes `Use soon` when within 3 days of its expiry date and `Expired` after the date passes.
 - Manual `Running low` / `Need to buy` status takes precedence.
 - Overview and Supply summary counts use the same expiry-aware logic.
+- The first 0.3.0 Android compile attempt exposed a Dart scope error in the Supply card menu: `_editableStatuses` was declared as a static member of `SuppliesPage` but referenced unqualified inside `_SupplyCard`. This has been corrected to `SuppliesPage._editableStatuses`; the device build must be retried before 0.3.0 is called compiled successfully.
 
 ### Account / profile
 
@@ -94,6 +95,7 @@ flutter test
 
 Then run Homi from Android Studio on the Samsung S25 Ultra. Verify:
 
+- the Supplies compile-scope hotfix is present and the Android build gets past `compileFlutterBuildDebug`;
 - shaped bottom-nav mound in every selected state, especially centred Homi Home;
 - Overview wording and empty/populated attention states;
 - 10- and 30-minute Quick Reset generation and completion behavior;

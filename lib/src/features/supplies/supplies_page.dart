@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/supply_icon_catalog.dart';
 import '../../domain/supply_item.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/homi_controls.dart';
+import '../../widgets/homi_date_time_controls.dart';
 import '../../widgets/homi_page.dart';
 
 class SuppliesPage extends StatelessWidget {
@@ -20,6 +22,7 @@ class SuppliesPage extends StatelessWidget {
     String category,
     SupplyStatus status,
     DateTime? expiryDate,
+    String iconKey,
   ) onAdd;
   final Future<void> Function(String id, SupplyStatus status) onUpdateStatus;
   final Future<void> Function(String id) onRemove;
@@ -31,12 +34,12 @@ class SuppliesPage extends StatelessWidget {
   ];
 
   static const _quickStarts = <_SupplyTemplate>[
-    _SupplyTemplate('Milk', 'Fridge', Icons.local_drink_outlined),
-    _SupplyTemplate('Bread', 'Pantry', Icons.breakfast_dining_outlined),
-    _SupplyTemplate('Eggs', 'Fridge', Icons.egg_outlined),
-    _SupplyTemplate('Dog food', 'Pantry', Icons.pets_outlined),
-    _SupplyTemplate('Toilet paper', 'Household', Icons.bathroom_outlined),
-    _SupplyTemplate('Dishwashing liquid', 'Household', Icons.cleaning_services_outlined),
+    _SupplyTemplate('Milk', 'Fridge', 'milk'),
+    _SupplyTemplate('Bread', 'Pantry', 'bread'),
+    _SupplyTemplate('Eggs', 'Fridge', 'eggs'),
+    _SupplyTemplate('Dog food', 'Pantry', 'pet_food'),
+    _SupplyTemplate('Toilet paper', 'Household', 'toilet_paper'),
+    _SupplyTemplate('Dishwashing liquid', 'Household', 'dishwasher'),
   ];
 
   Future<void> _addSupply(
@@ -50,7 +53,13 @@ class SuppliesPage extends StatelessWidget {
       builder: (context) => _SupplyEditorSheet(template: template),
     );
     if (draft != null) {
-      await onAdd(draft.name, draft.category, draft.status, draft.expiryDate);
+      await onAdd(
+        draft.name,
+        draft.category,
+        draft.status,
+        draft.expiryDate,
+        draft.iconKey,
+      );
     }
   }
 
@@ -67,10 +76,7 @@ class SuppliesPage extends StatelessWidget {
             children: [
               Text(item.name, style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 5),
-              Text(
-                'Update the stock status',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              Text('Update the stock status', style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 14),
               HomiChoiceGroup<SupplyStatus>(
                 values: _editableStatuses,
@@ -93,8 +99,7 @@ class SuppliesPage extends StatelessWidget {
                     final confirmed = await showHomiConfirmSheet(
                       context,
                       title: 'Remove supply?',
-                      message:
-                          '“${item.name}” will be removed from your supplies on this phone.',
+                      message: '“${item.name}” will be removed from your supplies on this phone.',
                       confirmLabel: 'Remove item',
                       cancelLabel: 'Keep item',
                       icon: Icons.delete_outline_rounded,
@@ -116,15 +121,9 @@ class SuppliesPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final useSoon = items
-        .where((item) => item.effectiveStatus(now) == SupplyStatus.eatSoon)
-        .length;
-    final runningLow = items
-        .where((item) => item.effectiveStatus(now) == SupplyStatus.runningLow)
-        .length;
-    final needToBuy = items
-        .where((item) => item.effectiveStatus(now) == SupplyStatus.needToBuy)
-        .length;
+    final useSoon = items.where((item) => item.effectiveStatus(now) == SupplyStatus.eatSoon).length;
+    final runningLow = items.where((item) => item.effectiveStatus(now) == SupplyStatus.runningLow).length;
+    final needToBuy = items.where((item) => item.effectiveStatus(now) == SupplyStatus.needToBuy).length;
 
     return HomiPage(
       title: 'Supplies',
@@ -134,13 +133,9 @@ class SuppliesPage extends StatelessWidget {
           children: [
             Expanded(child: _SummaryCard(label: 'Use soon', count: useSoon)),
             const SizedBox(width: 8),
-            Expanded(
-              child: _SummaryCard(label: 'Running low', count: runningLow),
-            ),
+            Expanded(child: _SummaryCard(label: 'Running low', count: runningLow)),
             const SizedBox(width: 8),
-            Expanded(
-              child: _SummaryCard(label: 'Need to buy', count: needToBuy),
-            ),
+            Expanded(child: _SummaryCard(label: 'Need to buy', count: needToBuy)),
           ],
         ),
         const SizedBox(height: 16),
@@ -176,12 +171,13 @@ class SuppliesPage extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(template.icon, size: 18, color: HomiColors.coral),
-                    const SizedBox(width: 7),
-                    Text(
-                      template.name,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    Icon(
+                      SupplyIconCatalog.iconFor(template.iconKey),
+                      size: 18,
+                      color: HomiColors.coral,
                     ),
+                    const SizedBox(width: 7),
+                    Text(template.name, style: const TextStyle(fontWeight: FontWeight.w900)),
                     const SizedBox(width: 5),
                     const Icon(Icons.add_rounded, size: 16),
                   ],
@@ -226,10 +222,7 @@ class _SummaryCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text(
-            '$count',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-          ),
+          Text('$count', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
           const SizedBox(height: 2),
           Text(
             label,
@@ -245,23 +238,16 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _SupplyCard extends StatelessWidget {
-  const _SupplyCard({
-    required this.item,
-    required this.now,
-    required this.onOptions,
-  });
+  const _SupplyCard({required this.item, required this.now, required this.onOptions});
 
   final SupplyItem item;
   final DateTime now;
   final VoidCallback onOptions;
 
-  String _dateLabel(DateTime date) => '${date.day}/${date.month}/${date.year}';
-
   @override
   Widget build(BuildContext context) {
     final displayStatus = item.effectiveStatus(now);
     final displayLabel = item.displayStatusLabel(now);
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
@@ -274,8 +260,8 @@ class _SupplyCard extends StatelessWidget {
                 color: HomiColors.peach.withValues(alpha: 0.20),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(
-                Icons.inventory_2_outlined,
+              child: Icon(
+                SupplyIconCatalog.iconFor(item.iconKey),
                 color: HomiColors.coral,
               ),
             ),
@@ -284,18 +270,12 @@ class _SupplyCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    item.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
+                  Text(item.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 3),
                   Text(
                     item.expiryDate == null
                         ? item.category
-                        : '${item.category} · expires ${_dateLabel(item.expiryDate!)}',
+                        : '${item.category} · expires ${item.expiryDate!.day}/${item.expiryDate!.month}/${item.expiryDate!.year}',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 8),
@@ -329,23 +309,14 @@ class _StatusLine extends StatelessWidget {
       SupplyStatus.needToBuy => HomiColors.coral,
       SupplyStatus.eatSoon => const Color(0xFFD28B43),
     };
-
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
+        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
         const SizedBox(width: 7),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w900,
-            color: color,
-          ),
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: color),
         ),
       ],
     );
@@ -364,16 +335,9 @@ class _EmptySupplyCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Icon(
-              Icons.shopping_bag_outlined,
-              size: 34,
-              color: HomiColors.coral,
-            ),
+            const Icon(Icons.shopping_bag_outlined, size: 34, color: HomiColors.coral),
             const SizedBox(height: 10),
-            const Text(
-              'Nothing tracked yet',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
+            const Text('Nothing tracked yet', style: TextStyle(fontWeight: FontWeight.w900)),
             const SizedBox(height: 4),
             Text(
               'Add fridge, pantry and household basics so Homi can flag what is running low or nearing its expiry date.',
@@ -394,20 +358,19 @@ class _EmptySupplyCard extends StatelessWidget {
 }
 
 class _SupplyTemplate {
-  const _SupplyTemplate(this.name, this.category, this.icon);
-
+  const _SupplyTemplate(this.name, this.category, this.iconKey);
   final String name;
   final String category;
-  final IconData icon;
+  final String iconKey;
 }
 
 class _SupplyDraft {
-  const _SupplyDraft(this.name, this.category, this.status, this.expiryDate);
-
+  const _SupplyDraft(this.name, this.category, this.status, this.expiryDate, this.iconKey);
   final String name;
   final String category;
   final SupplyStatus status;
   final DateTime? expiryDate;
+  final String iconKey;
 }
 
 class _SupplyEditorSheet extends StatefulWidget {
@@ -421,56 +384,117 @@ class _SupplyEditorSheet extends StatefulWidget {
 
 class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
   late final TextEditingController _nameController;
-  late final TextEditingController _dayController;
-  late final TextEditingController _monthController;
-  late final TextEditingController _yearController;
   late String _category;
   SupplyStatus _status = SupplyStatus.okay;
-  bool _hasExpiry = false;
+  DateTime? _expiryDate;
+  late String _iconKey;
   String? _error;
 
-  static const _categories = <String>[
-    'Pantry',
-    'Fridge',
-    'Freezer',
-    'Medicine',
-    'Household',
-  ];
+  static const _categories = <String>['Pantry', 'Fridge', 'Freezer', 'Medicine', 'Household'];
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
     _nameController = TextEditingController(text: widget.template?.name ?? '');
     _category = widget.template?.category ?? 'Pantry';
-    _dayController = TextEditingController(text: now.day.toString().padLeft(2, '0'));
-    _monthController = TextEditingController(text: now.month.toString().padLeft(2, '0'));
-    _yearController = TextEditingController(text: now.year.toString());
+    _iconKey = widget.template?.iconKey ?? SupplyIconCatalog.defaultKey;
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _dayController.dispose();
-    _monthController.dispose();
-    _yearController.dispose();
     super.dispose();
   }
 
-  DateTime? _expiryFromFields() {
-    if (!_hasExpiry) return null;
-    final day = int.tryParse(_dayController.text.trim());
-    final month = int.tryParse(_monthController.text.trim());
-    final year = int.tryParse(_yearController.text.trim());
-    if (day == null || month == null || year == null) return null;
-    if (year < 2020 || month < 1 || month > 12 || day < 1 || day > 31) {
-      return null;
-    }
-    final candidate = DateTime(year, month, day);
-    if (candidate.year != year || candidate.month != month || candidate.day != day) {
-      return null;
-    }
-    return candidate;
+  Future<void> _pickExpiry() async {
+    final selected = await showHomiDatePicker(
+      context,
+      title: 'Expiry date',
+      initialDate: _expiryDate ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
+      allowClear: true,
+    );
+    if (!mounted) return;
+    if (selected != null) setState(() => _expiryDate = selected);
+  }
+
+  Future<void> _pickIcon() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.72,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Choose an icon', style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Pick the one that makes this item easiest to recognise. If you skip it, Homi uses the general supply icon.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 0.88,
+                  ),
+                  itemCount: SupplyIconCatalog.all.length,
+                  itemBuilder: (context, index) {
+                    final option = SupplyIconCatalog.all[index];
+                    final active = option.key == _iconKey;
+                    return GestureDetector(
+                      onTap: () => Navigator.pop(context, option.key),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: active
+                              ? HomiColors.peach.withValues(alpha: 0.30)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: active ? HomiColors.coral : HomiColors.border,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(option.icon, color: HomiColors.coral, size: 26),
+                            const SizedBox(height: 6),
+                            Text(
+                              option.label,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected != null && mounted) setState(() => _iconKey = selected);
   }
 
   void _submit() {
@@ -479,19 +503,15 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
       setState(() => _error = 'Give the item a short name.');
       return;
     }
-    final expiry = _expiryFromFields();
-    if (_hasExpiry && expiry == null) {
-      setState(() => _error = 'Enter a valid expiry date.');
-      return;
-    }
     Navigator.pop(
       context,
-      _SupplyDraft(name, _category, _status, expiry),
+      _SupplyDraft(name, _category, _status, _expiryDate, _iconKey),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final icon = SupplyIconCatalog.optionFor(_iconKey);
     return SafeArea(
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
@@ -501,16 +521,12 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
           20 + MediaQuery.viewInsetsOf(context).bottom,
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Add a supply',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
+            Text('Add a supply', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 6),
             Text(
-              'Keep the details simple. Homi only needs enough information to tell you when something needs attention.',
+              'Keep the details simple. Homi only needs enough information to help you notice stock and expiry changes.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
@@ -527,8 +543,46 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
               },
             ),
             const SizedBox(height: 18),
-            const _FieldLabel('Where is it?'),
-            const SizedBox(height: 9),
+            Text('Icon', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: _pickIcon,
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: HomiColors.border),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: HomiColors.peach.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(icon.icon, color: HomiColors.coral),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(icon.label, style: const TextStyle(fontWeight: FontWeight.w900)),
+                          Text('Tap to change', style: Theme.of(context).textTheme.bodyMedium),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right_rounded),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text('Where is it?', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
             HomiChoiceGroup<String>(
               values: _categories,
               selected: _category,
@@ -536,90 +590,31 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
               onSelected: (value) => setState(() => _category = value),
               compact: true,
             ),
-            const SizedBox(height: 20),
-            const _FieldLabel('Stock status'),
-            const SizedBox(height: 9),
+            const SizedBox(height: 18),
+            Text('Stock status', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
             HomiChoiceGroup<SupplyStatus>(
               values: SuppliesPage._editableStatuses,
               selected: _status,
               labelFor: (value) => value.label,
               onSelected: (value) => setState(() => _status = value),
-              compact: true,
             ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                const Expanded(child: _FieldLabel('Expiry date')),
-                TextButton(
-                  onPressed: () => setState(() => _hasExpiry = !_hasExpiry),
-                  child: Text(_hasExpiry ? 'Remove' : 'Add date'),
-                ),
-              ],
+            const SizedBox(height: 18),
+            HomiDateField(
+              label: 'Expiry date',
+              value: _expiryDate,
+              optional: true,
+              onTap: _pickExpiry,
+              onClear: _expiryDate == null ? null : () => setState(() => _expiryDate = null),
             ),
-            if (_hasExpiry) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Enter the date as day, month and year.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 9),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _dayController,
-                      keyboardType: TextInputType.number,
-                      maxLength: 2,
-                      decoration: const InputDecoration(labelText: 'Day', counterText: ''),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _monthController,
-                      keyboardType: TextInputType.number,
-                      maxLength: 2,
-                      decoration: const InputDecoration(labelText: 'Month', counterText: ''),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _yearController,
-                      keyboardType: TextInputType.number,
-                      maxLength: 4,
-                      decoration: const InputDecoration(labelText: 'Year', counterText: ''),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 22),
+            const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
-              child: FilledButton(
-                onPressed: _submit,
-                child: const Text('Add supply'),
-              ),
+              child: FilledButton(onPressed: _submit, child: const Text('Add supply')),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _FieldLabel extends StatelessWidget {
-  const _FieldLabel(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
     );
   }
 }

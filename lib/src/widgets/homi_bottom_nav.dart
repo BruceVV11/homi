@@ -27,6 +27,7 @@ class HomiBottomNav extends StatelessWidget {
       builder: (context, constraints) {
         const itemCount = 5;
         const activeSize = 50.0;
+        const activeTop = 8.0;
         final itemWidth = constraints.maxWidth / itemCount;
         final centerX = itemWidth * (selectedIndex + 0.5);
         final activeLeft = centerX - (activeSize / 2);
@@ -45,7 +46,7 @@ class HomiBottomNav extends StatelessWidget {
                 duration: const Duration(milliseconds: 230),
                 curve: Curves.easeOutCubic,
                 left: activeLeft,
-                top: 7,
+                top: activeTop,
                 width: activeSize,
                 height: activeSize,
                 child: IgnorePointer(
@@ -56,7 +57,7 @@ class HomiBottomNav extends StatelessWidget {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                height: 69,
+                height: 68,
                 child: Row(
                   children: List<Widget>.generate(itemCount, (index) {
                     final selected = index == selectedIndex;
@@ -196,7 +197,7 @@ class _HomiNavBackgroundPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final path = _path(size);
+    final path = _surfacePath(size);
     canvas.drawShadow(path, const Color(0x1C000000), 11, false);
 
     final fill = Paint()
@@ -211,58 +212,35 @@ class _HomiNavBackgroundPainter extends CustomPainter {
     canvas.drawPath(path, border);
   }
 
-  Path _path(Size size) {
-    const bodyTop = 24.0;
-    const topCorner = 22.0;
-    const bottomCorner = 20.0;
-    const moundHalf = 34.0;
+  Path _surfacePath(Size size) {
+    const bodyTop = 27.0;
+    const bodyRadius = 23.0;
+    const haloRadius = 33.0;
+    const haloCenterY = 33.0;
+
     final cx = centerX
-        .clamp(moundHalf + 1, size.width - moundHalf - 1)
+        .clamp(haloRadius + 1, size.width - haloRadius - 1)
         .toDouble();
 
-    final path = Path()..moveTo(topCorner, bodyTop);
-    path.lineTo(cx - moundHalf, bodyTop);
+    final base = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, bodyTop, size.width, size.height - bodyTop),
+          const Radius.circular(bodyRadius),
+        ),
+      );
+    final halo = Path()
+      ..addOval(
+        Rect.fromCircle(
+          center: Offset(cx, haloCenterY),
+          radius: haloRadius,
+        ),
+      );
 
-    // The white dome is deliberately larger than the active circle. This
-    // leaves a visible, even halo around the top and sides, matching the
-    // approved reference rather than letting the bar touch the button.
-    path.cubicTo(
-      cx - 24,
-      bodyTop,
-      cx - 24,
-      0,
-      cx,
-      0,
-    );
-    path.cubicTo(
-      cx + 24,
-      0,
-      cx + 24,
-      bodyTop,
-      cx + moundHalf,
-      bodyTop,
-    );
-
-    path.lineTo(size.width - topCorner, bodyTop);
-    path.quadraticBezierTo(
-      size.width,
-      bodyTop,
-      size.width,
-      bodyTop + topCorner,
-    );
-    path.lineTo(size.width, size.height - bottomCorner);
-    path.quadraticBezierTo(
-      size.width,
-      size.height,
-      size.width - bottomCorner,
-      size.height,
-    );
-    path.lineTo(bottomCorner, size.height);
-    path.quadraticBezierTo(0, size.height, 0, size.height - bottomCorner);
-    path.lineTo(0, bodyTop + topCorner);
-    path.quadraticBezierTo(0, bodyTop, topCorner, bodyTop);
-    path.close();
-    return path;
+    // Unioning a true circle with the rounded bar keeps the active halo
+    // circular at every destination, including Overview and People. It avoids
+    // the pointed edge created by hand-drawn mound control points.
+    return Path.combine(PathOperation.union, base, halo);
   }
 
   @override

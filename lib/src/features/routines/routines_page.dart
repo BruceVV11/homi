@@ -14,19 +14,63 @@ class RoutinesPage extends StatelessWidget {
   });
 
   final List<RoutineItem> items;
-  final Future<void> Function(String title, String category, String frequency) onAdd;
+  final Future<void> Function(
+    String title,
+    String category,
+    String frequency,
+    int estimatedMinutes,
+  ) onAdd;
   final Future<void> Function(String id) onToggle;
   final Future<void> Function(String id) onRemove;
 
-  Future<void> _addRoutine(BuildContext context) async {
+  static const _examples = <_RoutineTemplate>[
+    _RoutineTemplate(
+      icon: Icons.pets_rounded,
+      title: 'Feed the pets',
+      category: 'Pets',
+      frequency: 'Daily',
+      estimatedMinutes: 5,
+    ),
+    _RoutineTemplate(
+      icon: Icons.delete_outline_rounded,
+      title: 'Take the bins out',
+      category: 'Chores',
+      frequency: 'Weekly',
+      estimatedMinutes: 10,
+    ),
+    _RoutineTemplate(
+      icon: Icons.bed_outlined,
+      title: 'Change bed linen',
+      category: 'Chores',
+      frequency: 'Weekly',
+      estimatedMinutes: 15,
+    ),
+    _RoutineTemplate(
+      icon: Icons.local_florist_outlined,
+      title: 'Water indoor plants',
+      category: 'Plants & garden',
+      frequency: 'Weekly',
+      estimatedMinutes: 10,
+    ),
+  ];
+
+  Future<void> _addRoutine(
+    BuildContext context, {
+    _RoutineTemplate? template,
+  }) async {
     final draft = await showModalBottomSheet<_RoutineDraft>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => const _RoutineEditorSheet(),
+      builder: (context) => _RoutineEditorSheet(template: template),
     );
     if (draft != null) {
-      await onAdd(draft.title, draft.category, draft.frequency);
+      await onAdd(
+        draft.title,
+        draft.category,
+        draft.frequency,
+        draft.estimatedMinutes,
+      );
     }
   }
 
@@ -41,10 +85,13 @@ class RoutinesPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Remove routine?', style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                'Remove routine?',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const SizedBox(height: 8),
               Text(
-                'This removes “${item.title}” from this device.',
+                '“${item.title}” will be removed from your routines on this phone.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 18),
@@ -53,7 +100,7 @@ class RoutinesPage extends StatelessWidget {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Keep it'),
+                      child: const Text('Keep routine'),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -79,15 +126,15 @@ class RoutinesPage extends StatelessWidget {
 
     return HomiPage(
       title: 'Routines',
-      subtitle: 'The repeatable things that make home life easier.',
+      subtitle: 'Set the repeatable jobs Homi should remember for you.',
       children: [
         Row(
           children: [
             Expanded(
               child: Text(
                 items.isEmpty
-                    ? 'Start with one thing you do often.'
-                    : '$openCount ${openCount == 1 ? 'routine' : 'routines'} waiting right now.',
+                    ? 'Start with one job you regularly need to remember.'
+                    : '$openCount ${openCount == 1 ? 'routine is' : 'routines are'} ready to do.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
@@ -113,25 +160,22 @@ class RoutinesPage extends StatelessWidget {
               ),
             ),
           ),
-        const SizedBox(height: 12),
-        Text('Useful categories', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 10),
-        const _IdeaTile(
-          icon: Icons.pets_rounded,
-          title: 'Pets',
-          subtitle: 'Feeds, walks, medication and care',
+        const SizedBox(height: 14),
+        Text('Ideas to try', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 4),
+        Text(
+          'Tap an example to use it as a starting point.',
+          style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 10),
-        const _IdeaTile(
-          icon: Icons.cleaning_services_outlined,
-          title: 'Chores',
-          subtitle: 'Cleaning, bins, laundry and resets',
-        ),
-        const SizedBox(height: 10),
-        const _IdeaTile(
-          icon: Icons.local_florist_outlined,
-          title: 'Plants & garden',
-          subtitle: 'Watering and recurring care',
+        ..._examples.map(
+          (template) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _RoutineExampleTile(
+              template: template,
+              onTap: () => _addRoutine(context, template: template),
+            ),
+          ),
         ),
       ],
     );
@@ -171,19 +215,14 @@ class _RoutineCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
-                      decoration: item.completed ? TextDecoration.lineThrough : null,
+                      decoration:
+                          item.completed ? TextDecoration.lineThrough : null,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      _MiniPill(label: item.category),
-                      _MiniPill(label: item.frequency),
-                      if (item.completed)
-                        const _MiniPill(label: 'Done', emphasized: true),
-                    ],
+                  Text(
+                    '${item.category} · ${item.frequency} · about ${item.estimatedMinutes} min',
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ],
               ),
@@ -207,30 +246,6 @@ class _RoutineCard extends StatelessWidget {
   }
 }
 
-class _MiniPill extends StatelessWidget {
-  const _MiniPill({required this.label, this.emphasized = false});
-
-  final String label;
-  final bool emphasized;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: emphasized
-            ? HomiColors.sage.withValues(alpha: 0.28)
-            : HomiColors.peach.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
-      ),
-    );
-  }
-}
-
 class _EmptyRoutineCard extends StatelessWidget {
   const _EmptyRoutineCard({required this.onAdd});
 
@@ -243,12 +258,19 @@ class _EmptyRoutineCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Icon(Icons.repeat_rounded, size: 34, color: HomiColors.coral),
+            const Icon(
+              Icons.repeat_rounded,
+              size: 34,
+              color: HomiColors.coral,
+            ),
             const SizedBox(height: 10),
-            const Text('No routines yet', style: TextStyle(fontWeight: FontWeight.w900)),
+            const Text(
+              'No routines yet',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
             const SizedBox(height: 4),
             Text(
-              'Add something you want Homi to remember repeatedly.',
+              'Add a repeatable job and Homi can bring it into your overview and Quick Reset suggestions.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
@@ -265,66 +287,104 @@ class _EmptyRoutineCard extends StatelessWidget {
   }
 }
 
-class _IdeaTile extends StatelessWidget {
-  const _IdeaTile({required this.icon, required this.title, required this.subtitle});
+class _RoutineExampleTile extends StatelessWidget {
+  const _RoutineExampleTile({
+    required this.template,
+    required this.onTap,
+  });
 
-  final IconData icon;
-  final String title;
-  final String subtitle;
+  final _RoutineTemplate template;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: HomiColors.peach.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: HomiColors.peach.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(template.icon, color: HomiColors.coral),
               ),
-              child: Icon(icon, color: HomiColors.coral),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
-                ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      template.title,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${template.frequency} · about ${template.estimatedMinutes} min',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              const Icon(Icons.add_rounded, color: HomiColors.coral),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
+class _RoutineTemplate {
+  const _RoutineTemplate({
+    required this.icon,
+    required this.title,
+    required this.category,
+    required this.frequency,
+    required this.estimatedMinutes,
+  });
+
+  final IconData icon;
+  final String title;
+  final String category;
+  final String frequency;
+  final int estimatedMinutes;
+}
+
 class _RoutineDraft {
-  const _RoutineDraft(this.title, this.category, this.frequency);
+  const _RoutineDraft(
+    this.title,
+    this.category,
+    this.frequency,
+    this.estimatedMinutes,
+  );
 
   final String title;
   final String category;
   final String frequency;
+  final int estimatedMinutes;
 }
 
 class _RoutineEditorSheet extends StatefulWidget {
-  const _RoutineEditorSheet();
+  const _RoutineEditorSheet({this.template});
+
+  final _RoutineTemplate? template;
 
   @override
   State<_RoutineEditorSheet> createState() => _RoutineEditorSheetState();
 }
 
 class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
-  final TextEditingController _titleController = TextEditingController();
-  String _category = 'Chores';
-  String _frequency = 'Daily';
+  late final TextEditingController _titleController;
+  late String _category;
+  late String _frequency;
+  late int _estimatedMinutes;
   String? _error;
 
   static const _categories = <String>[
@@ -343,6 +403,18 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
     'As needed',
   ];
 
+  static const _durations = <int>[5, 10, 15, 20, 30, 45, 60];
+
+  @override
+  void initState() {
+    super.initState();
+    final template = widget.template;
+    _titleController = TextEditingController(text: template?.title ?? '');
+    _category = template?.category ?? 'Chores';
+    _frequency = template?.frequency ?? 'Daily';
+    _estimatedMinutes = template?.estimatedMinutes ?? 10;
+  }
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -355,7 +427,10 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
       setState(() => _error = 'Give the routine a short name.');
       return;
     }
-    Navigator.pop(context, _RoutineDraft(title, _category, _frequency));
+    Navigator.pop(
+      context,
+      _RoutineDraft(title, _category, _frequency, _estimatedMinutes),
+    );
   }
 
   @override
@@ -372,16 +447,19 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Add a routine', style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              'Add a routine',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
             const SizedBox(height: 6),
             Text(
-              'Keep it simple. You can mark it done whenever it is handled.',
+              'Tell Homi what repeats and roughly how long it usually takes.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _titleController,
-              autofocus: true,
+              autofocus: widget.template == null,
               textInputAction: TextInputAction.next,
               decoration: InputDecoration(
                 labelText: 'Routine',
@@ -397,7 +475,12 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
               value: _category,
               decoration: const InputDecoration(labelText: 'Category'),
               items: _categories
-                  .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                  .map(
+                    (value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(value),
+                    ),
+                  )
                   .toList(growable: false),
               onChanged: (value) {
                 if (value != null) setState(() => _category = value);
@@ -408,10 +491,33 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
               value: _frequency,
               decoration: const InputDecoration(labelText: 'How often?'),
               items: _frequencies
-                  .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                  .map(
+                    (value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(value),
+                    ),
+                  )
                   .toList(growable: false),
               onChanged: (value) {
                 if (value != null) setState(() => _frequency = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              value: _estimatedMinutes,
+              decoration: const InputDecoration(labelText: 'Usually takes'),
+              items: _durations
+                  .map(
+                    (minutes) => DropdownMenuItem(
+                      value: minutes,
+                      child: Text('$minutes minutes'),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => _estimatedMinutes = value);
+                }
               },
             ),
             const SizedBox(height: 16),

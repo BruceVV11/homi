@@ -63,12 +63,26 @@ class SharedTaskService {
       throw StateError('Give the task a short name.');
     }
 
+    final preference = await _firestore
+        .collection('peoplePreferences')
+        .doc(user.uid)
+        .collection('people')
+        .doc(assigneeUid)
+        .get();
+    if (preference.data()?['scope'] != 'household') {
+      throw StateError(
+        'Mark this person as Household in People before assigning household tasks to them.',
+      );
+    }
+
     final ref = _firestore.collection('sharedTasks').doc();
     await ref.set({
       'title': trimmedTitle,
       'notes': _clean(notes),
       'assigneeUid': assigneeUid,
-      'assigneeName': assigneeName.trim().isEmpty ? 'Homi user' : assigneeName.trim(),
+      'assigneeName': assigneeName.trim().isEmpty
+          ? 'Homi user'
+          : assigneeName.trim(),
       'createdByUid': user.uid,
       'createdByName': _displayName(user),
       'memberUids': <String>[user.uid, assigneeUid],

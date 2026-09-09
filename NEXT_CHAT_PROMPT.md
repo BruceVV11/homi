@@ -1,11 +1,11 @@
 # Homi — Next Chat Prompt
 
-Continue development of **Homi** from the current GitHub `main` branch. Treat GitHub as the source of truth for tracked source/docs. Before changing anything, inspect the current source plus:
+Continue development of **Homi** from the current GitHub `main` branch. Treat GitHub as the source of truth for tracked source/docs. Before changing anything, inspect:
 
-- `documentation/releases/0.5.0.md`
+- `documentation/releases/0.6.0.md`
 - `documentation/ARCHITECTURE.md`
 - `documentation/LOCATION_SAFETY.md`
-- `documentation/RELEASE_NOTES.md`
+- the latest affected source files
 
 Use the **mobile-app-development** workflow first. Preserve approved behaviour/design, exact brand assets and existing user data. Do not claim a pass compiled or worked on-device until Bruce's local Flutter/Android toolchain proves it.
 
@@ -21,11 +21,16 @@ Use the **mobile-app-development** workflow first. Preserve approved behaviour/d
 - Dart baseline: 3.11.3
 - Development device: Samsung S25 Ultra
 - JDK 21 / Gradle 8.14
-- Verified local Gradle profile on the development PC: 4 GB heap, one worker, parallel execution off
+- Verified local Gradle profile: 4 GB heap, one worker, parallel execution off
 - Android host under `android/` is intentionally local/untracked at this stage.
-- Existing local Firebase/Maps config must be preserved.
-- Never ask Bruce to paste the Maps API key into chat.
-- The deleted project `homi-508000` must never be used.
+- Preserve existing local Firebase/Maps files and never ask Bruce to paste the Maps key into chat.
+- Deleted project `homi-508000` must never be used.
+
+Bruce currently has a safety stash named:
+
+`stash@{0}: On main: Homi pre-0.5.0 local tracked changes`
+
+Do **not** automatically pop or delete that stash. It preserves old local source fixes; current GitHub already supersedes them.
 
 ## Approved brand
 
@@ -35,169 +40,152 @@ Use the **mobile-app-development** workflow first. Preserve approved behaviour/d
 - Cream `#FFF8F2`
 - Slate `#2E2E2E`
 - Nunito typography
-- Exact Homi logo/mark artwork already exists in `assets/brand/` and must never be redrawn or approximated with framework shapes.
+- Exact Homi logo/mark artwork already exists in `assets/brand/`; never redraw/approximate it with framework shapes.
 
-## Product direction
+## Current product / navigation
 
 Homi is a local-first household operating system with a broader trusted-person/location layer.
 
-Primary navigation is now:
+Primary navigation:
 
 **Overview · Tasks · Home · Supplies · People**
 
-Home remains the centre destination and uses the exact Homi mark.
+Home remains centred and uses the exact Homi mark. The persistent Homi logo/profile header remains fixed while swiping primary pages.
 
-The persistent Homi logo/profile header must stay fixed while swiping primary pages.
+Current source version: **`0.6.0+6`**.
 
-## Tasks vs Routines
+## Tasks and Routines
 
-This distinction is intentional and must be preserved:
+Tasks and Routines are intentionally separate.
 
 ### Tasks
 
 Tasks happen once.
 
-Examples:
-- Take the mince out to defrost
-- Put the bins at the gate tonight
-- Call the plumber
-
-A task can:
-- have no due time, or an optional date/time;
-- be local-only;
-- be assigned to the user;
-- be assigned to an accepted Homi person marked **Household**;
-- remain visible in Completed after completion;
-- record who completed it and when;
-- be reopened if ticked by mistake.
-
-Cloud-assigned tasks use `sharedTasks/{taskId}` and share only that task with creator/assignee. They do not grant Home/Supplies/Routine access.
+- Optional due date/time or **No due time**.
+- Completed Tasks show who completed them and when.
+- Completed Tasks stay visible for 48 hours, then are hidden/purged by local/cloud cleanup.
+- **Me** tasks remain private/local.
+- A task assigned to another Household person, or **Anyone at home**, can be visible to the creator's chosen Household people through `sharedTasks/{taskId}`.
+- Every household viewer sees the assignee/due/completion attribution.
+- Location-only friends must not see household Tasks.
+- Task explanatory copy now lives behind **How it works** instead of occupying page space.
 
 ### Routines
 
-Routines are repeating jobs only:
+Routines repeat:
+
 - Daily
 - Weekdays
-- Selected weekdays
+- Weekly / selected weekdays
+- **Bi-weekly** / every second selected weekday
 - Monthly
 
-Each occurrence records who completed it and when, calculates the next due time, stays visible in Up to date after completion, and can be unticked/re-ticked for the same occurrence if it was marked by mistake.
+`RoutineCompletion.occurrenceDueAt` keeps complete → undo → complete-again reversible for the same occurrence.
 
-`RoutineCompletion.occurrenceDueAt` exists specifically to make this reversible.
+Duration choices include **60+ min**.
 
-## Date/time controls
+## Overview
 
-Do not bring back typed date/time fields or awkward dropdowns for stable choices.
+Overview **Quick add** is now a launcher rather than another vague reminder field.
 
-Current reusable branded controls are in:
+It offers:
 
-`lib/src/widgets/homi_date_time_controls.dart`
+- Task
+- Routine
+- Supply
+- Home
 
-They include:
-- Homi calendar sheet
-- Homi 24-hour time wheel
-- Homi day-of-month selector
-- Homi date/time display fields
+Task/Routine selections route into the correct Tasks subview. Supply/Home route to their primary page. Existing old Quick Add reminder strings remain readable/removable for migration but the Overview UI no longer creates new ambiguous reminder records.
 
-Use inline Homi choice controls for fixed categories/statuses/frequencies wherever practical.
-
-## Supplies
-
-Supplies now have:
-- quick adds such as Milk, Bread, Eggs, Dog food, Toilet paper, Dishwashing liquid;
-- a broad icon picker using `SupplyIconCatalog`;
-- persisted `iconKey` with legacy fallback to `inventory`;
-- inline category/status choices;
-- branded expiry-date picker;
-- expiry-derived Use soon/Expired behaviour.
-
-Keep adding icons to the catalog when a real missing household use case appears rather than storing raw IconData codepoints in user data.
+`When you have time` continues to prioritise due Routines and rotate common household suggestions.
 
 ## Home
 
-Home currently supports:
+Home supports:
+
 - Things/appliances/equipment
 - service dates
 - warranty dates
 - maintenance/repair history
 - utility readings
 
-The page has a compact **How Home works** explanation. Trusted/location-only friends do not get Home access. Full household Home/Routine/Supply synchronization is not implemented yet and must not be implied.
+Utility unit input is now controlled, not free text:
+
+- electricity: `kWh`, `Wh`, `MWh`, `units`
+- water: `kL`, `L`, `m³`, `units`
+
+Dates/times remain Homi-branded controls rather than typed fields/native dropdowns.
+
+## Supplies
+
+Supplies include quick adds, expiry logic and a broad persisted `SupplyIconCatalog`. Missing legacy icon keys fall back to `inventory`.
 
 ## People / trusted location
 
-People is intentionally broader than family/household.
+People intentionally supports partners, family, roommates **and friends**.
 
-A connected person can be privately labelled by the current user as:
-- Partner
-- Wife / Husband
-- Mother / Father / Parent
-- Son / Daughter / Child
-- Sibling
-- Roommate
-- Friend
-- Family
-- Caregiver
-- Trusted person
+Each connected person can be privately classified with a relationship label plus scope:
 
-Each private relationship also has scope:
 - **Household**
 - **Friend · location only**
 
-A location-only friend:
-- may receive location only after the owner separately enables sharing;
-- must not gain Home, Supplies, Routines or household records;
-- must not appear as a household task assignee.
+Connection acceptance, household/friend scope and location consent are separate permissions.
 
-A Household person may be eligible for separately scoped collaboration such as an assigned task, but household status still does not start location sharing.
+Current People source includes:
 
-Connection acceptance, relationship scope and location consent are three separate decisions.
+- cached current location + live state reused immediately on return to the tab;
+- `AutomaticKeepAliveClientMixin` to prevent tab-swipe state flicker;
+- profile-photo map markers;
+- embedded interactive map;
+- **Open map** full-screen Google Map;
+- pan/zoom on full map;
+- person focus chips that centre a selected person;
+- person card focus action;
+- battery/charging/freshness;
+- address + coordinate details;
+- copy-address icon;
+- copy-coordinates icon;
+- **Copy all**;
+- external Google Maps;
+- Homi codes / connection requests;
+- per-person Share mine / Stop my share;
+- explicit Live updates with Android foreground-service notification;
+- trusted-person sync retry that keeps last successful location data instead of collapsing to an empty state.
 
-People currently includes:
-- Homi codes
-- connection requests / accept / remove
-- private relationship/scope preferences
-- current-location map
-- profile-photo/initial map markers
-- battery and charging state
-- reverse-geocoded address
-- coordinates
-- copy-address button
-- copy-coordinates button
-- **Copy all**
-- open in Google Maps
-- explicit per-person Share mine / Stop my share
-- opt-in Live updates with Android foreground-service notification
+Raw Firestore permission errors should never be shown directly. A permission/sync problem must not be mislabeled as an internet problem.
 
-`LocationStatusService` currently uses medium accuracy, a 100 m distance filter and roughly two-minute requested Android updates while live sharing is active. This is designed to reduce battery pressure, but do not claim full Life360 force-stop/reboot resilience until it is actually implemented and proven on real devices.
+The prior Connect-sheet red-screen regression (`'_dependents.isEmpty': is not true`) was addressed by giving the modal ownership of its controller. Continue real-device regression testing before declaring it permanently fixed.
 
-Latest location is stored; long-term route history is not on by default.
+## Location battery/safety boundary
 
-## Important People regression
+Live sharing remains explicit and visible. Current Android strategy uses medium accuracy, a 100 m movement filter and roughly two-minute requested updates. Do not claim full Life360 force-stop/reboot persistence until proven/implemented. Long-term movement history is not enabled by default.
 
-A prior red framework screen appeared after opening Connect and then closing it:
+## Navbar direction
 
-`'_dependents.isEmpty': is not true`
+0.6 replaces the hand-drawn mound with a geometric union of:
 
-The Connect flow was rewritten as a stateful modal that owns/disposes its own TextEditingController. Re-test opening/closing Connect repeatedly on the real S25 Ultra before calling it fixed.
+- the rounded white navbar base; and
+- a **true circular white halo** behind the active control.
 
-Raw Firestore permission codes should not appear in user-visible People UI. Friendly user wording is now used.
+This is specifically intended to remove the pointed/irregular shape Bruce saw when **Overview** or **People** was selected. Home remains the exact Homi mark. The physical S25 Ultra screenshot remains the authority; do not call this visually locked until Bruce approves it.
 
 ## Firestore rules
 
-Current rules include:
-- private user/device data
-- exact-lookup Homi codes
-- accepted trusted connections
-- private per-user `peoplePreferences`
-- `sharedTasks` creator/assignee authorization
-- accepted-connection + household-scope requirement for shared task creation
-- accepted-connection + explicit active location share for location reads
-- latest location/battery only by default
+The current rules now include:
 
-**The latest rules have not yet been confirmed deployed after the 0.5.0 changes.** People previously showed `permission-denied` because source rules were ahead of deployed rules.
+- private user/device data;
+- exact-lookup Homi codes;
+- accepted trusted connections;
+- private per-user relationship preferences;
+- household-visible `sharedTasks` member lists;
+- specific non-self assignee validation against accepted Household connection;
+- owner-controlled per-person location shares;
+- latest location/battery access only to authorized viewers.
 
-After analyzer/tests are clean, deploy from Google Cloud Shell:
+**The current 0.6 rules must be deployed after local analyzer/tests are clean and before testing household-shared Tasks or the People sync error.**
+
+Cloud Shell:
 
 ```bash
 cd ~/homi
@@ -205,19 +193,11 @@ git pull
 bash scripts/deploy-firestore-rules.sh
 ```
 
-Do not deploy before the local source checkpoint is clean unless specifically debugging rules.
+## Immediate verification checkpoint
 
-## Navbar direction
+The 0.6 source was implemented in GitHub but has **not yet been compiled/device-verified**.
 
-Bruce wants the selected circular item to look like the supplied reference: a white navigation surface whose top edge forms a smooth symmetric dome around the active button, leaving an **equal visible white gap around the top and sides of the active circle**. The bar must not visually touch the top of the active circle, and first/last destinations must not look pinched.
-
-Current source was reworked again in 0.5.0 but still requires physical-device screenshot approval. Do not call it visually locked until Bruce approves it.
-
-## Current verification checkpoint
-
-The 0.5.0 source has been implemented in GitHub but is **not yet compile/device verified**.
-
-Bruce's next local commands are:
+Bruce should first run:
 
 ```powershell
 cd C:\ConceptLab\Projects\homi
@@ -226,30 +206,31 @@ flutter analyze
 flutter test
 ```
 
-If clean, deploy the Firestore rules from Cloud Shell, then use Android Studio → Samsung S25 Ultra → Run.
+If clean, deploy Firestore rules from Cloud Shell, then Android Studio → Samsung S25 Ultra → Run.
 
-Re-test specifically:
-- navbar: Overview, Tasks, Home, Supplies, People selected states, including first/last;
-- Task create with no due time;
-- Task create with Homi date/time pickers;
-- completed Task remains visible and reopens cleanly;
-- Household-person assignment;
-- Friend/location-only person does not appear as task assignee;
-- recurring Routine complete → untick → tick again;
-- Routine time/weekdays/monthly selectors;
-- Home service/warranty/maintenance/reading date/time pickers;
-- Supplies icon picker + restart persistence;
-- People Connect open/close repeatedly;
-- People relationship/scoping;
-- location details individual copy buttons + Copy all + Google Maps;
-- People permission error after rules deployment;
-- live-location foreground/background behaviour and battery impact.
+Device-review priorities:
 
-If analyzer or build produces an error, fix the exact source/tooling layer that failed. Do not reset Firebase, JDK, Gradle, signing, Maps or Android host setup unless the error actually points there.
+- Task How it works vs page breathing room;
+- No due time wording;
+- specific-person household Task visible to all Household members;
+- Me Task remains private;
+- Recently completed 48-hour section + reopen;
+- Bi-weekly Routine and 60+ min duration;
+- Overview Quick add routing;
+- utility unit choices;
+- People state no longer flashes back to initial state after swipe-away/back;
+- trusted people Retry / no raw permission error after rules deployment;
+- embedded map pan/zoom;
+- Open map full-screen flow;
+- person focus chips/markers/details;
+- navbar circular halo on Overview, Home and People, especially edge geometry.
+
+If analyzer/build reports an error, fix the exact source/tooling layer. Do not reset Firebase, JDK, Gradle, signing, Maps, or the Android host unless the error actually points there.
 
 ## Documentation rule
 
 At the end of every pass:
+
 - update relevant documentation;
-- update a release note under `documentation/releases/`;
-- refresh this top-level `NEXT_CHAT_PROMPT.md` with the newest source-of-truth state.
+- add/update a release note under `documentation/releases/`;
+- refresh this top-level `NEXT_CHAT_PROMPT.md`.

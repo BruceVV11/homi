@@ -1,25 +1,64 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../domain/household_task.dart';
 import '../../domain/routine_create_data.dart';
 import '../../domain/routine_item.dart';
+import '../../services/shared_task_service.dart';
+import '../../services/trusted_people_service.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/homi_controls.dart';
+import '../../widgets/homi_date_time_controls.dart';
 import '../../widgets/homi_page.dart';
 
-class RoutinesPage extends StatelessWidget {
+enum _WorkView { tasks, routines }
+
+class RoutinesPage extends StatefulWidget {
   const RoutinesPage({
     required this.items,
+    required this.tasks,
+    required this.actorName,
+    required this.actorUid,
+    required this.trustedPeopleService,
+    required this.sharedTaskService,
     required this.onAdd,
     required this.onToggle,
     required this.onRemove,
+    required this.onAddTask,
+    required this.onToggleTask,
+    required this.onRemoveTask,
     super.key,
   });
 
   final List<RoutineItem> items;
+  final List<HouseholdTask> tasks;
+  final String actorName;
+  final String? actorUid;
+  final TrustedPeopleService trustedPeopleService;
+  final SharedTaskService sharedTaskService;
   final Future<void> Function(RoutineCreateData data) onAdd;
   final Future<void> Function(String id) onToggle;
   final Future<void> Function(String id) onRemove;
+  final Future<void> Function(HouseholdTaskInput input) onAddTask;
+  final Future<void> Function(String id) onToggleTask;
+  final Future<void> Function(String id) onRemoveTask;
+
+  @override
+  State<RoutinesPage> createState() => _RoutinesPageState();
+}
+
+class _RoutinesPageState extends State<RoutinesPage> {
+  _WorkView _view = _WorkView.tasks;
+  StreamSubscription<List<TrustedConnection>>? _connectionSub;
+  StreamSubscription<Map<String, TrustedPersonPreference>>? _preferenceSub;
+  StreamSubscription<List<HouseholdTask>>? _sharedTaskSub;
+  List<TrustedConnection> _connections = const <TrustedConnection>[];
+  Map<String, TrustedPersonPreference> _preferences =
+      const <String, TrustedPersonPreference>{};
+  List<HouseholdTask> _sharedTasks = const <HouseholdTask>[];
+  String? _cloudMessage;
 
   static const _examples = <_RoutineTemplate>[
     _RoutineTemplate(
@@ -63,123 +102,388 @@ class RoutinesPage extends StatelessWidget {
     ),
   ];
 
-  Future<void> _addRoutine(
-    BuildContext context, {
-    _RoutineTemplate? template,
-  }) async {
+  @override
+  void initState() {
+    super.initState();
+    _bindCloud();
+  }
+
+  @override
+  void didUpdateWidget(covariant RoutinesPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.actorUid != widget.actorUid) _bindCloud();
+  }
+
+  @override
+  void dispose() {
+    _cancelCloud();
+    super.dispose();
+  }
+
+  void _cancelCloud() {
+    _connectionSub?.cancel();
+    _preferenceSub?.cancel();
+    _sharedTaskSub?.cancel();
+    _connectionSub = null;
+    _preferenceSub = null;
+    _sharedTaskSub = null;
+  }
+
+  void _bindCloud() {
+    _cancelCloud();
+    if (widget.actorUid == null) {
+      _connections = const <TrustedConnection>[];
+      _preferences = const <String, TrustedPersonPreference>{};
+      _sharedTasks = const <HouseholdTask>[];
+      return;
+    }
+
+    _connectionSub = widget.trustedPeopleService.watchConnections().listen(
+      (value) {
+        if (mounted) setState(() => _connections = value);
+      },
+      onError: (_) {
+        if (mounted) {
+          setState(() => _cloudMessage = 'Shared task connections are temporarily unavailable.');
+        }
+      },
+    );
+    _preferenceSub = widget.trustedPeopleService.watchPreferences().listen(
+      (value) {
+        if (mounted) setState(() => _preferences = value);
+      },
+      onError: (_) {},
+    );
+    _sharedTaskSub = widget.sharedTaskService.watchSharedTasks().listen(
+      (value) {
+        if (mounted) {
+          setState(() {
+            _sharedTasks = value;
+            _cloudMessage = null;
+          });
+        }
+      },
+      onError: (_) {
+        if (mounted) {
+          setState(() => _cloudMessage = 'Assigned tasks are temporarily unavailable.');
+        }
+      },
+    );
+  }
+
+  List<_AssigneeOption> get _assignees {
+    final result = <_AssigneeOption>[
+      const _AssigneeOption(
+        label: 'Anyone at home',
+        name: null,
+        uid: null,
+        detail: 'A local task anyone can pick up',
+      ),
+      _AssigneeOption(
+        label: 'Me',
+        name: widget.actorName,
+        uid: widget.actorUid,
+        detail: 'Keep this task for yourself',
+      ),
+    ];
+
+    final currentUid = widget.actorUid;
+    if (currentUid == null) return result;
+    for (final connection in _connections.where((item) => item.accepted)) {
+      final uid = connection.otherUid(currentUid);
+      final preference =
+          _preferences[uid] ?? TrustedPersonPreference.fallback;
+      result.add(
+        _AssigneeOption(
+          label: connection.otherName(currentUid),
+          name: connection.otherName(currentUid),
+          uid: uid,
+          detail: preference.relationship == 'Trusted person'
+              ? (preference.household ? 'Household member' : 'Trusted person')
+              : '${preference.relationship}${preference.household ? ' · household' : ''}',
+        ),
+      );
+    }
+    return result;
+  }
+
+  Future<void> _addTask() async {
+    final draft = await showModalBottomSheet<HouseholdTaskInput>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _TaskEditorSheet(
+        assignees: _assignees,
+        actorUid: widget.actorUid,
+      ),
+    );
+    if (draft == null) return;
+
+    final shareWithOther = draft.assigneeUid != null &&
+        widget.actorUid != null &&
+        draft.assigneeUid != widget.actorUid;
+    if (shareWithOther) {
+      try {
+        await widget.sharedTaskService.createAssignedTask(
+          title: draft.title,
+          assigneeUid: draft.assigneeUid!,
+          assigneeName: draft.assigneeName ?? 'Homi user',
+          notes: draft.notes,
+          dueAt: draft.dueAt,
+        );
+      } catch (_) {
+        if (mounted) {
+          setState(() => _cloudMessage = 'Homi could not share that task. Try again.');
+        }
+      }
+      return;
+    }
+    await widget.onAddTask(draft);
+  }
+
+  Future<void> _addRoutine({_RoutineTemplate? template}) async {
     final draft = await showModalBottomSheet<RoutineCreateData>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => _RoutineEditorSheet(template: template),
     );
-    if (draft != null) await onAdd(draft);
+    if (draft != null) await widget.onAdd(draft);
   }
 
-  Future<void> _showOptions(BuildContext context, RoutineItem item) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item.title, style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 5),
-              Text('Routine options', style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.error,
-                  ),
-                  onPressed: () async {
-                    Navigator.pop(sheetContext);
-                    final confirmed = await showHomiConfirmSheet(
-                      context,
-                      title: 'Remove routine?',
-                      message:
-                          '“${item.title}” and its completion history will be removed from this phone.',
-                      confirmLabel: 'Remove routine',
-                      cancelLabel: 'Keep routine',
-                      icon: Icons.delete_outline_rounded,
-                      destructive: true,
-                    );
-                    if (confirmed) await onRemove(item.id);
-                  },
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  label: const Text('Remove routine'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+  Future<void> _removeTask(HouseholdTask task) async {
+    final confirmed = await showHomiConfirmSheet(
+      context,
+      title: 'Remove task?',
+      message: '“${task.title}” will be removed${task.shared ? ' for everyone on this task' : ' from this phone'}.',
+      confirmLabel: 'Remove task',
+      cancelLabel: 'Keep task',
+      icon: Icons.delete_outline_rounded,
+      destructive: true,
     );
+    if (!confirmed) return;
+    if (task.shared) {
+      try {
+        await widget.sharedTaskService.removeTask(task.id);
+      } catch (_) {
+        if (mounted) setState(() => _cloudMessage = 'Homi could not remove that shared task.');
+      }
+    } else {
+      await widget.onRemoveTask(task.id);
+    }
+  }
+
+  Future<void> _removeRoutine(RoutineItem item) async {
+    final confirmed = await showHomiConfirmSheet(
+      context,
+      title: 'Remove routine?',
+      message: '“${item.title}” and its completion history will be removed from this phone.',
+      confirmLabel: 'Remove routine',
+      cancelLabel: 'Keep routine',
+      icon: Icons.delete_outline_rounded,
+      destructive: true,
+    );
+    if (confirmed) await widget.onRemove(item.id);
+  }
+
+  Future<void> _toggleTask(HouseholdTask task) async {
+    if (task.shared) {
+      try {
+        await widget.sharedTaskService.toggleTask(task);
+      } catch (_) {
+        if (mounted) setState(() => _cloudMessage = 'Homi could not update that shared task.');
+      }
+    } else {
+      await widget.onToggleTask(task.id);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final dueCount = items.where((item) => item.isDue(now)).length;
-    final displayItems = List<RoutineItem>.of(items)
-      ..sort((a, b) {
-        final aDue = a.isDue(now);
-        final bDue = b.isDue(now);
-        if (aDue != bDue) return aDue ? -1 : 1;
-        final aNext = a.nextDueAt ?? a.initialDueAt();
-        final bNext = b.nextDueAt ?? b.initialDueAt();
-        return aNext.compareTo(bNext);
-      });
-
     return HomiPage(
-      title: 'Routines',
-      subtitle: 'Keep recurring home jobs visible, timed and easy to recognise.',
+      title: 'Tasks & routines',
+      subtitle: 'One-off jobs for today, routines for the things that come back.',
+      children: [
+        HomiChoiceGroup<_WorkView>(
+          values: _WorkView.values,
+          selected: _view,
+          labelFor: (value) => value == _WorkView.tasks ? 'Tasks' : 'Routines',
+          onSelected: (value) => setState(() => _view = value),
+        ),
+        if (_cloudMessage != null) ...[
+          const SizedBox(height: 10),
+          _QuietNotice(text: _cloudMessage!),
+        ],
+        const SizedBox(height: 18),
+        if (_view == _WorkView.tasks) _buildTasks(context) else _buildRoutines(context),
+      ],
+    );
+  }
+
+  Widget _buildTasks(BuildContext context) {
+    final all = <HouseholdTask>[...widget.tasks, ..._sharedTasks];
+    all.sort((a, b) {
+      if (a.completed != b.completed) return a.completed ? 1 : -1;
+      final aDue = a.dueAt;
+      final bDue = b.dueAt;
+      if (aDue == null && bDue != null) return 1;
+      if (aDue != null && bDue == null) return -1;
+      if (aDue != null && bDue != null) return aDue.compareTo(bDue);
+      return b.createdAt.compareTo(a.createdAt);
+    });
+    final open = all.where((item) => !item.completed).toList(growable: false);
+    final completed = all.where((item) => item.completed).toList(growable: false);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Expanded(
               child: Text(
-                items.isEmpty
-                    ? 'Start with one job you regularly need to remember.'
-                    : dueCount == 0
-                        ? 'Everything scheduled is up to date.'
-                        : '$dueCount ${dueCount == 1 ? 'routine needs' : 'routines need'} attention.',
+                open.isEmpty
+                    ? 'Nothing is waiting right now.'
+                    : '${open.length} ${open.length == 1 ? 'task is' : 'tasks are'} still open.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             FilledButton.icon(
-              onPressed: () => _addRoutine(context),
+              onPressed: _addTask,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Add'),
+              label: const Text('Add task'),
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        if (items.isEmpty)
-          _EmptyRoutineCard(onAdd: () => _addRoutine(context))
+        const SizedBox(height: 14),
+        if (open.isEmpty)
+          _EmptyCard(
+            icon: Icons.task_alt_rounded,
+            title: 'No open tasks',
+            message: 'Add a one-off job such as “Take the mince out to defrost”. Give it a time if it matters, or leave it open.',
+            action: 'Add a task',
+            onTap: _addTask,
+          )
         else
-          ...displayItems.map(
-            (item) => Padding(
+          ...open.map(
+            (task) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: _RoutineCard(
-                item: item,
-                now: now,
-                onToggle: () => onToggle(item.id),
-                onOptions: () => _showOptions(context, item),
+              child: _TaskCard(
+                task: task,
+                currentUid: widget.actorUid,
+                onToggle: () => _toggleTask(task),
+                onRemove: () => _removeTask(task),
               ),
             ),
           ),
+        if (completed.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Text('Completed', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          ...completed.take(8).map(
+            (task) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _TaskCard(
+                task: task,
+                currentUid: widget.actorUid,
+                onToggle: () => _toggleTask(task),
+                onRemove: () => _removeTask(task),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        _QuietNotice(
+          text: widget.actorUid == null
+              ? 'Sign in when you want to assign a task directly to another Homi user. Local tasks continue to work without an account.'
+              : 'Assigning a shared task sends only that task to the person you chose. It does not give them access to your Home, supplies or other household records.',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRoutines(BuildContext context) {
+    final now = DateTime.now();
+    final due = widget.items.where((item) => item.isDue(now)).toList(growable: false)
+      ..sort((a, b) => (a.nextDueAt ?? a.initialDueAt())
+          .compareTo(b.nextDueAt ?? b.initialDueAt()));
+    final upToDate = widget.items.where((item) => !item.isDue(now)).toList(growable: false)
+      ..sort((a, b) => (a.nextDueAt ?? a.initialDueAt())
+          .compareTo(b.nextDueAt ?? b.initialDueAt()));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                due.isEmpty
+                    ? 'Everything scheduled is up to date.'
+                    : '${due.length} ${due.length == 1 ? 'routine needs' : 'routines need'} attention.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            const SizedBox(width: 10),
+            FilledButton.icon(
+              onPressed: () => _addRoutine(),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add routine'),
+            ),
+          ],
+        ),
         const SizedBox(height: 14),
+        if (widget.items.isEmpty)
+          _EmptyCard(
+            icon: Icons.repeat_rounded,
+            title: 'No routines yet',
+            message: 'Routines are for jobs that repeat. Homi remembers when they come around, who completed them and when they are due again.',
+            action: 'Add a routine',
+            onTap: () => _addRoutine(),
+          )
+        else ...[
+          if (due.isNotEmpty) ...[
+            Text('Due now', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            ...due.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _RoutineCard(
+                  item: item,
+                  now: now,
+                  onToggle: () => widget.onToggle(item.id),
+                  onRemove: () => _removeRoutine(item),
+                ),
+              ),
+            ),
+          ],
+          if (upToDate.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('Up to date', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              'These routines are complete for their current occurrence. You can undo a tick if it was marked by mistake.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            ...upToDate.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _RoutineCard(
+                  item: item,
+                  now: now,
+                  onToggle: () => widget.onToggle(item.id),
+                  onRemove: () => _removeRoutine(item),
+                ),
+              ),
+            ),
+          ],
+        ],
+        const SizedBox(height: 20),
         Text('Common routines', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
         Text(
-          'Tap one to start with a realistic schedule, then adjust it to suit your home.',
+          'Tap one to start with a realistic schedule, then adjust it for your home.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 10),
@@ -188,7 +492,7 @@ class RoutinesPage extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: _RoutineExampleTile(
               template: template,
-              onTap: () => _addRoutine(context, template: template),
+              onTap: () => _addRoutine(template: template),
             ),
           ),
         ),
@@ -197,120 +501,111 @@ class RoutinesPage extends StatelessWidget {
   }
 }
 
-class _RoutineCard extends StatelessWidget {
-  const _RoutineCard({
-    required this.item,
-    required this.now,
+class _TaskCard extends StatelessWidget {
+  const _TaskCard({
+    required this.task,
+    required this.currentUid,
     required this.onToggle,
-    required this.onOptions,
+    required this.onRemove,
   });
 
-  final RoutineItem item;
-  final DateTime now;
+  final HouseholdTask task;
+  final String? currentUid;
   final VoidCallback onToggle;
-  final VoidCallback onOptions;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
-    final due = item.isDue(now);
-    final last = item.lastCompletion;
-    final completedForCurrentCycle = !due && last != null;
+    final due = task.dueAt;
+    final assignedToMe = task.assigneeUid != null && task.assigneeUid == currentUid;
+    final createdByOther = task.shared &&
+        task.createdByUid != null &&
+        task.createdByUid != currentUid;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 13, 7, 13),
+        padding: const EdgeInsets.fromLTRB(10, 12, 6, 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            GestureDetector(
-              onTap: onToggle,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: completedForCurrentCycle
-                      ? HomiColors.coral
-                      : HomiColors.peach.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: completedForCurrentCycle
-                        ? HomiColors.coral
-                        : HomiColors.border,
-                  ),
-                ),
-                child: Icon(
-                  completedForCurrentCycle
-                      ? Icons.check_rounded
-                      : Icons.check_rounded,
-                  color: completedForCurrentCycle
-                      ? Colors.white
-                      : HomiColors.muted,
-                  size: 21,
-                ),
-              ),
+            Checkbox(
+              value: task.completed,
+              activeColor: HomiColors.coral,
+              onChanged: (_) => onToggle(),
             ),
-            const SizedBox(width: 11),
+            const SizedBox(width: 4),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      if (item.repeats) ...[
-                        const Icon(
-                          Icons.repeat_rounded,
-                          size: 17,
-                          color: HomiColors.coral,
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                      Expanded(
-                        child: Text(
-                          item.title,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.title,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        decoration: task.completed
+                            ? TextDecoration.lineThrough
+                            : null,
+                      ),
+                    ),
+                    if (task.notes?.trim().isNotEmpty == true) ...[
+                      const SizedBox(height: 3),
+                      Text(task.notes!, style: Theme.of(context).textTheme.bodyMedium),
+                    ],
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 4,
+                      children: [
+                        if (task.assigneeName != null)
+                          _Meta(
+                            icon: Icons.person_outline_rounded,
+                            text: assignedToMe ? 'Assigned to you' : 'For ${task.assigneeName}',
+                          )
+                        else
+                          const _Meta(
+                            icon: Icons.groups_outlined,
+                            text: 'Anyone at home',
                           ),
+                        if (due != null)
+                          _Meta(
+                            icon: Icons.schedule_outlined,
+                            text: DateFormat('EEE d MMM · HH:mm').format(due),
+                          ),
+                        if (task.shared)
+                          const _Meta(
+                            icon: Icons.sync_rounded,
+                            text: 'Shared task',
+                          ),
+                      ],
+                    ),
+                    if (createdByOther) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        'Added by ${task.createdByName}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                    if (task.completedAt != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Done ${DateFormat('EEE d MMM · HH:mm').format(task.completedAt!)} by ${task.completedByName ?? 'someone'}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF6F8B65),
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${item.category} · ${_scheduleLabel(item)} · about ${item.estimatedMinutes} min',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  if (last != null) ...[
-                    const SizedBox(height: 7),
-                    Text(
-                      'Done ${DateFormat('d MMM · HH:mm').format(last.at)} by ${last.byName}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF6F8B65),
-                      ),
-                    ),
                   ],
-                  if (item.repeats) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      due
-                          ? 'Due now'
-                          : 'Next ${DateFormat('EEE d MMM · HH:mm').format(item.nextDueAt ?? item.initialDueAt())}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        color: due ? HomiColors.coral : HomiColors.muted,
-                      ),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
             IconButton(
-              tooltip: 'Routine options',
-              onPressed: onOptions,
+              tooltip: 'Task options',
+              onPressed: onRemove,
               icon: const Icon(Icons.more_vert_rounded),
             ),
           ],
@@ -320,63 +615,619 @@ class _RoutineCard extends StatelessWidget {
   }
 }
 
-String _scheduleLabel(RoutineItem item) {
-  if (!item.repeats) return 'As needed';
-  final time =
-      '${item.dueHour.toString().padLeft(2, '0')}:${item.dueMinute.toString().padLeft(2, '0')}';
-  switch (item.repeat) {
-    case RoutineRepeat.once:
-      return 'As needed';
-    case RoutineRepeat.daily:
-      return 'Daily at $time';
-    case RoutineRepeat.weekdays:
-      return 'Weekdays at $time';
-    case RoutineRepeat.weekly:
-      final days = item.repeatDays.isEmpty
-          ? <int>[item.createdAt.weekday]
-          : item.repeatDays;
-      return '${days.map(_shortDay).join(', ')} at $time';
-    case RoutineRepeat.monthly:
-      return 'Day ${item.dayOfMonth ?? item.createdAt.day} each month at $time';
-  }
-}
+class _RoutineCard extends StatelessWidget {
+  const _RoutineCard({
+    required this.item,
+    required this.now,
+    required this.onToggle,
+    required this.onRemove,
+  });
 
-String _shortDay(int weekday) {
-  const days = <String>['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  final index = (weekday - 1).clamp(0, 6).toInt();
-  return days[index];
-}
-
-class _EmptyRoutineCard extends StatelessWidget {
-  const _EmptyRoutineCard({required this.onAdd});
-
-  final VoidCallback onAdd;
+  final RoutineItem item;
+  final DateTime now;
+  final VoidCallback onToggle;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
+    final due = item.isDue(now);
+    final last = item.lastCompletion;
+    final checked = !due && last != null;
+    final next = item.nextDueAt ?? item.initialDueAt();
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
+        padding: const EdgeInsets.fromLTRB(10, 12, 6, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.repeat_rounded, size: 34, color: HomiColors.coral),
-            const SizedBox(height: 10),
-            const Text('No routines yet', style: TextStyle(fontWeight: FontWeight.w900)),
-            const SizedBox(height: 4),
-            Text(
-              'Add the things that repeat around home. Homi can show when they are due, who last completed them and when they come around again.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
+            Checkbox(
+              value: checked,
+              activeColor: HomiColors.coral,
+              onChanged: (_) => onToggle(),
             ),
-            const SizedBox(height: 14),
-            OutlinedButton.icon(
-              onPressed: onAdd,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add first routine'),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (item.repeats) ...[
+                          const Icon(
+                            Icons.repeat_rounded,
+                            size: 17,
+                            color: HomiColors.coral,
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        Expanded(
+                          child: Text(
+                            item.title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${item.category} · ${_scheduleLabel(item)} · about ${item.estimatedMinutes} min',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    if (last != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Done ${DateFormat('EEE d MMM · HH:mm').format(last.at)} by ${last.byName}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF6F8B65),
+                        ),
+                      ),
+                    ],
+                    if (item.repeats) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        due
+                            ? 'Due now'
+                            : 'Next ${DateFormat('EEE d MMM · HH:mm').format(next)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          color: due ? HomiColors.coral : HomiColors.muted,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Routine options',
+              onPressed: onRemove,
+              icon: const Icon(Icons.more_vert_rounded),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _Meta extends StatelessWidget {
+  const _Meta({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: HomiColors.muted),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: const TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w800,
+            color: HomiColors.muted,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TaskEditorSheet extends StatefulWidget {
+  const _TaskEditorSheet({
+    required this.assignees,
+    required this.actorUid,
+  });
+
+  final List<_AssigneeOption> assignees;
+  final String? actorUid;
+
+  @override
+  State<_TaskEditorSheet> createState() => _TaskEditorSheetState();
+}
+
+class _TaskEditorSheetState extends State<_TaskEditorSheet> {
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
+  late _AssigneeOption _assignee;
+  bool _scheduled = false;
+  DateTime _date = DateTime.now();
+  TimeOfDay _time = const TimeOfDay(hour: 18, minute: 0);
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _assignee = widget.assignees.first;
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final selected = await showHomiDatePicker(
+      context,
+      title: 'When is this task due?',
+      initialDate: _date,
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
+    );
+    if (selected != null && mounted) setState(() => _date = selected);
+  }
+
+  Future<void> _pickTime() async {
+    final selected = await showHomiTimePicker(
+      context,
+      title: 'What time is it due?',
+      initialTime: _time,
+    );
+    if (selected != null && mounted) setState(() => _time = selected);
+  }
+
+  void _submit() {
+    final title = _titleController.text.trim();
+    if (title.isEmpty) {
+      setState(() => _error = 'Give the task a short name.');
+      return;
+    }
+    final dueAt = _scheduled
+        ? DateTime(
+            _date.year,
+            _date.month,
+            _date.day,
+            _time.hour,
+            _time.minute,
+          )
+        : null;
+    Navigator.pop(
+      context,
+      HouseholdTaskInput(
+        title: title,
+        notes: _notesController.text,
+        assigneeName: _assignee.name,
+        assigneeUid: _assignee.uid,
+        dueAt: dueAt,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          4,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Add a task', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 6),
+            Text(
+              'Tasks happen once. Set a time if it matters, assign it to someone if needed, then it stays completed when it is done.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _titleController,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'Task',
+                hintText: 'e.g. Take the mince out to defrost',
+                errorText: _error,
+              ),
+              onChanged: (_) {
+                if (_error != null) setState(() => _error = null);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notesController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Note (optional)',
+                hintText: 'Anything useful to know',
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text('Assign to', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: widget.assignees.map((option) {
+                final active = option == _assignee;
+                return GestureDetector(
+                  onTap: () => setState(() => _assignee = option),
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 90),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: active
+                          ? HomiColors.coral
+                          : HomiColors.peach.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: active ? HomiColors.coral : HomiColors.border,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          option.label,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: active ? Colors.white : HomiColors.slate,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          option.detail,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: active
+                                ? Colors.white.withValues(alpha: 0.82)
+                                : HomiColors.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(growable: false),
+            ),
+            const SizedBox(height: 18),
+            Text('Due time', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            HomiChoiceGroup<bool>(
+              values: const <bool>[false, true],
+              selected: _scheduled,
+              labelFor: (value) => value ? 'Set date & time' : 'Leave open',
+              onSelected: (value) => setState(() => _scheduled = value),
+            ),
+            if (_scheduled) ...[
+              const SizedBox(height: 12),
+              HomiDateField(
+                label: 'Date',
+                value: _date,
+                onTap: _pickDate,
+              ),
+              const SizedBox(height: 12),
+              HomiTimeField(
+                label: 'Time',
+                value: _time,
+                onTap: _pickTime,
+              ),
+            ],
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _submit,
+                child: Text(
+                  _assignee.uid != null && _assignee.uid != widget.actorUid
+                      ? 'Assign task'
+                      : 'Add task',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RoutineEditorSheet extends StatefulWidget {
+  const _RoutineEditorSheet({this.template});
+
+  final _RoutineTemplate? template;
+
+  @override
+  State<_RoutineEditorSheet> createState() => _RoutineEditorSheetState();
+}
+
+class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
+  late final TextEditingController _titleController;
+  late String _category;
+  late RoutineRepeat _repeat;
+  late int _estimatedMinutes;
+  late Set<int> _repeatDays;
+  late int _dayOfMonth;
+  late TimeOfDay _time;
+  String? _error;
+
+  static const _categories = <String>[
+    'Chores',
+    'Pets',
+    'Plants & garden',
+    'Pool & outdoor',
+    'Cleaning',
+    'Home',
+  ];
+
+  static const _repeatOptions = <RoutineRepeat>[
+    RoutineRepeat.daily,
+    RoutineRepeat.weekdays,
+    RoutineRepeat.weekly,
+    RoutineRepeat.monthly,
+  ];
+
+  static const _durations = <int>[5, 10, 15, 20, 30, 45, 60];
+  static const _weekdays = <int>[1, 2, 3, 4, 5, 6, 7];
+
+  @override
+  void initState() {
+    super.initState();
+    final template = widget.template;
+    _titleController = TextEditingController(text: template?.title ?? '');
+    _category = template?.category ?? 'Chores';
+    _repeat = template?.repeat ?? RoutineRepeat.daily;
+    _estimatedMinutes = template?.estimatedMinutes ?? 10;
+    _repeatDays = (template?.repeatDays ?? <int>[]).toSet();
+    if (_repeat == RoutineRepeat.weekly && _repeatDays.isEmpty) {
+      _repeatDays = <int>{DateTime.now().weekday};
+    }
+    _dayOfMonth = DateTime.now().day;
+    _time = TimeOfDay(
+      hour: template?.dueHour ?? 9,
+      minute: template?.dueMinute ?? 0,
+    );
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickTime() async {
+    final selected = await showHomiTimePicker(
+      context,
+      title: 'When should this routine be due?',
+      initialTime: _time,
+    );
+    if (selected != null && mounted) setState(() => _time = selected);
+  }
+
+  Future<void> _pickMonthDay() async {
+    final selected = await showHomiDayOfMonthPicker(
+      context,
+      title: 'Which day each month?',
+      initialDay: _dayOfMonth,
+    );
+    if (selected != null && mounted) setState(() => _dayOfMonth = selected);
+  }
+
+  void _submit() {
+    final title = _titleController.text.trim();
+    if (title.isEmpty) {
+      setState(() => _error = 'Give the routine a short name.');
+      return;
+    }
+    if (_repeat == RoutineRepeat.weekly && _repeatDays.isEmpty) {
+      setState(() => _error = 'Choose at least one day for a weekly routine.');
+      return;
+    }
+
+    final repeatDays = _repeat == RoutineRepeat.weekly
+        ? (List<int>.of(_repeatDays)..sort())
+        : const <int>[];
+    Navigator.pop(
+      context,
+      RoutineCreateData(
+        title: title,
+        category: _category,
+        repeat: _repeat,
+        estimatedMinutes: _estimatedMinutes,
+        dueHour: _time.hour,
+        dueMinute: _time.minute,
+        repeatDays: repeatDays,
+        dayOfMonth:
+            _repeat == RoutineRepeat.monthly ? _dayOfMonth : null,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          4,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Add a routine', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 6),
+            Text(
+              'Routines repeat. Homi brings each occurrence back when it is due and keeps the latest completion visible.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _titleController,
+              autofocus: widget.template == null,
+              decoration: InputDecoration(
+                labelText: 'Routine',
+                hintText: 'e.g. Feed the pets',
+                errorText: _error,
+              ),
+              onChanged: (_) {
+                if (_error != null) setState(() => _error = null);
+              },
+            ),
+            const SizedBox(height: 18),
+            Text('Category', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            HomiChoiceGroup<String>(
+              values: _categories,
+              selected: _category,
+              labelFor: (value) => value,
+              onSelected: (value) => setState(() => _category = value),
+              compact: true,
+            ),
+            const SizedBox(height: 18),
+            Text('Repeats', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            HomiChoiceGroup<RoutineRepeat>(
+              values: _repeatOptions,
+              selected: _repeat,
+              labelFor: (value) => value.label,
+              onSelected: (value) {
+                setState(() {
+                  _repeat = value;
+                  if (_repeat == RoutineRepeat.weekly && _repeatDays.isEmpty) {
+                    _repeatDays = <int>{DateTime.now().weekday};
+                  }
+                });
+              },
+              compact: true,
+            ),
+            if (_repeat == RoutineRepeat.weekly) ...[
+              const SizedBox(height: 14),
+              Text('Days', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              HomiMultiChoiceGroup<int>(
+                values: _weekdays,
+                selected: _repeatDays,
+                labelFor: _shortDay,
+                onChanged: (value) => setState(() => _repeatDays = value),
+              ),
+            ],
+            if (_repeat == RoutineRepeat.monthly) ...[
+              const SizedBox(height: 14),
+              _PickerRow(
+                label: 'Day of month',
+                value: 'Day $_dayOfMonth',
+                icon: Icons.calendar_view_month_outlined,
+                onTap: _pickMonthDay,
+              ),
+            ],
+            const SizedBox(height: 14),
+            HomiTimeField(
+              label: 'Time',
+              value: _time,
+              onTap: _pickTime,
+            ),
+            const SizedBox(height: 18),
+            Text('Usually takes', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            HomiChoiceGroup<int>(
+              values: _durations,
+              selected: _estimatedMinutes,
+              labelFor: (value) => '$value min',
+              onSelected: (value) => setState(() => _estimatedMinutes = value),
+              compact: true,
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _submit,
+                child: const Text('Add routine'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PickerRow extends StatelessWidget {
+  const _PickerRow({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: HomiColors.muted,
+          ),
+        ),
+        const SizedBox(height: 6),
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: HomiColors.border),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: HomiColors.coral),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+                ),
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -429,14 +1280,77 @@ class _RoutineExampleTile extends StatelessWidget {
   }
 }
 
-String _templateSchedule(_RoutineTemplate template) {
-  final time =
-      '${template.dueHour.toString().padLeft(2, '0')}:${template.dueMinute.toString().padLeft(2, '0')}';
-  if (template.repeat == RoutineRepeat.daily) return 'Daily at $time';
-  if (template.repeat == RoutineRepeat.weekly) {
-    return '${template.repeatDays.map(_shortDay).join(', ')} at $time';
+class _EmptyCard extends StatelessWidget {
+  const _EmptyCard({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.action,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String action;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Icon(icon, size: 34, color: HomiColors.coral),
+            const SizedBox(height: 10),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 14),
+            OutlinedButton(onPressed: onTap, child: Text(action)),
+          ],
+        ),
+      ),
+    );
   }
-  return template.repeat.label;
+}
+
+class _QuietNotice extends StatelessWidget {
+  const _QuietNotice({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: HomiColors.sage.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
+    );
+  }
+}
+
+class _AssigneeOption {
+  const _AssigneeOption({
+    required this.label,
+    required this.name,
+    required this.uid,
+    required this.detail,
+  });
+
+  final String label;
+  final String? name;
+  final String? uid;
+  final String detail;
 }
 
 class _RoutineTemplate {
@@ -449,7 +1363,6 @@ class _RoutineTemplate {
     required this.dueHour,
     required this.dueMinute,
     this.repeatDays = const <int>[],
-    this.dayOfMonth,
   });
 
   final IconData icon;
@@ -460,300 +1373,40 @@ class _RoutineTemplate {
   final int dueHour;
   final int dueMinute;
   final List<int> repeatDays;
-  final int? dayOfMonth;
 }
 
-class _RoutineEditorSheet extends StatefulWidget {
-  const _RoutineEditorSheet({this.template});
-
-  final _RoutineTemplate? template;
-
-  @override
-  State<_RoutineEditorSheet> createState() => _RoutineEditorSheetState();
-}
-
-class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
-  late final TextEditingController _titleController;
-  late final TextEditingController _hourController;
-  late final TextEditingController _minuteController;
-  late final TextEditingController _dayOfMonthController;
-  late String _category;
-  late RoutineRepeat _repeat;
-  late int _estimatedMinutes;
-  late Set<int> _repeatDays;
-  String? _error;
-
-  static const _categories = <String>[
-    'Chores',
-    'Pets',
-    'Plants & garden',
-    'Pool & outdoor',
-    'Cleaning',
-    'Home',
-  ];
-
-  static const _repeatOptions = <RoutineRepeat>[
-    RoutineRepeat.once,
-    RoutineRepeat.daily,
-    RoutineRepeat.weekdays,
-    RoutineRepeat.weekly,
-    RoutineRepeat.monthly,
-  ];
-
-  static const _durations = <int>[5, 10, 15, 20, 30, 45, 60];
-  static const _weekdays = <int>[1, 2, 3, 4, 5, 6, 7];
-
-  @override
-  void initState() {
-    super.initState();
-    final template = widget.template;
-    _titleController = TextEditingController(text: template?.title ?? '');
-    _category = template?.category ?? 'Chores';
-    _repeat = template?.repeat ?? RoutineRepeat.daily;
-    _estimatedMinutes = template?.estimatedMinutes ?? 10;
-    _repeatDays = (template?.repeatDays ?? <int>[]).toSet();
-    if (_repeat == RoutineRepeat.weekly && _repeatDays.isEmpty) {
-      _repeatDays = <int>{DateTime.now().weekday};
-    }
-    _hourController = TextEditingController(
-      text: (template?.dueHour ?? 9).toString().padLeft(2, '0'),
-    );
-    _minuteController = TextEditingController(
-      text: (template?.dueMinute ?? 0).toString().padLeft(2, '0'),
-    );
-    _dayOfMonthController = TextEditingController(
-      text: (template?.dayOfMonth ?? DateTime.now().day).toString(),
-    );
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _hourController.dispose();
-    _minuteController.dispose();
-    _dayOfMonthController.dispose();
-    super.dispose();
-  }
-
-  String _repeatLabel(RoutineRepeat value) {
-    return value == RoutineRepeat.once ? 'As needed' : value.label;
-  }
-
-  void _submit() {
-    final title = _titleController.text.trim();
-    if (title.isEmpty) {
-      setState(() => _error = 'Give the routine a short name.');
-      return;
-    }
-
-    var hour = 9;
-    var minute = 0;
-    if (_repeat != RoutineRepeat.once) {
-      final parsedHour = int.tryParse(_hourController.text.trim());
-      final parsedMinute = int.tryParse(_minuteController.text.trim());
-      if (parsedHour == null || parsedHour < 0 || parsedHour > 23) {
-        setState(() => _error = 'Enter an hour from 00 to 23.');
-        return;
-      }
-      if (parsedMinute == null || parsedMinute < 0 || parsedMinute > 59) {
-        setState(() => _error = 'Enter minutes from 00 to 59.');
-        return;
-      }
-      if (_repeat == RoutineRepeat.weekly && _repeatDays.isEmpty) {
-        setState(() => _error = 'Choose at least one day for a weekly routine.');
-        return;
-      }
-      hour = parsedHour;
-      minute = parsedMinute;
-    }
-
-    int? dayOfMonth;
-    if (_repeat == RoutineRepeat.monthly) {
-      dayOfMonth = int.tryParse(_dayOfMonthController.text.trim());
-      if (dayOfMonth == null || dayOfMonth < 1 || dayOfMonth > 31) {
-        setState(() => _error = 'Enter a day from 1 to 31.');
-        return;
-      }
-    }
-
-    final repeatDays = _repeat == RoutineRepeat.weekly
-        ? (List<int>.of(_repeatDays)..sort())
-        : const <int>[];
-
-    Navigator.pop(
-      context,
-      RoutineCreateData(
-        title: title,
-        category: _category,
-        repeat: _repeat,
-        estimatedMinutes: _estimatedMinutes,
-        dueHour: hour,
-        dueMinute: minute,
-        repeatDays: repeatDays,
-        dayOfMonth: dayOfMonth,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          4,
-          20,
-          20 + MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Add a routine', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 6),
-            Text(
-              'Set when it repeats and Homi will bring it back when it is due again.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _titleController,
-              autofocus: widget.template == null,
-              textInputAction: TextInputAction.next,
-              decoration: InputDecoration(
-                labelText: 'Routine',
-                hintText: 'e.g. Feed the dogs',
-                errorText: _error,
-              ),
-              onChanged: (_) {
-                if (_error != null) setState(() => _error = null);
-              },
-            ),
-            const SizedBox(height: 18),
-            const _FieldLabel('Category'),
-            const SizedBox(height: 9),
-            HomiChoiceGroup<String>(
-              values: _categories,
-              selected: _category,
-              labelFor: (value) => value,
-              onSelected: (value) => setState(() => _category = value),
-              compact: true,
-            ),
-            const SizedBox(height: 20),
-            const _FieldLabel('Repeats'),
-            const SizedBox(height: 9),
-            HomiChoiceGroup<RoutineRepeat>(
-              values: _repeatOptions,
-              selected: _repeat,
-              labelFor: _repeatLabel,
-              onSelected: (value) {
-                setState(() {
-                  _repeat = value;
-                  if (value == RoutineRepeat.weekly && _repeatDays.isEmpty) {
-                    _repeatDays = <int>{DateTime.now().weekday};
-                  }
-                });
-              },
-              compact: true,
-            ),
-            if (_repeat == RoutineRepeat.weekly) ...[
-              const SizedBox(height: 18),
-              const _FieldLabel('Days'),
-              const SizedBox(height: 9),
-              HomiMultiChoiceGroup<int>(
-                values: _weekdays,
-                selected: _repeatDays,
-                labelFor: _shortDay,
-                onChanged: (value) => setState(() => _repeatDays = value),
-              ),
-            ],
-            if (_repeat == RoutineRepeat.monthly) ...[
-              const SizedBox(height: 18),
-              TextField(
-                controller: _dayOfMonthController,
-                keyboardType: TextInputType.number,
-                maxLength: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Day of the month',
-                  hintText: '15',
-                  counterText: '',
-                ),
-              ),
-            ],
-            if (_repeat != RoutineRepeat.once) ...[
-              const SizedBox(height: 20),
-              const _FieldLabel('Time'),
-              const SizedBox(height: 4),
-              Text(
-                'Use 24-hour time, for example 14:30.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 9),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _hourController,
-                      keyboardType: TextInputType.number,
-                      maxLength: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'Hour',
-                        counterText: '',
-                        hintText: '14',
-                      ),
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                    child: Text(':', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _minuteController,
-                      keyboardType: TextInputType.number,
-                      maxLength: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'Minutes',
-                        counterText: '',
-                        hintText: '30',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 20),
-            const _FieldLabel('Usually takes'),
-            const SizedBox(height: 9),
-            HomiChoiceGroup<int>(
-              values: _durations,
-              selected: _estimatedMinutes,
-              labelFor: (minutes) => '$minutes min',
-              onSelected: (value) => setState(() => _estimatedMinutes = value),
-              compact: true,
-            ),
-            const SizedBox(height: 22),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _submit,
-                child: const Text('Add routine'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+String _scheduleLabel(RoutineItem item) {
+  if (!item.repeats) return 'One-off';
+  final time =
+      '${item.dueHour.toString().padLeft(2, '0')}:${item.dueMinute.toString().padLeft(2, '0')}';
+  switch (item.repeat) {
+    case RoutineRepeat.once:
+      return 'One-off';
+    case RoutineRepeat.daily:
+      return 'Daily at $time';
+    case RoutineRepeat.weekdays:
+      return 'Weekdays at $time';
+    case RoutineRepeat.weekly:
+      final days = item.repeatDays.isEmpty
+          ? <int>[item.createdAt.weekday]
+          : item.repeatDays;
+      return '${days.map(_shortDay).join(', ')} at $time';
+    case RoutineRepeat.monthly:
+      return 'Day ${item.dayOfMonth ?? item.createdAt.day} each month at $time';
   }
 }
 
-class _FieldLabel extends StatelessWidget {
-  const _FieldLabel(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900));
+String _templateSchedule(_RoutineTemplate template) {
+  final time =
+      '${template.dueHour.toString().padLeft(2, '0')}:${template.dueMinute.toString().padLeft(2, '0')}';
+  if (template.repeat == RoutineRepeat.daily) return 'Daily at $time';
+  if (template.repeat == RoutineRepeat.weekly) {
+    return '${template.repeatDays.map(_shortDay).join(', ')} at $time';
   }
+  return template.repeat.label;
+}
+
+String _shortDay(int weekday) {
+  const days = <String>['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  return days[(weekday - 1).clamp(0, 6)];
 }

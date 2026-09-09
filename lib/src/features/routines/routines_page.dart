@@ -13,7 +13,7 @@ import '../../widgets/homi_controls.dart';
 import '../../widgets/homi_date_time_controls.dart';
 import '../../widgets/homi_page.dart';
 
-enum _WorkView { tasks, routines }
+enum WorkView { tasks, routines }
 
 class RoutinesPage extends StatefulWidget {
   const RoutinesPage({
@@ -29,6 +29,8 @@ class RoutinesPage extends StatefulWidget {
     required this.onAddTask,
     required this.onToggleTask,
     required this.onRemoveTask,
+    this.requestedView = WorkView.tasks,
+    this.viewRequest = 0,
     super.key,
   });
 
@@ -44,13 +46,16 @@ class RoutinesPage extends StatefulWidget {
   final Future<void> Function(HouseholdTaskInput input) onAddTask;
   final Future<void> Function(String id) onToggleTask;
   final Future<void> Function(String id) onRemoveTask;
+  final WorkView requestedView;
+  final int viewRequest;
 
   @override
   State<RoutinesPage> createState() => _RoutinesPageState();
 }
 
-class _RoutinesPageState extends State<RoutinesPage> {
-  _WorkView _view = _WorkView.tasks;
+class _RoutinesPageState extends State<RoutinesPage>
+    with AutomaticKeepAliveClientMixin<RoutinesPage> {
+  late WorkView _view;
   StreamSubscription<List<TrustedConnection>>? _connectionSub;
   StreamSubscription<Map<String, TrustedPersonPreference>>? _preferenceSub;
   StreamSubscription<List<HouseholdTask>>? _sharedTaskSub;
@@ -94,7 +99,7 @@ class _RoutinesPageState extends State<RoutinesPage> {
       icon: Icons.local_florist_outlined,
       title: 'Water indoor plants',
       category: 'Plants & garden',
-      repeat: RoutineRepeat.weekly,
+      repeat: RoutineRepeat.biweekly,
       estimatedMinutes: 10,
       repeatDays: <int>[7],
       dueHour: 9,
@@ -103,8 +108,12 @@ class _RoutinesPageState extends State<RoutinesPage> {
   ];
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
+    _view = widget.requestedView;
     _bindCloud();
   }
 
@@ -112,6 +121,10 @@ class _RoutinesPageState extends State<RoutinesPage> {
   void didUpdateWidget(covariant RoutinesPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.actorUid != widget.actorUid) _bindCloud();
+    if (oldWidget.viewRequest != widget.viewRequest ||
+        oldWidget.requestedView != widget.requestedView) {
+      _view = widget.requestedView;
+    }
   }
 
   @override
@@ -140,11 +153,16 @@ class _RoutinesPageState extends State<RoutinesPage> {
 
     _connectionSub = widget.trustedPeopleService.watchConnections().listen(
       (value) {
-        if (mounted) setState(() => _connections = value);
+        if (!mounted) return;
+        setState(() {
+          _connections = value;
+          _cloudMessage = null;
+        });
       },
       onError: (_) {
         if (mounted) {
-          setState(() => _cloudMessage = 'Shared task connections are temporarily unavailable.');
+          setState(() => _cloudMessage =
+              'Household people could not refresh. Your saved tasks are still available.');
         }
       },
     );
@@ -156,19 +174,29 @@ class _RoutinesPageState extends State<RoutinesPage> {
     );
     _sharedTaskSub = widget.sharedTaskService.watchSharedTasks().listen(
       (value) {
-        if (mounted) {
-          setState(() {
-            _sharedTasks = value;
-            _cloudMessage = null;
-          });
-        }
+        if (!mounted) return;
+        setState(() {
+          _sharedTasks = value;
+          _cloudMessage = null;
+        });
       },
       onError: (_) {
         if (mounted) {
-          setState(() => _cloudMessage = 'Assigned tasks are temporarily unavailable.');
+          setState(() => _cloudMessage =
+              'Shared tasks could not refresh. Homi will try again automatically.');
         }
       },
     );
+  }
+
+  List<String> get _householdMemberUids {
+    final currentUid = widget.actorUid;
+    if (currentUid == null) return const <String>[];
+    return _connections
+        .where((item) => item.accepted)
+        .map((item) => item.otherUid(currentUid))
+        .toSet()
+        .toList(growable: false);
   }
 
   List<_AssigneeOption> get _assignees {
@@ -177,13 +205,13 @@ class _RoutinesPageState extends State<RoutinesPage> {
         label: 'Anyone at home',
         name: null,
         uid: null,
-        detail: 'A local task anyone can pick up',
+        detail: 'Visible to your household',
       ),
       _AssigneeOption(
         label: 'Me',
         name: widget.actorName,
         uid: widget.actorUid,
-        detail: 'Keep this task for yourself',
+        detail: 'Private to you',
       ),
     ];
 
@@ -199,8 +227,8 @@ class _RoutinesPageState extends State<RoutinesPage> {
           name: connection.otherName(currentUid),
           uid: uid,
           detail: preference.relationship == 'Trusted person'
-              ? (preference.household ? 'Household member' : 'Trusted person')
-              : '${preference.relationship}${preference.household ? ' · household' : ''}',
+              ? 'Household member'
+              : preference.relationship,
         ),
       );
     }
@@ -219,26 +247,42 @@ class _RoutinesPageState extends State<RoutinesPage> {
     );
     if (draft == null) return;
 
-    final shareWithOther = draft.assigneeUid != null &&
-        widget.actorUid != null &&
-        draft.assigneeUid != widget.actorUid;
-    if (shareWithOther) {
+    final personal = widget.actorUid == null ||
+        draft.assigneeUid == widget.actorUid;
+    final householdUids = _householdMemberUids;
+
+    if (!personal && householdUids.isNotEmpty) {
       try {
-        await widget.sharedTaskService.createAssignedTask(
+        await widget.sharedTaskService.createHouseholdTask(
           title: draft.title,
-          assigneeUid: draft.assigneeUid!,
-          assigneeName: draft.assigneeName ?? 'Homi user',
+          householdMemberUids: householdUids,
+          assigneeUid: draft.assigneeUid,
+          assigneeName: draft.assigneeName,
           notes: draft.notes,
           dueAt: draft.dueAt,
         );
-      } catch (_) {
+      } catch (error) {
         if (mounted) {
-          setState(() => _cloudMessage = 'Homi could not share that task. Try again.');
+          setState(() => _cloudMessage = _taskError(error));
         }
       }
       return;
     }
+
     await widget.onAddTask(draft);
+  }
+
+  String _taskError(Object error) {
+    final message = error
+        .toString()
+        .replaceFirst('Bad state: ', '')
+        .replaceFirst('StateError: ', '')
+        .replaceFirst('Exception: ', '');
+    if (message.contains('permission-denied') ||
+        message.contains('PERMISSION_DENIED')) {
+      return 'Homi could not share that household task yet. Refresh your household connection and try again.';
+    }
+    return message;
   }
 
   Future<void> _addRoutine({_RoutineTemplate? template}) async {
@@ -255,7 +299,7 @@ class _RoutinesPageState extends State<RoutinesPage> {
     final confirmed = await showHomiConfirmSheet(
       context,
       title: 'Remove task?',
-      message: '“${task.title}” will be removed${task.shared ? ' for everyone on this task' : ' from this phone'}.',
+      message: '“${task.title}” will be removed${task.shared ? ' for everyone who can see it' : ' from this phone'}.',
       confirmLabel: 'Remove task',
       cancelLabel: 'Keep task',
       icon: Icons.delete_outline_rounded,
@@ -266,7 +310,9 @@ class _RoutinesPageState extends State<RoutinesPage> {
       try {
         await widget.sharedTaskService.removeTask(task.id);
       } catch (_) {
-        if (mounted) setState(() => _cloudMessage = 'Homi could not remove that shared task.');
+        if (mounted) {
+          setState(() => _cloudMessage = 'Homi could not remove that shared task.');
+        }
       }
     } else {
       await widget.onRemoveTask(task.id);
@@ -277,7 +323,8 @@ class _RoutinesPageState extends State<RoutinesPage> {
     final confirmed = await showHomiConfirmSheet(
       context,
       title: 'Remove routine?',
-      message: '“${item.title}” and its completion history will be removed from this phone.',
+      message:
+          '“${item.title}” and its completion history will be removed from this phone.',
       confirmLabel: 'Remove routine',
       cancelLabel: 'Keep routine',
       icon: Icons.delete_outline_rounded,
@@ -291,23 +338,85 @@ class _RoutinesPageState extends State<RoutinesPage> {
       try {
         await widget.sharedTaskService.toggleTask(task);
       } catch (_) {
-        if (mounted) setState(() => _cloudMessage = 'Homi could not update that shared task.');
+        if (mounted) {
+          setState(() => _cloudMessage = 'Homi could not update that shared task.');
+        }
       }
     } else {
       await widget.onToggleTask(task.id);
     }
   }
 
+  void _showTasksInfo() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('How Tasks work',
+                  style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 14),
+              const _InfoPoint(
+                icon: Icons.task_alt_rounded,
+                title: 'Tasks happen once',
+                text:
+                    'Use a Task for something such as taking food out to defrost, collecting a parcel or calling the plumber. A Routine is better when the job repeats.',
+              ),
+              const _InfoPoint(
+                icon: Icons.schedule_outlined,
+                title: 'A due time is optional',
+                text:
+                    'Choose a date and time when timing matters, or use No due time when the job simply needs to get done.',
+              ),
+              const _InfoPoint(
+                icon: Icons.groups_outlined,
+                title: 'Household tasks stay visible',
+                text:
+                    'Tasks for Anyone at home or another household person are visible to everyone in the household, including who they are assigned to and who completed them.',
+              ),
+              const _InfoPoint(
+                icon: Icons.lock_outline_rounded,
+                title: 'Tasks for Me stay private',
+                text:
+                    'Choose Me when the reminder is only for you. Location-only friends never receive household Tasks.',
+              ),
+              const _InfoPoint(
+                icon: Icons.history_rounded,
+                title: 'Recently completed stays useful',
+                text:
+                    'Completed Tasks remain visible for 2 days so everyone can see what was done, then Homi removes them from the active household list.',
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Got it'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return HomiPage(
       title: 'Tasks & routines',
       subtitle: 'One-off jobs for today, routines for the things that come back.',
       children: [
-        HomiChoiceGroup<_WorkView>(
-          values: _WorkView.values,
+        HomiChoiceGroup<WorkView>(
+          values: WorkView.values,
           selected: _view,
-          labelFor: (value) => value == _WorkView.tasks ? 'Tasks' : 'Routines',
+          labelFor: (value) => value == WorkView.tasks ? 'Tasks' : 'Routines',
           onSelected: (value) => setState(() => _view = value),
         ),
         if (_cloudMessage != null) ...[
@@ -315,13 +424,19 @@ class _RoutinesPageState extends State<RoutinesPage> {
           _QuietNotice(text: _cloudMessage!),
         ],
         const SizedBox(height: 18),
-        if (_view == _WorkView.tasks) _buildTasks(context) else _buildRoutines(context),
+        if (_view == WorkView.tasks)
+          _buildTasks(context)
+        else
+          _buildRoutines(context),
       ],
     );
   }
 
   Widget _buildTasks(BuildContext context) {
-    final all = <HouseholdTask>[...widget.tasks, ..._sharedTasks];
+    final now = DateTime.now();
+    final all = <HouseholdTask>[...widget.tasks, ..._sharedTasks]
+        .where((task) => !task.shouldPurge(now))
+        .toList();
     all.sort((a, b) {
       if (a.completed != b.completed) return a.completed ? 1 : -1;
       final aDue = a.dueAt;
@@ -332,11 +447,27 @@ class _RoutinesPageState extends State<RoutinesPage> {
       return b.createdAt.compareTo(a.createdAt);
     });
     final open = all.where((item) => !item.completed).toList(growable: false);
-    final completed = all.where((item) => item.completed).toList(growable: false);
+    final completed = all
+        .where((item) => item.completedWithinRetention(now))
+        .toList(growable: false)
+      ..sort((a, b) => b.completedAt!.compareTo(a.completedAt!));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('Tasks', style: Theme.of(context).textTheme.titleLarge),
+            ),
+            TextButton.icon(
+              onPressed: _showTasksInfo,
+              icon: const Icon(Icons.info_outline_rounded, size: 17),
+              label: const Text('How it works'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
         Row(
           children: [
             Expanded(
@@ -360,7 +491,8 @@ class _RoutinesPageState extends State<RoutinesPage> {
           _EmptyCard(
             icon: Icons.task_alt_rounded,
             title: 'No open tasks',
-            message: 'Add a one-off job such as “Take the mince out to defrost”. Give it a time if it matters, or leave it open.',
+            message:
+                'Add a one-off job such as “Take the mince out to defrost”. Give it a time if it matters, or choose No due time.',
             action: 'Add a task',
             onTap: _addTask,
           )
@@ -378,9 +510,15 @@ class _RoutinesPageState extends State<RoutinesPage> {
           ),
         if (completed.isNotEmpty) ...[
           const SizedBox(height: 18),
-          Text('Completed', style: Theme.of(context).textTheme.titleLarge),
+          Text('Recently completed',
+              style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 4),
+          Text(
+            'Completed Tasks stay here for 2 days, then Homi clears them automatically.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
           const SizedBox(height: 8),
-          ...completed.take(8).map(
+          ...completed.map(
             (task) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: _TaskCard(
@@ -392,12 +530,6 @@ class _RoutinesPageState extends State<RoutinesPage> {
             ),
           ),
         ],
-        const SizedBox(height: 12),
-        _QuietNotice(
-          text: widget.actorUid == null
-              ? 'Sign in when you want to assign a task directly to another Homi user. Local tasks continue to work without an account.'
-              : 'Assigning a shared task sends only that task to the person you chose. It does not give them access to your Home, supplies or other household records.',
-        ),
       ],
     );
   }
@@ -407,7 +539,9 @@ class _RoutinesPageState extends State<RoutinesPage> {
     final due = widget.items.where((item) => item.isDue(now)).toList(growable: false)
       ..sort((a, b) => (a.nextDueAt ?? a.initialDueAt())
           .compareTo(b.nextDueAt ?? b.initialDueAt()));
-    final upToDate = widget.items.where((item) => !item.isDue(now)).toList(growable: false)
+    final upToDate = widget.items
+        .where((item) => !item.isDue(now))
+        .toList(growable: false)
       ..sort((a, b) => (a.nextDueAt ?? a.initialDueAt())
           .compareTo(b.nextDueAt ?? b.initialDueAt()));
 
@@ -437,7 +571,8 @@ class _RoutinesPageState extends State<RoutinesPage> {
           _EmptyCard(
             icon: Icons.repeat_rounded,
             title: 'No routines yet',
-            message: 'Routines are for jobs that repeat. Homi remembers when they come around, who completed them and when they are due again.',
+            message:
+                'Routines are for jobs that repeat. Homi remembers when they come around, who completed them and when they are due again.',
             action: 'Add a routine',
             onTap: () => _addRoutine(),
           )
@@ -517,7 +652,8 @@ class _TaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final due = task.dueAt;
-    final assignedToMe = task.assigneeUid != null && task.assigneeUid == currentUid;
+    final assignedToMe =
+        task.assigneeUid != null && task.assigneeUid == currentUid;
     final createdByOther = task.shared &&
         task.createdByUid != null &&
         task.createdByUid != currentUid;
@@ -545,14 +681,14 @@ class _TaskCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
-                        decoration: task.completed
-                            ? TextDecoration.lineThrough
-                            : null,
+                        decoration:
+                            task.completed ? TextDecoration.lineThrough : null,
                       ),
                     ),
                     if (task.notes?.trim().isNotEmpty == true) ...[
                       const SizedBox(height: 3),
-                      Text(task.notes!, style: Theme.of(context).textTheme.bodyMedium),
+                      Text(task.notes!,
+                          style: Theme.of(context).textTheme.bodyMedium),
                     ],
                     const SizedBox(height: 6),
                     Wrap(
@@ -562,22 +698,25 @@ class _TaskCard extends StatelessWidget {
                         if (task.assigneeName != null)
                           _Meta(
                             icon: Icons.person_outline_rounded,
-                            text: assignedToMe ? 'Assigned to you' : 'For ${task.assigneeName}',
+                            text: assignedToMe
+                                ? 'Assigned to you'
+                                : 'For ${task.assigneeName}',
                           )
                         else
                           const _Meta(
                             icon: Icons.groups_outlined,
                             text: 'Anyone at home',
                           ),
-                        if (due != null)
-                          _Meta(
-                            icon: Icons.schedule_outlined,
-                            text: DateFormat('EEE d MMM · HH:mm').format(due),
-                          ),
+                        _Meta(
+                          icon: Icons.schedule_outlined,
+                          text: due == null
+                              ? 'No due time'
+                              : DateFormat('EEE d MMM · HH:mm').format(due),
+                        ),
                         if (task.shared)
                           const _Meta(
                             icon: Icons.sync_rounded,
-                            text: 'Shared task',
+                            text: 'Household task',
                           ),
                       ],
                     ),
@@ -676,7 +815,7 @@ class _RoutineCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${item.category} · ${_scheduleLabel(item)} · about ${item.estimatedMinutes} min',
+                      '${item.category} · ${_scheduleLabel(item)} · about ${item.durationLabel}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     if (last != null) ...[
@@ -843,7 +982,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
             Text('Add a task', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 6),
             Text(
-              'Tasks happen once. Set a time if it matters, assign it to someone if needed, then it stays completed when it is done.',
+              'Tasks happen once. Assign one to your household, keep it for yourself, or leave the due time open.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
@@ -880,7 +1019,8 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
                   onTap: () => setState(() => _assignee = option),
                   child: Container(
                     constraints: const BoxConstraints(minWidth: 90),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                     decoration: BoxDecoration(
                       color: active
                           ? HomiColors.coral
@@ -922,7 +1062,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
             HomiChoiceGroup<bool>(
               values: const <bool>[false, true],
               selected: _scheduled,
-              labelFor: (value) => value ? 'Set date & time' : 'Leave open',
+              labelFor: (value) => value ? 'Set date & time' : 'No due time',
               onSelected: (value) => setState(() => _scheduled = value),
             ),
             if (_scheduled) ...[
@@ -973,6 +1113,7 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
   late RoutineRepeat _repeat;
   late int _estimatedMinutes;
   late Set<int> _repeatDays;
+  late int _biweeklyDay;
   late int _dayOfMonth;
   late TimeOfDay _time;
   String? _error;
@@ -990,6 +1131,7 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
     RoutineRepeat.daily,
     RoutineRepeat.weekdays,
     RoutineRepeat.weekly,
+    RoutineRepeat.biweekly,
     RoutineRepeat.monthly,
   ];
 
@@ -1008,6 +1150,9 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
     if (_repeat == RoutineRepeat.weekly && _repeatDays.isEmpty) {
       _repeatDays = <int>{DateTime.now().weekday};
     }
+    _biweeklyDay = (template?.repeatDays.isNotEmpty == true)
+        ? template!.repeatDays.first
+        : DateTime.now().weekday;
     _dayOfMonth = DateTime.now().day;
     _time = TimeOfDay(
       hour: template?.dueHour ?? 9,
@@ -1050,9 +1195,11 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
       return;
     }
 
-    final repeatDays = _repeat == RoutineRepeat.weekly
-        ? (List<int>.of(_repeatDays)..sort())
-        : const <int>[];
+    final repeatDays = switch (_repeat) {
+      RoutineRepeat.weekly => (List<int>.of(_repeatDays)..sort()),
+      RoutineRepeat.biweekly => <int>[_biweeklyDay],
+      _ => const <int>[],
+    };
     Navigator.pop(
       context,
       RoutineCreateData(
@@ -1063,8 +1210,7 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
         dueHour: _time.hour,
         dueMinute: _time.minute,
         repeatDays: repeatDays,
-        dayOfMonth:
-            _repeat == RoutineRepeat.monthly ? _dayOfMonth : null,
+        dayOfMonth: _repeat == RoutineRepeat.monthly ? _dayOfMonth : null,
       ),
     );
   }
@@ -1139,6 +1285,18 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
                 onChanged: (value) => setState(() => _repeatDays = value),
               ),
             ],
+            if (_repeat == RoutineRepeat.biweekly) ...[
+              const SizedBox(height: 14),
+              Text('Every second', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              HomiChoiceGroup<int>(
+                values: _weekdays,
+                selected: _biweeklyDay,
+                labelFor: _shortDay,
+                onSelected: (value) => setState(() => _biweeklyDay = value),
+                compact: true,
+              ),
+            ],
             if (_repeat == RoutineRepeat.monthly) ...[
               const SizedBox(height: 14),
               _PickerRow(
@@ -1160,7 +1318,7 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
             HomiChoiceGroup<int>(
               values: _durations,
               selected: _estimatedMinutes,
-              labelFor: (value) => '$value min',
+              labelFor: (value) => value >= 60 ? '60+ min' : '$value min',
               onSelected: (value) => setState(() => _estimatedMinutes = value),
               compact: true,
             ),
@@ -1220,7 +1378,8 @@ class _PickerRow extends StatelessWidget {
                 Icon(icon, color: HomiColors.coral),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+                  child: Text(value,
+                      style: const TextStyle(fontWeight: FontWeight.w900)),
                 ),
                 const Icon(Icons.chevron_right_rounded),
               ],
@@ -1262,10 +1421,11 @@ class _RoutineExampleTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(template.title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                    Text(template.title,
+                        style: const TextStyle(fontWeight: FontWeight.w900)),
                     const SizedBox(height: 2),
                     Text(
-                      '${_templateSchedule(template)} · about ${template.estimatedMinutes} min',
+                      '${_templateSchedule(template)} · about ${template.estimatedMinutes >= 60 ? '60+ min' : '${template.estimatedMinutes} min'}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
@@ -1339,6 +1499,51 @@ class _QuietNotice extends StatelessWidget {
   }
 }
 
+class _InfoPoint extends StatelessWidget {
+  const _InfoPoint({
+    required this.icon,
+    required this.title,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: HomiColors.peach.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, size: 20, color: HomiColors.coral),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
+                const SizedBox(height: 3),
+                Text(text, style: Theme.of(context).textTheme.bodyMedium),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AssigneeOption {
   const _AssigneeOption({
     required this.label,
@@ -1391,6 +1596,11 @@ String _scheduleLabel(RoutineItem item) {
           ? <int>[item.createdAt.weekday]
           : item.repeatDays;
       return '${days.map(_shortDay).join(', ')} at $time';
+    case RoutineRepeat.biweekly:
+      final day = item.repeatDays.isEmpty
+          ? item.createdAt.weekday
+          : item.repeatDays.first;
+      return 'Every 2 weeks · ${_shortDay(day)} at $time';
     case RoutineRepeat.monthly:
       return 'Day ${item.dayOfMonth ?? item.createdAt.day} each month at $time';
   }
@@ -1402,6 +1612,12 @@ String _templateSchedule(_RoutineTemplate template) {
   if (template.repeat == RoutineRepeat.daily) return 'Daily at $time';
   if (template.repeat == RoutineRepeat.weekly) {
     return '${template.repeatDays.map(_shortDay).join(', ')} at $time';
+  }
+  if (template.repeat == RoutineRepeat.biweekly) {
+    final day = template.repeatDays.isEmpty
+        ? DateTime.monday
+        : template.repeatDays.first;
+    return 'Every 2 weeks · ${_shortDay(day)} at $time';
   }
   return template.repeat.label;
 }

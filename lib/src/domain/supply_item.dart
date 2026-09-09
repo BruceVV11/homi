@@ -28,6 +28,7 @@ class SupplyItem {
     required this.name,
     required this.category,
     required this.status,
+    this.iconKey = 'inventory',
     this.expiryDate,
   });
 
@@ -35,10 +36,12 @@ class SupplyItem {
   final String name;
   final String category;
   final SupplyStatus status;
+  final String iconKey;
   final DateTime? expiryDate;
 
   SupplyItem copyWith({
     SupplyStatus? status,
+    String? iconKey,
     DateTime? expiryDate,
     bool clearExpiryDate = false,
   }) {
@@ -47,6 +50,7 @@ class SupplyItem {
       name: name,
       category: category,
       status: status ?? this.status,
+      iconKey: iconKey ?? this.iconKey,
       expiryDate: clearExpiryDate ? null : (expiryDate ?? this.expiryDate),
     );
   }
@@ -86,6 +90,7 @@ class SupplyItem {
         'name': name,
         'category': category,
         'status': status.name,
+        'iconKey': iconKey,
         'expiryDate': expiryDate?.toIso8601String(),
       };
 
@@ -100,6 +105,9 @@ class SupplyItem {
         (value) => value.name == statusName,
         orElse: () => SupplyStatus.okay,
       ),
+      iconKey: (json['iconKey'] as String?)?.trim().isNotEmpty == true
+          ? (json['iconKey'] as String).trim()
+          : 'inventory',
       expiryDate: expiry == null ? null : DateTime.tryParse(expiry),
     );
   }

@@ -65,6 +65,26 @@ class TrustedConnection {
   }
 }
 
+class TrustedPersonPreference {
+  const TrustedPersonPreference({
+    required this.relationship,
+    required this.scope,
+  });
+
+  final String relationship;
+
+  /// `household` means this person is part of the user's home context.
+  /// `friend` means the connection is intentionally location/social only.
+  final String scope;
+
+  bool get household => scope == 'household';
+
+  static const fallback = TrustedPersonPreference(
+    relationship: 'Trusted person',
+    scope: 'friend',
+  );
+}
+
 class TrustedPersonLocation {
   const TrustedPersonLocation({
     required this.latitude,
@@ -187,9 +207,8 @@ class TrustedPeopleService {
           displayName: name,
           photoUrl: user.photoURL,
         );
-      } on FirebaseException {
-        // A rare code collision is retried with another code. A persistent
-        // configuration/network failure surfaces after the bounded attempts.
+      } on FirebaseException catch (error) {
+        if (error.code == 'permission-denied') rethrow;
       }
     }
     throw StateError('Homi could not create a connection code. Try again.');
@@ -243,10 +262,8 @@ class TrustedPeopleService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } on FirebaseException catch (error) {
-      if (error.code == 'permission-denied' || error.code == 'already-exists') {
-        throw StateError(
-          'A connection request already exists, or you are already connected.',
-        );
+      if (error.code == 'already-exists') {
+        throw StateError('There is already a connection request for this person.');
       }
       rethrow;
     }
@@ -273,6 +290,51 @@ class TrustedPeopleService {
       });
       return connections;
     });
+  }
+
+  Stream<Map<String, TrustedPersonPreference>> watchPreferences() {
+    final user = currentUser;
+    if (user == null) {
+      return Stream.value(const <String, TrustedPersonPreference>{});
+    }
+    return _firestore
+        .collection('peoplePreferences')
+        .doc(user.uid)
+        .collection('people')
+        .snapshots()
+        .map((snapshot) {
+      final result = <String, TrustedPersonPreference>{};
+      for (final document in snapshot.docs) {
+        final data = document.data();
+        result[document.id] = TrustedPersonPreference(
+          relationship: (data['relationship'] as String?)?.trim().isNotEmpty == true
+              ? (data['relationship'] as String).trim()
+              : 'Trusted person',
+          scope: data['scope'] == 'household' ? 'household' : 'friend',
+        );
+      }
+      return result;
+    });
+  }
+
+  Future<void> setPreference({
+    required String otherUid,
+    required String relationship,
+    required String scope,
+  }) async {
+    final user = _requireUser();
+    await _firestore
+        .collection('peoplePreferences')
+        .doc(user.uid)
+        .collection('people')
+        .doc(otherUid)
+        .set({
+      'relationship': relationship.trim().isEmpty
+          ? 'Trusted person'
+          : relationship.trim(),
+      'scope': scope == 'household' ? 'household' : 'friend',
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Future<void> acceptConnection(TrustedConnection connection) async {
@@ -302,8 +364,18 @@ class TrustedPeopleService {
           .doc(otherUid)
           .delete();
     } on FirebaseException {
-      // The connection is already removed. A missing share document does not
-      // need to turn that successful removal into an error.
+      // Removing an absent share should not turn a successful disconnect into
+      // an error.
+    }
+    try {
+      await _firestore
+          .collection('peoplePreferences')
+          .doc(user.uid)
+          .collection('people')
+          .doc(otherUid)
+          .delete();
+    } on FirebaseException {
+      // The preference is private convenience metadata and may not exist.
     }
   }
 

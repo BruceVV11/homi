@@ -2,158 +2,156 @@
 
 ## Purpose
 
-Homi can share a person's latest location with trusted people they explicitly choose. A trusted person may be a partner, family member, friend, housemate, caregiver or another appropriate contact; the feature is not limited to members of the same physical household.
+Homi lets people share their latest location with trusted people they explicitly choose. A trusted person may be a partner, family member, roommate, friend, caregiver or another appropriate contact. The People feature is intentionally broader than the physical household.
 
-## Non-negotiable product principle
+## Non-negotiable principle
 
 **Location sharing must be explicit, visible, reversible and understandable.**
 
-- A Homi connection never starts tracking automatically.
-- The person/device being located controls who can see them.
+- A Homi connection never starts location sharing automatically.
+- The person/device being located controls who can see their location.
 - Live background updates require a separate opt-in.
-- Stopping live updates and revoking one person's access are independent controls.
+- Android live sharing keeps a visible foreground-service notification.
+- Stopping live updates and revoking one person's access remain separate controls.
 - Homi has no stealth-sharing mode.
-- Sensitive location/battery data must not be placed in analytics or general logs.
+- Location/battery values must not be placed in analytics or general logs.
 
-## Current connection model
+## Connection, relationship and sharing are separate
 
-Signed-in users receive a six-character Homi code.
+Homi deliberately models three independent decisions:
 
-1. Person A enters Person B's code.
-2. Homi creates a pending connection request.
-3. Person B explicitly accepts or declines.
-4. Once connected, each person separately chooses whether to share location with the other.
-5. Either person can remove the trusted connection later.
+1. **Connection** — both users accept a trusted-person connection.
+2. **Relationship/scope** — each user may privately label the other person, for example Mother, Roommate or Friend, and decide whether they are `household` or `friend`.
+3. **Location share** — the location owner explicitly chooses whether that connected person may see their current location.
 
-The Homi-code directory cannot be browsed: Firestore rules allow authenticated exact-document lookup and deny collection listing.
+None of these decisions silently enables the others.
 
-## Current shared signals
+### Location-only friends
 
-When a person has explicitly granted access, Homi may display their latest:
+Friends are a first-class use case. Two close friends may connect and mutually share location simply to check in on one another.
 
-- latitude and longitude
-- reverse-geocoded address when available
-- accuracy estimate
-- update timestamp
+A person marked **Friend · location only**:
+
+- may receive location only when the owner separately enables a location share;
+- does not receive access to Home, Supplies, Routines or other household records;
+- is not offered as a household task assignee;
+- can be relabelled later without changing location consent automatically.
+
+This supports the social/check-in value of Life360-style location sharing without treating every trusted person as a member of the same home.
+
+### Household people
+
+A connected person may be privately marked **Household** when they genuinely participate in the user's home context. Household status can make that person eligible for narrowly scoped collaboration such as an assigned one-off task.
+
+Household status still does not automatically share location, and it is not yet full Home/Routine/Supply membership.
+
+## Current cloud authorization
+
+### Trusted connections
+
+`connections/{connectionId}` stores an accepted relationship between two authenticated accounts.
+
+### Private relationship metadata
+
+`peoplePreferences/{ownerUid}/people/{otherUid}` is readable/writable only by `ownerUid` and contains the owner's private relationship label and household/friend scope.
+
+### Location authorization
+
+`locationShares/{ownerUid}/viewers/{viewerUid}` is controlled by the location owner. Firestore rules require an accepted connection before the share may be enabled.
+
+A viewer can read `locations/{ownerUid}` only when:
+
+- the users still have an accepted connection; and
+- the owner has an active share document for that viewer.
+
+Removing a connection therefore prevents the old share document from continuing to authorize location access.
+
+### Assigned tasks do not broaden location or Home access
+
+`sharedTasks/{taskId}` is a narrowly scoped collaboration document between creator and assignee. Creating one requires an accepted connection and the creator's private Household preference for that assignee.
+
+It does not grant access to Home, Supplies, Routines or location.
+
+## Current location data
+
+Homi currently works with latest-state data:
+
+- latitude / longitude
+- accuracy
 - battery percentage
 - charging state
-- profile photo/name from the accepted connection
+- last update time
+- optionally resolved human-readable address in the client UI
 
-Battery information is convenience telemetry, not emergency-grade data. The UI must always expose freshness/last-updated time so stale values are not presented as current.
+Latest location/battery is treated as convenience/safety context, not emergency-grade telemetry.
 
-## Map behavior
+## Map markers and details
 
-People contains a persistent Google Map.
+Authorized people can appear on the map with their profile picture, falling back to initials when no image is available.
 
-- A person is represented by their profile picture when available, not a generic drop pin.
-- If no photo is available, Homi uses an initials-based marker.
-- Selecting a marker opens a Homi-styled detail sheet.
-- The detail sheet exposes address, coordinates, accuracy, battery and update time.
-- Address/coordinates can be copied.
-- The coordinates can be opened externally in Google Maps.
+Tapping a marker may show:
 
-A connected person appears on the map only when their own share to the current viewer is active and a readable latest location exists.
+- address
+- coordinates
+- battery and charging state
+- accuracy
+- last update
+- individual copy controls for address and coordinates
+- Copy all
+- open coordinates in Google Maps
 
-## Foreground location
+The UI should always show freshness so stale location/battery data is not presented as live.
 
-Foreground/current location is useful even without background sharing.
+## Background location and battery discipline
 
-If Homi already has foreground location permission, the People page refreshes the phone's status automatically when opened rather than requiring a repeated `Check my location` action. If permission has never been granted, Homi asks only when the user chooses to enable location.
+Modern Android treats background location as a sensitive capability. Homi therefore requests background behavior only from the explicit Live updates flow.
 
-The latest self snapshot is cached locally so the People page can show the most recent known status immediately after restart.
+The current Android strategy uses:
 
-## Live background sharing
+- a foreground location service while live sharing is active;
+- visible persistent notification;
+- medium location accuracy rather than maximum accuracy;
+- a movement threshold;
+- spaced update requests rather than continuous maximum-frequency GPS.
 
-Live sharing is an explicit signed-in capability.
+This is intended to reduce battery cost, but exact battery behavior must be measured on real devices.
 
-On Android, the current implementation uses Geolocator's location foreground-service configuration. While live sharing is active:
+**Do not claim Life360-equivalent force-stop/reboot persistence until it has been proven.** Android may stop or restrict app processes depending on OS and manufacturer behavior. Full production-grade resilience may require additional native Android work, boot/restart handling, foreground-service policy validation and Google Play background-location review.
 
-- Android location permission must be `Allow all the time`.
-- Homi keeps a foreground-service notification visible as required by Android.
-- the requested accuracy is **medium**, not maximum GPS accuracy;
-- location updates use a **100 metre movement filter**;
-- the requested interval is approximately **two minutes**;
-- Homi does **not** enable a wake lock by default;
-- each accepted update refreshes the latest location/battery document rather than creating an indefinite route history.
+## Location history
 
-These choices are intended to reduce battery impact while still giving useful household/loved-one awareness. Android may batch or delay delivery, so the actual update cadence and battery cost must be validated on representative real devices rather than treated as a guaranteed two-minute heartbeat.
+Default architecture favours current state, not indefinite route history.
 
-## Resume and stop behavior
+- latest location remains until replaced or sharing is revoked according to product policy;
+- long-term route history is not enabled by default;
+- any future recent breadcrumb/history feature must have a specific retention purpose, short retention by default and clear user-facing controls.
 
-If the user has explicitly enabled live sharing, Homi stores that preference locally and attempts to resume the location foreground service the next time the signed-in app starts, provided Android still grants the necessary permission.
+## Places and arrival/departure alerts
 
-If the user explicitly chooses **Stop live updates**, Homi cancels the stream and clears that preference. Homi must not silently re-enable it afterwards.
+Places remain a planned capability rather than a completed one. Potential examples include Home, Work, School, Gym or a partner's home.
 
-Signing out also stops live updates before the Firebase session ends.
+Any arrival/departure alert must be transparent, tied to an authorized location share and easy to disable. Homi must not add a hidden surveillance mode through Places.
 
-## Important Android/release limitations
+## Safety boundaries
 
-A functioning location foreground service is not the same as complete Life360-grade process resilience.
+Homi is not currently:
 
-The current implementation still requires release hardening and real-device validation for cases such as:
+- emergency-service dispatch;
+- crash detection;
+- a medical or child-safety guarantee;
+- a covert tracker;
+- proof that a person is safe merely because a recent location exists.
 
-- device reboot
-- OEM battery optimizers
-- force-stop behavior
-- long stationary periods
-- lost/recovered network connectivity
-- Play Store background-location declaration/review
-- notification permission behavior across Android versions
+User-facing copy should avoid implying any of those capabilities.
 
-Homi must not claim guaranteed continuous tracking until those scenarios are implemented/tested for the production release.
+## Google Play / Android release requirements
 
-## Firestore authorization
+Before production release of background location:
 
-Connection and location authorization are deliberately separate.
-
-```text
-users/{uid}
-homiCodes/{code}
-connections/{sortedUidPair}
-locationShares/{ownerUid}/viewers/{viewerUid}
-locations/{ownerUid}
-```
-
-- `connections` answers: “Are these two Homi users connected?”
-- `locationShares` answers: “Has the location owner explicitly allowed this viewer?”
-- `locations` stores the latest shareable status.
-
-A viewer cannot read another person's `/locations/{uid}` document unless an active owner-controlled `locationShares` document grants them access.
-
-## Data retention
-
-The default architecture remains current-state location, not movement history.
-
-Current default:
-
-- latest location/battery snapshot: replaced by newer status
-- no long-term route history collection
-- no hidden breadcrumb collection
-
-Places, arrival/departure alerts and short history may be added later only as clearly explained features with appropriate retention and privacy controls.
-
-## User-facing FAQ requirements
-
-The in-app FAQ should explain, in plain language:
-
-- why background permission is needed
-- why Android shows a persistent notification
-- that connecting to someone does not start location sharing
-- that location sharing can be revoked per person
-- that live updates can be stopped globally
-- that battery use is reduced through moderate accuracy, movement filtering and spaced updates
-- that Homi stores the latest state by default rather than a travel history
-
-## Play Store requirement
-
-Because background location is a sensitive Android permission, production release work must include the relevant Google Play background-location declaration, prominent user-facing disclosure, privacy-policy alignment and evidence that the feature is core to Homi's People experience. Permission must not be requested out of context merely because it exists in the manifest.
-
-## Out of scope by default
-
-- covert tracking
-- monitoring a non-Homi device without the device owner's consent
-- indefinite route history
-- crash detection
-- emergency-service dispatch
-- insurance scoring
-- location sharing that cannot be stopped without payment
+- verify background location is essential to the user-facing People feature;
+- provide contextual disclosure before permission requests;
+- test foreground-only fallback;
+- verify persistent-notification behavior;
+- test screen off, app background, process recreation and device reboot where supported;
+- prepare the Google Play background-location declaration/review material;
+- verify all final permission wording against the Android/Play requirements current at release time.

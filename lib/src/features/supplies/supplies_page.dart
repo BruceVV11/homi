@@ -249,13 +249,13 @@ class _SupplyCard extends StatelessWidget {
                   onDelete();
                   return;
                 }
-                final status = _editableStatuses.firstWhere(
+                final status = SuppliesPage._editableStatuses.firstWhere(
                   (item) => item.name == value,
                 );
                 onStatus(status);
               },
               itemBuilder: (context) => [
-                ..._editableStatuses.map(
+                ...SuppliesPage._editableStatuses.map(
                   (status) => PopupMenuItem<String>(
                     value: status.name,
                     child: Text(status.label),

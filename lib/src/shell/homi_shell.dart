@@ -11,6 +11,7 @@ import '../features/routines/routines_page.dart';
 import '../features/supplies/supplies_page.dart';
 import '../features/today/today_page.dart';
 import '../services/auth_service.dart';
+import '../services/household_people_service.dart';
 import '../services/location_status_service.dart';
 import '../services/shared_task_service.dart';
 import '../services/trusted_people_service.dart';
@@ -43,6 +44,7 @@ class _HomiShellState extends State<HomiShell> {
   late final PageController _pageController;
   late final LocationStatusService _locationService;
   late final TrustedPeopleService _trustedPeopleService;
+  late final HouseholdPeopleService _householdPeopleService;
   late final SharedTaskService _sharedTaskService;
 
   @override
@@ -53,6 +55,9 @@ class _HomiShellState extends State<HomiShell> {
       firebaseReady: widget.firebaseReady,
     );
     _trustedPeopleService = TrustedPeopleService(
+      firebaseReady: widget.firebaseReady,
+    );
+    _householdPeopleService = HouseholdPeopleService(
       firebaseReady: widget.firebaseReady,
     );
     _sharedTaskService = SharedTaskService(
@@ -250,7 +255,7 @@ class _HomiShellState extends State<HomiShell> {
         tasks: widget.controller.tasks,
         actorName: actorName,
         actorUid: actorUid,
-        trustedPeopleService: _trustedPeopleService,
+        trustedPeopleService: _householdPeopleService,
         sharedTaskService: _sharedTaskService,
         onAdd: (data) => widget.controller.addRoutine(
           title: data.title,

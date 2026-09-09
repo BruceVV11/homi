@@ -251,7 +251,7 @@ class TodayPage extends StatelessWidget {
               title:
                   '$openTasks ${openTasks == 1 ? 'task is' : 'tasks are'} still open',
               detail: 'One-off jobs waiting to be completed',
-              onTap: onOpenRoutines,
+              onTap: onQuickAddTask,
             ),
             const SizedBox(height: 10),
           ],

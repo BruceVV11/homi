@@ -45,10 +45,19 @@ class HomiAppController extends ChangeNotifier {
     homeType = _prefs?.getString(_homeTypeKey) ?? 'House';
     localOnly = _prefs?.getBool(_localOnlyKey) ?? true;
     quickItems = _prefs?.getStringList(_quickItemsKey) ?? <String>[];
-    tasks = _decode<HouseholdTask>(
+
+    final loadedTasks = _decode<HouseholdTask>(
       _prefs?.getStringList(_tasksKey) ?? <String>[],
       HouseholdTask.decode,
     );
+    final now = DateTime.now();
+    tasks = loadedTasks
+        .where((task) => !task.shouldPurge(now))
+        .toList(growable: false);
+    if (tasks.length != loadedTasks.length) {
+      await _persistTasks();
+    }
+
     routines = _decode<RoutineItem>(
       _prefs?.getStringList(_routinesKey) ?? <String>[],
       RoutineItem.decode,
@@ -162,6 +171,17 @@ class HomiAppController extends ChangeNotifier {
         byUid: actorUid,
       );
     }).toList(growable: false);
+    await _persistTasks();
+    notifyListeners();
+  }
+
+  Future<void> pruneExpiredTasks({DateTime? now}) async {
+    final reference = now ?? DateTime.now();
+    final filtered = tasks
+        .where((task) => !task.shouldPurge(reference))
+        .toList(growable: false);
+    if (filtered.length == tasks.length) return;
+    tasks = filtered;
     await _persistTasks();
     notifyListeners();
   }

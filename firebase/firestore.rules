@@ -49,6 +49,12 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/locationShares/$(ownerUid)/viewers/$(viewerUid)).data.active == true;
     }
 
+    function isSharedTaskMember(data) {
+      return signedIn()
+        && data.memberUids is list
+        && request.auth.uid in data.memberUids;
+    }
+
     match /users/{uid} {
       allow read, create, update, delete: if isSelf(uid);
 
@@ -72,7 +78,7 @@ service cloud.firestore {
     }
 
     // A connection establishes a trusted-person relationship only. It does
-    // not grant location access; location consent remains separate below.
+    // not grant location or household-data access by itself.
     match /connections/{connectionId} {
       allow get, list: if isConnectionMember(resource.data);
 
@@ -95,6 +101,44 @@ service cloud.firestore {
         && connectionCoreUnchanged();
 
       allow delete: if isConnectionMember(resource.data);
+    }
+
+    // Relationship labels and household-vs-friend scope are private to the
+    // person who created them. The other connected person cannot read them.
+    match /peoplePreferences/{ownerUid}/people/{otherUid} {
+      allow read, create, update, delete: if isSelf(ownerUid);
+    }
+
+    // One-off assigned tasks share exactly one task between its creator and
+    // assignee. They do not grant either person access to Home, supplies,
+    // routines or other household records.
+    match /sharedTasks/{taskId} {
+      allow get, list: if isSharedTaskMember(resource.data);
+
+      allow create: if signedIn()
+        && request.resource.data.memberUids is list
+        && request.resource.data.memberUids.size() == 2
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.assigneeUid != request.auth.uid
+        && request.resource.data.createdByUid in request.resource.data.memberUids
+        && request.resource.data.assigneeUid in request.resource.data.memberUids
+        && hasAcceptedConnection(
+          request.resource.data.createdByUid,
+          request.resource.data.assigneeUid
+        );
+
+      allow update: if isSharedTaskMember(resource.data)
+        && request.resource.data.memberUids == resource.data.memberUids
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.assigneeUid == resource.data.assigneeUid
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.notes == resource.data.notes
+        && request.resource.data.createdByName == resource.data.createdByName
+        && request.resource.data.assigneeName == resource.data.assigneeName
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.dueAt == resource.data.dueAt;
+
+      allow delete: if isSharedTaskMember(resource.data);
     }
 
     match /locationShares/{ownerUid}/viewers/{viewerUid} {

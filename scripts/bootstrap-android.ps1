@@ -28,31 +28,27 @@ try {
     Pop-Location
 }
 
-$Manifest = Join-Path $AndroidDir 'app\src\main\AndroidManifest.xml'
-if (Test-Path $Manifest) {
-    $xml = Get-Content $Manifest -Raw
-    $permissions = @"
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-"@
-    if ($xml -notmatch 'ACCESS_FINE_LOCATION') {
-        $xml = $xml -replace '<manifest xmlns:android="http://schemas.android.com/apk/res/android">', "<manifest xmlns:android=`"http://schemas.android.com/apk/res/android`">`r`n$permissions"
-    }
-    Set-Content -Path $Manifest -Value $xml -Encoding UTF8
-}
-
 $SecretsXml = Join-Path $AndroidDir 'app\src\main\res\values\homi_secrets.xml'
 $SecretsDir = Split-Path -Parent $SecretsXml
 New-Item -ItemType Directory -Force -Path $SecretsDir | Out-Null
 if (-not (Test-Path $SecretsXml)) {
-@'
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $placeholder = @'
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="google_maps_key" translatable="false"></string>
 </resources>
-'@ | Set-Content -Path $SecretsXml -Encoding UTF8
+'@
+    [System.IO.File]::WriteAllText($SecretsXml, $placeholder, $utf8NoBom)
+}
+
+$LocationHostHelper = Join-Path $PSScriptRoot 'enable-location-map-android.ps1'
+if (Test-Path $LocationHostHelper) {
+    Write-Host '==> Enabling Homi Android location and Maps host integration'
+    & powershell -ExecutionPolicy Bypass -File $LocationHostHelper
+    if ($LASTEXITCODE -ne 0) {
+        throw "Android location/Maps host setup failed with exit code $LASTEXITCODE"
+    }
 }
 
 if (Test-Path $TempRoot) { Remove-Item $TempRoot -Recurse -Force }

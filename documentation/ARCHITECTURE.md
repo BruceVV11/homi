@@ -45,19 +45,24 @@ lib/
     app.dart
     domain/
       location_snapshot.dart
+      quick_reset_plan.dart
       routine_item.dart
       supply_item.dart
     features/
-      today/
+      auth/
       home/
+      onboarding/
+      people/
+      profile/
       routines/
       supplies/
-      people/
+      today/
     services/
     shell/
     state/
     theme/
     widgets/
+      google_provider_mark.dart
       homi_brand.dart
       homi_bottom_nav.dart
       homi_page.dart
@@ -75,11 +80,37 @@ scripts/
 The primary app shell owns persistent chrome rather than each feature page recreating it:
 
 - one persistent top row contains the exact Homi logo on the left and the account/profile control on the right;
+- the five primary destinations are **Overview, Routines, Home, Supplies, People**;
+- Home is the central destination in the custom bottom navigation and uses the exact approved Homi mark instead of a framework-drawn house icon;
+- the active bottom-navigation destination is represented by a circular button integrated into a shaped rise in the white navigation surface rather than a detached floating bubble;
 - the five primary destinations are hosted in a `PageView`, so horizontal swiping changes page content without moving or duplicating the shell header;
 - the custom Homi bottom navigation remains outside the page scrollers and mirrors the `PageView` index;
-- the Home destination uses the exact approved Homi mark asset rather than a framework-drawn home icon;
-- Android Back from a secondary primary destination returns to Today before root exit behavior;
+- Android Back from a secondary primary destination returns to Overview before root exit behavior;
 - individual feature pages own only their scrollable title/content area and use clamped scrolling with normal bottom padding because the navigation bar already occupies layout space.
+
+The source file remains named `today_page.dart` for continuity while the user-facing destination is now called **Overview**. A file/folder rename is not required merely to change product wording.
+
+## Overview and Quick Reset
+
+Overview is the returning-user status surface. It should show real actionable state, not static demonstration content.
+
+Current sources are:
+
+- incomplete local Routine records;
+- Supply records that need attention, including expiry-derived attention;
+- Quick Add reminders entered by the user.
+
+`QuickResetPlanner` powers the `When you have time` feature:
+
+- the user chooses a time budget such as 10 or 30 minutes;
+- incomplete saved Routines are considered first and sorted by their estimated duration;
+- only tasks that fit inside the remaining time are added;
+- small built-in household suggestions may fill spare time;
+- the total planned duration must never exceed the chosen budget;
+- completing a saved Routine from Quick Reset updates the same persisted Routine record;
+- built-in suggestions are intentionally session-only because they are not saved household records.
+
+Quick Reset is local-first and deterministic in v0.3.0. Future Home/maintenance data may feed the same planner when those domains have real task/due-date models, but that is not assumed yet.
 
 ## Data boundaries
 
@@ -87,11 +118,15 @@ The primary app shell owns persistent chrome rather than each feature page recre
 
 Household preferences, local task state, cached home records and UI preferences remain usable without connectivity.
 
-In v0.2.0 this includes:
+In v0.3.0 this includes:
 
 - Quick Add reminders;
-- Routine records with UUID, title, category, frequency, completion state and last-completed timestamp;
-- Supply records with UUID, category, attention status and optional expiry date.
+- Routine records with UUID, title, category, frequency, estimated duration, completion state and last-completed timestamp;
+- Supply records with UUID, category, stock status and optional expiry date.
+
+Routine `estimatedMinutes` was added after the first persisted Routine version. Decoding therefore defaults missing/invalid duration data to 10 minutes so existing local records remain usable without a reset.
+
+Supply attention is partly derived rather than fully user-entered. A manually `In stock` item becomes `Use soon` for display/attention when its expiry date is within three days, and past expiry dates display `Expired`. Manual `Running low` and `Need to buy` states take precedence.
 
 These records are persisted through `SharedPreferences` as version-tolerant JSON strings. Invalid legacy/corrupt entries are skipped during local decode instead of blocking app startup. Cloud collaboration for these records is intentionally deferred until a merge/conflict strategy exists.
 
@@ -104,6 +139,22 @@ Local-first records must not be silently overwritten when shared Firestore sync 
 ### User-owned media
 
 Receipts, manuals, incident photos, meter evidence and backup files should be stored in the user's own Google Drive where feasible. Homi stores references/metadata rather than becoming the permanent owner of those files.
+
+## Authentication and profile identity
+
+Firebase Authentication remains optional for basic local use.
+
+For signed-in users:
+
+- provider identity is read from Firebase `providerData` rather than inferred from the email address;
+- Google-authenticated accounts surface a Google provider mark so the user can recognise their sign-in method;
+- Firebase `emailVerified` is shown as account status, but it is not treated as a trusted-device signal;
+- Firebase display name can be updated from Profile settings;
+- email/password accounts can resend verification and request a password reset;
+- Google-only accounts are not shown password-management controls that do not apply to them;
+- Firebase profile photo is used in the persistent profile control when available, with a local icon fallback.
+
+Profile/account management is secondary navigation opened from the persistent account control and does not become a sixth primary tab.
 
 ## Location architecture
 

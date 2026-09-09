@@ -472,7 +472,7 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _category,
+              initialValue: _category,
               decoration: const InputDecoration(labelText: 'Category'),
               items: _categories
                   .map(
@@ -488,7 +488,7 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _frequency,
+              initialValue: _frequency,
               decoration: const InputDecoration(labelText: 'How often?'),
               items: _frequencies
                   .map(
@@ -504,7 +504,7 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
-              value: _estimatedMinutes,
+              initialValue: _estimatedMinutes,
               decoration: const InputDecoration(labelText: 'Usually takes'),
               items: _durations
                   .map(

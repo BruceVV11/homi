@@ -15,7 +15,7 @@ class HomiBottomNav extends StatelessWidget {
 
   static const _labels = <String>[
     'Overview',
-    'Routines',
+    'Tasks',
     'Home',
     'Supplies',
     'People',
@@ -216,14 +216,16 @@ class _HomiNavBackgroundPainter extends CustomPainter {
     const topCorner = 22.0;
     const bottomCorner = 20.0;
     const moundHalf = 34.0;
-    final cx = centerX.clamp(moundHalf + 1, size.width - moundHalf - 1).toDouble();
+    final cx = centerX
+        .clamp(moundHalf + 1, size.width - moundHalf - 1)
+        .toDouble();
 
     final path = Path()..moveTo(topCorner, bodyTop);
     path.lineTo(cx - moundHalf, bodyTop);
 
-    // A symmetric dome surrounds the 50 px active button. The dome reaches
-    // y=0 while the button starts at y=7, leaving a visible and even white
-    // halo around the selected destination instead of touching its top edge.
+    // The white dome is deliberately larger than the active circle. This
+    // leaves a visible, even halo around the top and sides, matching the
+    // approved reference rather than letting the bar touch the button.
     path.cubicTo(
       cx - 24,
       bodyTop,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -8,6 +10,8 @@ import '../features/routines/routines_page.dart';
 import '../features/supplies/supplies_page.dart';
 import '../features/today/today_page.dart';
 import '../services/auth_service.dart';
+import '../services/location_status_service.dart';
+import '../services/trusted_people_service.dart';
 import '../state/homi_app_controller.dart';
 import '../theme/homi_theme.dart';
 import '../widgets/google_provider_mark.dart';
@@ -35,16 +39,35 @@ class HomiShell extends StatefulWidget {
 class _HomiShellState extends State<HomiShell> {
   int _index = 0;
   late final PageController _pageController;
+  late final LocationStatusService _locationService;
+  late final TrustedPeopleService _trustedPeopleService;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    _locationService = LocationStatusService(
+      firebaseReady: widget.firebaseReady,
+    );
+    _trustedPeopleService = TrustedPeopleService(
+      firebaseReady: widget.firebaseReady,
+    );
+    unawaited(_resumeLocationSharing());
+  }
+
+  Future<void> _resumeLocationSharing() async {
+    try {
+      await _locationService.loadCachedStatus();
+      await _locationService.resumeContinuousSharingIfEnabled();
+    } catch (_) {
+      // Resuming never prompts. The People page explains any permission issue.
+    }
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    unawaited(_locationService.dispose());
     super.dispose();
   }
 
@@ -55,6 +78,8 @@ class _HomiShellState extends State<HomiShell> {
     if (email != null && email.contains('@')) return email.split('@').first;
     return 'Homi user';
   }
+
+  String _actorName(User? user) => user == null ? 'You' : _displayName(user);
 
   Future<void> _openAccount() async {
     final user = widget.authService.currentUser;
@@ -166,6 +191,7 @@ class _HomiShellState extends State<HomiShell> {
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () async {
+                    await _locationService.stopContinuousSharing();
                     await widget.authService.signOut();
                     if (sheetContext.mounted) Navigator.pop(sheetContext);
                     if (mounted) setState(() {});
@@ -191,36 +217,96 @@ class _HomiShellState extends State<HomiShell> {
     );
   }
 
-  List<Widget> _pages() => [
-        TodayPage(
-          homeName: widget.controller.homeName,
-          quickItems: widget.controller.quickItems,
-          routines: widget.controller.routines,
-          supplies: widget.controller.supplies,
-          onAddQuickItem: widget.controller.addQuickItem,
-          onRemoveQuickItem: widget.controller.removeQuickItem,
-          onToggleRoutine: widget.controller.toggleRoutine,
-          onOpenRoutines: () => _selectPage(1),
-          onOpenSupplies: () => _selectPage(3),
+  List<Widget> _pages(User? user) {
+    final actorName = _actorName(user);
+    final actorUid = user?.uid;
+    return [
+      TodayPage(
+        homeName: widget.controller.homeName,
+        quickItems: widget.controller.quickItems,
+        routines: widget.controller.routines,
+        supplies: widget.controller.supplies,
+        homeThings: widget.controller.homeThings,
+        onAddQuickItem: widget.controller.addQuickItem,
+        onRemoveQuickItem: widget.controller.removeQuickItem,
+        onToggleRoutine: (id) => widget.controller.toggleRoutine(
+          id,
+          actorName: actorName,
+          actorUid: actorUid,
         ),
-        RoutinesPage(
-          items: widget.controller.routines,
-          onAdd: widget.controller.addRoutine,
-          onToggle: widget.controller.toggleRoutine,
-          onRemove: widget.controller.removeRoutine,
+        onOpenRoutines: () => _selectPage(1),
+        onOpenHome: () => _selectPage(2),
+        onOpenSupplies: () => _selectPage(3),
+      ),
+      RoutinesPage(
+        items: widget.controller.routines,
+        onAdd: (data) => widget.controller.addRoutine(
+          title: data.title,
+          category: data.category,
+          repeat: data.repeat,
+          estimatedMinutes: data.estimatedMinutes,
+          dueHour: data.dueHour,
+          dueMinute: data.dueMinute,
+          repeatDays: data.repeatDays,
+          dayOfMonth: data.dayOfMonth,
         ),
-        HomePage(
-          homeName: widget.controller.homeName,
-          homeType: widget.controller.homeType,
+        onToggle: (id) => widget.controller.toggleRoutine(
+          id,
+          actorName: actorName,
+          actorUid: actorUid,
         ),
-        SuppliesPage(
-          items: widget.controller.supplies,
-          onAdd: widget.controller.addSupply,
-          onUpdateStatus: widget.controller.updateSupplyStatus,
-          onRemove: widget.controller.removeSupply,
+        onRemove: widget.controller.removeRoutine,
+      ),
+      HomePage(
+        homeName: widget.controller.homeName,
+        homeType: widget.controller.homeType,
+        things: widget.controller.homeThings,
+        events: widget.controller.homeEvents,
+        readings: widget.controller.utilityReadings,
+        actorName: actorName,
+        onAddThing: (input) => widget.controller.addHomeThing(
+          name: input.name,
+          category: input.category,
+          location: input.location,
+          brandModel: input.brandModel,
+          nextServiceDate: input.nextServiceDate,
+          warrantyUntil: input.warrantyUntil,
+          notes: input.notes,
         ),
-        PeoplePage(firebaseReady: widget.firebaseReady),
-      ];
+        onRemoveThing: widget.controller.removeHomeThing,
+        onAddEvent: (input) => widget.controller.addHomeEvent(
+          type: input.type,
+          title: input.title,
+          date: input.date,
+          completedByName: input.completedByName,
+          thingId: input.thingId,
+          notes: input.notes,
+        ),
+        onRemoveEvent: widget.controller.removeHomeEvent,
+        onAddReading: (input) => widget.controller.addUtilityReading(
+          type: input.type,
+          value: input.value,
+          recordedAt: input.recordedAt,
+          recordedByName: input.recordedByName,
+          unit: input.unit,
+          notes: input.notes,
+        ),
+        onRemoveReading: widget.controller.removeUtilityReading,
+      ),
+      SuppliesPage(
+        items: widget.controller.supplies,
+        onAdd: widget.controller.addSupply,
+        onUpdateStatus: widget.controller.updateSupplyStatus,
+        onRemove: widget.controller.removeSupply,
+      ),
+      PeoplePage(
+        locationService: _locationService,
+        trustedPeopleService: _trustedPeopleService,
+        firebaseReady: widget.firebaseReady,
+        onSignIn: widget.onOpenAuth,
+      ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -246,7 +332,7 @@ class _HomiShellState extends State<HomiShell> {
                   onPageChanged: (index) {
                     if (index != _index) setState(() => _index = index);
                   },
-                  children: _pages(),
+                  children: _pages(user),
                 ),
               ),
             ],
@@ -255,7 +341,7 @@ class _HomiShellState extends State<HomiShell> {
         bottomNavigationBar: SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+            padding: const EdgeInsets.fromLTRB(8, 3, 8, 8),
             child: HomiBottomNav(
               selectedIndex: _index,
               onSelected: _selectPage,
@@ -286,10 +372,13 @@ class _PersistentHeader extends StatelessWidget {
           const Spacer(),
           Tooltip(
             message: user == null ? 'Sign in' : 'Account',
-            child: InkWell(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: onAccountTap,
-              customBorder: const CircleBorder(),
-              child: _AccountAvatar(user: user, size: 42),
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: _AccountAvatar(user: user, size: 42),
+              ),
             ),
           ),
         ],

@@ -38,7 +38,9 @@ class _PeoplePageState extends State<PeoplePage> {
       if (mounted) setState(() => _snapshot = snapshot);
     } catch (error) {
       if (mounted) {
-        setState(() => _error = error.toString().replaceFirst('Bad state: ', ''));
+        setState(
+          () => _error = error.toString().replaceFirst('Bad state: ', ''),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -79,19 +81,19 @@ class _PeoplePageState extends State<PeoplePage> {
               const SizedBox(height: 16),
               const _PrivacyPoint(
                 icon: Icons.touch_app_outlined,
-                text: 'Sharing is always opt-in on the device being shared.',
+                text: 'Location sharing only starts when you choose to enable it on the device being shared.',
               ),
               const _PrivacyPoint(
                 icon: Icons.person_add_alt_1_outlined,
-                text: 'Adding or inviting someone never starts tracking automatically.',
+                text: 'Connecting with someone never turns location sharing on automatically.',
               ),
               const _PrivacyPoint(
                 icon: Icons.location_searching_rounded,
-                text: 'This build stores the latest location and battery snapshot, not a movement history.',
+                text: 'Homi uses your latest location and battery status for current-location features. Location history is not kept by default.',
               ),
               const _PrivacyPoint(
                 icon: Icons.stop_circle_outlined,
-                text: 'Future continuous sharing must stay visible and easy to stop at any time.',
+                text: 'Location sharing is designed to stay visible and easy to stop whenever you want.',
               ),
               const SizedBox(height: 8),
               SizedBox(
@@ -141,7 +143,10 @@ class _PeoplePageState extends State<PeoplePage> {
                         children: [
                           const Text(
                             'Current status',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
                           Text(
                             _snapshot == null
@@ -223,7 +228,11 @@ class _PeoplePageState extends State<PeoplePage> {
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
               child: Row(
                 children: [
-                  const Icon(Icons.shield_outlined, size: 19, color: HomiColors.muted),
+                  const Icon(
+                    Icons.shield_outlined,
+                    size: 19,
+                    color: HomiColors.muted,
+                  ),
                   const SizedBox(width: 9),
                   Expanded(
                     child: Text(
@@ -231,7 +240,10 @@ class _PeoplePageState extends State<PeoplePage> {
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
-                  const Icon(Icons.chevron_right_rounded, color: HomiColors.muted),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: HomiColors.muted,
+                  ),
                 ],
               ),
             ),
@@ -259,10 +271,13 @@ class _PeoplePageState extends State<PeoplePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('No trusted people yet', style: TextStyle(fontWeight: FontWeight.w900)),
+                      const Text(
+                        'No trusted people connected',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
                       const SizedBox(height: 3),
                       Text(
-                        'Invites and mutual sharing controls will build on the secure location foundation already in place.',
+                        'People you connect with appear here. Location sharing always stays separate and opt-in.',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
@@ -292,7 +307,9 @@ class _PrivacyPoint extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: HomiColors.coral),
           const SizedBox(width: 10),
-          Expanded(child: Text(text, style: Theme.of(context).textTheme.bodyLarge)),
+          Expanded(
+            child: Text(text, style: Theme.of(context).textTheme.bodyLarge),
+          ),
         ],
       ),
     );

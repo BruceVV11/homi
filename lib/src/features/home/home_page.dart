@@ -7,6 +7,7 @@ import '../../domain/home_thing.dart';
 import '../../domain/utility_reading.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/homi_controls.dart';
+import '../../widgets/homi_date_time_controls.dart';
 import '../../widgets/homi_page.dart';
 
 class HomePage extends StatelessWidget {
@@ -92,6 +93,7 @@ class HomePage extends StatelessWidget {
       title: 'Remove this ${item.type.label.toLowerCase()} entry?',
       message: '“${item.title}” will be removed from your home history.',
       confirmLabel: 'Remove entry',
+      cancelLabel: 'Keep entry',
       icon: Icons.delete_outline_rounded,
       destructive: true,
     );
@@ -105,10 +107,68 @@ class HomePage extends StatelessWidget {
       message:
           '${item.type.label} ${item.value.toStringAsFixed(1)} ${item.unit} will be removed from this phone.',
       confirmLabel: 'Remove reading',
+      cancelLabel: 'Keep reading',
       icon: Icons.delete_outline_rounded,
       destructive: true,
     );
     if (confirmed) await onRemoveReading(item.id);
+  }
+
+  void _showHowHomeWorks(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('How Home works', style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(
+                'Home is your practical record for the physical place you live in. Add only the details that will be useful later.',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 16),
+              const _InfoPoint(
+                icon: Icons.kitchen_outlined,
+                title: 'Things',
+                text:
+                    'Keep appliances, pumps, geysers, equipment and other useful-to-remember items together with service and warranty dates.',
+              ),
+              const _InfoPoint(
+                icon: Icons.handyman_outlined,
+                title: 'Maintenance & repairs',
+                text:
+                    'Record work after it happens so you can later see what was fixed, when it was done and who handled it.',
+              ),
+              const _InfoPoint(
+                icon: Icons.bolt_outlined,
+                title: 'Utilities',
+                text:
+                    'Save electricity and water meter readings over time. Homi keeps who recorded each reading and when.',
+              ),
+              const _InfoPoint(
+                icon: Icons.lock_outline_rounded,
+                title: 'Your Home is not your People list',
+                text:
+                    'A trusted friend or location connection does not automatically get access to this information. Household sharing will always be a separate, explicit permission.',
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Got it'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -151,7 +211,28 @@ class HomePage extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 8),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _showHowHomeWorks(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, size: 19, color: HomiColors.muted),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    'Keep the useful history of your home here. See what belongs in Home.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: HomiColors.muted),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
         _SectionHeader(
           title: 'Things',
           action: 'Add item',
@@ -199,7 +280,8 @@ class HomePage extends StatelessWidget {
           _EmptyHomeCard(
             icon: Icons.handyman_outlined,
             title: 'No maintenance history yet',
-            message: 'Completed maintenance and repairs will build a useful history here.',
+            message:
+                'Completed maintenance and repairs will build a useful history here.',
             action: 'Log first entry',
             onTap: () => _addEvent(context),
           )
@@ -219,6 +301,11 @@ class HomePage extends StatelessWidget {
           title: 'Utilities',
           action: 'Add reading',
           onTap: () => _addReading(context),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Build a simple history of meter readings without needing a spreadsheet.',
+          style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 10),
         Row(
@@ -255,27 +342,22 @@ class HomePage extends StatelessWidget {
   }
 
   UtilityReading? _latestReading(UtilityType type) {
-    for (final reading in readings) {
-      if (reading.type == type) return reading;
-    }
-    return null;
+    final matching = readings.where((item) => item.type == type).toList()
+      ..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
+    return matching.isEmpty ? null : matching.first;
   }
 
-  String? _thingName(String? id) {
-    if (id == null) return null;
+  String? _thingName(String? thingId) {
+    if (thingId == null) return null;
     for (final item in things) {
-      if (item.id == id) return item.name;
+      if (item.id == thingId) return item.name;
     }
     return null;
   }
 }
 
 class _HomeSummary extends StatelessWidget {
-  const _HomeSummary({
-    required this.icon,
-    required this.value,
-    required this.label,
-  });
+  const _HomeSummary({required this.icon, required this.value, required this.label});
 
   final IconData icon;
   final String value;
@@ -284,7 +366,7 @@ class _HomeSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -295,12 +377,7 @@ class _HomeSummary extends StatelessWidget {
           Icon(icon, size: 19, color: HomiColors.coral),
           const SizedBox(height: 5),
           Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
-          ),
+          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -308,12 +385,7 @@ class _HomeSummary extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    required this.action,
-    required this.onTap,
-  });
-
+  const _SectionHeader({required this.title, required this.action, required this.onTap});
   final String title;
   final String action;
   final VoidCallback onTap;
@@ -325,7 +397,7 @@ class _SectionHeader extends StatelessWidget {
         Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
         TextButton.icon(
           onPressed: onTap,
-          icon: const Icon(Icons.add_rounded, size: 17),
+          icon: const Icon(Icons.add_rounded, size: 18),
           label: Text(action),
         ),
       ],
@@ -346,7 +418,7 @@ class _ThingCard extends StatelessWidget {
     final soon = item.serviceSoon(now);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+        padding: const EdgeInsets.fromLTRB(15, 14, 6, 14),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -354,10 +426,10 @@ class _ThingCard extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: HomiColors.peach.withValues(alpha: 0.20),
+                color: HomiColors.peach.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(Icons.home_repair_service_outlined, color: HomiColors.coral),
+              child: const Icon(Icons.kitchen_outlined, color: HomiColors.coral),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -367,37 +439,31 @@ class _ThingCard extends StatelessWidget {
                   Text(item.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 3),
                   Text(
-                    [item.category, item.location, item.brandModel]
-                        .whereType<String>()
-                        .where((value) => value.trim().isNotEmpty)
-                        .join(' · '),
+                    [
+                      item.location,
+                      item.category,
+                      if (item.brandModel?.trim().isNotEmpty == true) item.brandModel!,
+                    ].join(' · '),
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   if (item.nextServiceDate != null) ...[
-                    const SizedBox(height: 7),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.build_circle_outlined,
-                          size: 16,
-                          color: due || soon ? HomiColors.coral : HomiColors.muted,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            due
-                                ? 'Service is due'
-                                : soon
-                                    ? 'Service due ${DateFormat('d MMM yyyy').format(item.nextServiceDate!)}'
-                                    : 'Next service ${DateFormat('d MMM yyyy').format(item.nextServiceDate!)}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
-                              color: due || soon ? HomiColors.coral : HomiColors.muted,
-                            ),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 6),
+                    Text(
+                      due
+                          ? 'Service is due'
+                          : 'Service ${DateFormat('d MMM yyyy').format(item.nextServiceDate!)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: due || soon ? HomiColors.coral : HomiColors.muted,
+                      ),
+                    ),
+                  ],
+                  if (item.warrantyUntil != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      'Warranty until ${DateFormat('d MMM yyyy').format(item.warrantyUntil!)}',
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
                 ],
@@ -406,7 +472,7 @@ class _ThingCard extends StatelessWidget {
             IconButton(
               tooltip: 'Item options',
               onPressed: onRemove,
-              icon: const Icon(Icons.delete_outline_rounded),
+              icon: const Icon(Icons.more_vert_rounded),
             ),
           ],
         ),
@@ -416,12 +482,7 @@ class _ThingCard extends StatelessWidget {
 }
 
 class _EventCard extends StatelessWidget {
-  const _EventCard({
-    required this.item,
-    required this.thingName,
-    required this.onRemove,
-  });
-
+  const _EventCard({required this.item, required this.thingName, required this.onRemove});
   final HomeEvent item;
   final String? thingName;
   final VoidCallback onRemove;
@@ -430,16 +491,17 @@ class _EventCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 13, 8, 13),
+        padding: const EdgeInsets.fromLTRB(15, 13, 6, 13),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(
               item.type == HomeEventType.repair
-                  ? Icons.handyman_outlined
-                  : Icons.build_outlined,
+                  ? Icons.build_circle_outlined
+                  : Icons.handyman_outlined,
               color: HomiColors.coral,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 11),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -447,21 +509,21 @@ class _EventCard extends StatelessWidget {
                   Text(item.title, style: const TextStyle(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 3),
                   Text(
-                    '${item.type.label}${thingName == null ? '' : ' · $thingName'} · ${DateFormat('d MMM yyyy').format(item.date)}',
+                    '${item.type.label} · ${DateFormat('d MMM yyyy').format(item.date)}${thingName == null ? '' : ' · $thingName'}',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 4),
                   Text(
-                    'Logged by ${item.completedByName}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                    'Recorded by ${item.completedByName}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: HomiColors.muted),
                   ),
                 ],
               ),
             ),
             IconButton(
-              tooltip: 'Remove history entry',
+              tooltip: 'History options',
               onPressed: onRemove,
-              icon: const Icon(Icons.delete_outline_rounded),
+              icon: const Icon(Icons.more_vert_rounded),
             ),
           ],
         ),
@@ -472,35 +534,35 @@ class _EventCard extends StatelessWidget {
 
 class _ReadingSummary extends StatelessWidget {
   const _ReadingSummary({required this.type, required this.reading});
-
   final UtilityType type;
   final UtilityReading? reading;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(15),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              type == UtilityType.electricity
-                  ? Icons.bolt_outlined
-                  : Icons.water_drop_outlined,
-              color: HomiColors.coral,
-            ),
-            const SizedBox(height: 8),
-            Text(type.label, style: const TextStyle(fontWeight: FontWeight.w900)),
-            const SizedBox(height: 4),
-            Text(
-              reading == null
-                  ? 'No reading yet'
-                  : '${reading!.value.toStringAsFixed(1)} ${reading!.unit}',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: HomiColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            type == UtilityType.electricity ? Icons.bolt_outlined : Icons.water_drop_outlined,
+            color: HomiColors.coral,
+          ),
+          const SizedBox(height: 8),
+          Text(type.label, style: const TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 2),
+          Text(
+            reading == null
+                ? 'No reading yet'
+                : '${reading!.value.toStringAsFixed(1)} ${reading!.unit}',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ],
       ),
     );
   }
@@ -508,14 +570,13 @@ class _ReadingSummary extends StatelessWidget {
 
 class _ReadingRow extends StatelessWidget {
   const _ReadingRow({required this.item, required this.onRemove});
-
   final UtilityReading item;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      padding: const EdgeInsets.fromLTRB(13, 10, 5, 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -525,7 +586,7 @@ class _ReadingRow extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              '${item.type.label} · ${item.value.toStringAsFixed(1)} ${item.unit} · ${DateFormat('d MMM').format(item.recordedAt)}',
+              '${item.type.label} · ${item.value.toStringAsFixed(1)} ${item.unit} · ${DateFormat('d MMM · HH:mm').format(item.recordedAt)} · ${item.recordedByName}',
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
           ),
@@ -548,7 +609,6 @@ class _EmptyHomeCard extends StatelessWidget {
     required this.action,
     required this.onTap,
   });
-
   final IconData icon;
   final String title;
   final String message;
@@ -566,11 +626,7 @@ class _EmptyHomeCard extends StatelessWidget {
             const SizedBox(height: 9),
             Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
             const SizedBox(height: 4),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            Text(message, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 12),
             OutlinedButton(onPressed: onTap, child: Text(action)),
           ],
@@ -591,12 +647,10 @@ class _ThingEditorSheetState extends State<_ThingEditorSheet> {
   final _name = TextEditingController();
   final _brandModel = TextEditingController();
   final _notes = TextEditingController();
-  final _day = TextEditingController();
-  final _month = TextEditingController();
-  final _year = TextEditingController();
   String _category = 'Appliance';
   String _location = 'Kitchen';
-  bool _hasServiceDate = false;
+  DateTime? _serviceDate;
+  DateTime? _warrantyDate;
   String? _error;
 
   static const _categories = <String>[
@@ -618,45 +672,38 @@ class _ThingEditorSheetState extends State<_ThingEditorSheet> {
   ];
 
   @override
-  void initState() {
-    super.initState();
-    final now = DateTime.now().add(const Duration(days: 30));
-    _day.text = now.day.toString().padLeft(2, '0');
-    _month.text = now.month.toString().padLeft(2, '0');
-    _year.text = now.year.toString();
-  }
-
-  @override
   void dispose() {
     _name.dispose();
     _brandModel.dispose();
     _notes.dispose();
-    _day.dispose();
-    _month.dispose();
-    _year.dispose();
     super.dispose();
   }
 
-  DateTime? _serviceDate() {
-    if (!_hasServiceDate) return null;
-    final day = int.tryParse(_day.text.trim());
-    final month = int.tryParse(_month.text.trim());
-    final year = int.tryParse(_year.text.trim());
-    if (day == null || month == null || year == null) return null;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-    final value = DateTime(year, month, day);
-    if (value.day != day || value.month != month || value.year != year) return null;
-    return value;
+  Future<void> _pickServiceDate() async {
+    final selected = await showHomiDatePicker(
+      context,
+      title: 'Next service date',
+      initialDate: _serviceDate ?? DateTime.now().add(const Duration(days: 30)),
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
+    );
+    if (selected != null && mounted) setState(() => _serviceDate = selected);
+  }
+
+  Future<void> _pickWarrantyDate() async {
+    final selected = await showHomiDatePicker(
+      context,
+      title: 'Warranty end date',
+      initialDate: _warrantyDate ?? DateTime.now().add(const Duration(days: 365)),
+      firstDate: DateTime.now().subtract(const Duration(days: 3650)),
+      lastDate: DateTime.now().add(const Duration(days: 7300)),
+    );
+    if (selected != null && mounted) setState(() => _warrantyDate = selected);
   }
 
   void _submit() {
     if (_name.text.trim().isEmpty) {
       setState(() => _error = 'Give the item a name.');
-      return;
-    }
-    final serviceDate = _serviceDate();
-    if (_hasServiceDate && serviceDate == null) {
-      setState(() => _error = 'Enter a valid service date.');
       return;
     }
     Navigator.pop(
@@ -666,7 +713,8 @@ class _ThingEditorSheetState extends State<_ThingEditorSheet> {
         category: _category,
         location: _location,
         brandModel: _brandModel.text,
-        nextServiceDate: serviceDate,
+        nextServiceDate: _serviceDate,
+        warrantyUntil: _warrantyDate,
         notes: _notes.text,
       ),
     );
@@ -679,14 +727,10 @@ class _ThingEditorSheetState extends State<_ThingEditorSheet> {
         padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
             Text('Add a home item', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 6),
-            Text(
-              'Save the details you are most likely to need later.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            Text('Save the details you are most likely to need later.', style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 16),
             TextField(
               controller: _name,
@@ -719,20 +763,22 @@ class _ThingEditorSheetState extends State<_ThingEditorSheet> {
               compact: true,
             ),
             const SizedBox(height: 18),
-            Row(
-              children: [
-                const Expanded(child: _FieldLabel('Next service date')),
-                TextButton(
-                  onPressed: () => setState(() => _hasServiceDate = !_hasServiceDate),
-                  child: Text(_hasServiceDate ? 'Remove' : 'Add date'),
-                ),
-              ],
+            HomiDateField(
+              label: 'Next service date',
+              value: _serviceDate,
+              optional: true,
+              onTap: _pickServiceDate,
+              onClear: _serviceDate == null ? null : () => setState(() => _serviceDate = null),
             ),
-            if (_hasServiceDate) ...[
-              const SizedBox(height: 8),
-              _DateFields(day: _day, month: _month, year: _year),
-            ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
+            HomiDateField(
+              label: 'Warranty until',
+              value: _warrantyDate,
+              optional: true,
+              onTap: _pickWarrantyDate,
+              onClear: _warrantyDate == null ? null : () => setState(() => _warrantyDate = null),
+            ),
+            const SizedBox(height: 14),
             TextField(
               controller: _notes,
               minLines: 2,
@@ -750,7 +796,6 @@ class _ThingEditorSheetState extends State<_ThingEditorSheet> {
 
 class _EventEditorSheet extends StatefulWidget {
   const _EventEditorSheet({required this.things, required this.actorName});
-
   final List<HomeThing> things;
   final String actorName;
 
@@ -761,50 +806,32 @@ class _EventEditorSheet extends StatefulWidget {
 class _EventEditorSheetState extends State<_EventEditorSheet> {
   final _title = TextEditingController();
   final _notes = TextEditingController();
-  final _day = TextEditingController();
-  final _month = TextEditingController();
-  final _year = TextEditingController();
   HomeEventType _type = HomeEventType.maintenance;
   String _thingId = '__home__';
+  DateTime _date = DateTime.now();
   String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    final now = DateTime.now();
-    _day.text = now.day.toString().padLeft(2, '0');
-    _month.text = now.month.toString().padLeft(2, '0');
-    _year.text = now.year.toString();
-  }
 
   @override
   void dispose() {
     _title.dispose();
     _notes.dispose();
-    _day.dispose();
-    _month.dispose();
-    _year.dispose();
     super.dispose();
   }
 
-  DateTime? _date() {
-    final day = int.tryParse(_day.text.trim());
-    final month = int.tryParse(_month.text.trim());
-    final year = int.tryParse(_year.text.trim());
-    if (day == null || month == null || year == null) return null;
-    final value = DateTime(year, month, day);
-    if (value.day != day || value.month != month || value.year != year) return null;
-    return value;
+  Future<void> _pickDate() async {
+    final selected = await showHomiDatePicker(
+      context,
+      title: 'When was the work done?',
+      initialDate: _date,
+      firstDate: DateTime.now().subtract(const Duration(days: 3650)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (selected != null && mounted) setState(() => _date = selected);
   }
 
   void _submit() {
-    final date = _date();
     if (_title.text.trim().isEmpty) {
       setState(() => _error = 'Give this entry a short title.');
-      return;
-    }
-    if (date == null) {
-      setState(() => _error = 'Enter a valid date.');
       return;
     }
     Navigator.pop(
@@ -812,7 +839,7 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
       HomeEventInput(
         type: _type,
         title: _title.text.trim(),
-        date: date,
+        date: _date,
         completedByName: widget.actorName,
         thingId: _thingId == '__home__' ? null : _thingId,
         notes: _notes.text,
@@ -836,7 +863,6 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
         padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
             Text('Log maintenance or repair', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 16),
@@ -872,9 +898,7 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
               ),
             ],
             const SizedBox(height: 18),
-            const _FieldLabel('Date'),
-            const SizedBox(height: 8),
-            _DateFields(day: _day, month: _month, year: _year),
+            HomiDateField(label: 'Date', value: _date, onTap: _pickDate),
             const SizedBox(height: 12),
             TextField(
               controller: _notes,
@@ -893,7 +917,6 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
 
 class _ReadingEditorSheet extends StatefulWidget {
   const _ReadingEditorSheet({required this.actorName});
-
   final String actorName;
 
   @override
@@ -905,6 +928,8 @@ class _ReadingEditorSheetState extends State<_ReadingEditorSheet> {
   final _unit = TextEditingController(text: 'kWh');
   final _notes = TextEditingController();
   UtilityType _type = UtilityType.electricity;
+  DateTime _date = DateTime.now();
+  TimeOfDay _time = TimeOfDay.now();
   String? _error;
 
   @override
@@ -922,6 +947,26 @@ class _ReadingEditorSheetState extends State<_ReadingEditorSheet> {
     });
   }
 
+  Future<void> _pickDate() async {
+    final selected = await showHomiDatePicker(
+      context,
+      title: 'Reading date',
+      initialDate: _date,
+      firstDate: DateTime.now().subtract(const Duration(days: 3650)),
+      lastDate: DateTime.now().add(const Duration(days: 30)),
+    );
+    if (selected != null && mounted) setState(() => _date = selected);
+  }
+
+  Future<void> _pickTime() async {
+    final selected = await showHomiTimePicker(
+      context,
+      title: 'Reading time',
+      initialTime: _time,
+    );
+    if (selected != null && mounted) setState(() => _time = selected);
+  }
+
   void _submit() {
     final reading = double.tryParse(_value.text.trim().replaceAll(',', '.'));
     if (reading == null || reading < 0) {
@@ -934,7 +979,13 @@ class _ReadingEditorSheetState extends State<_ReadingEditorSheet> {
         type: _type,
         value: reading,
         unit: _unit.text,
-        recordedAt: DateTime.now(),
+        recordedAt: DateTime(
+          _date.year,
+          _date.month,
+          _date.day,
+          _time.hour,
+          _time.minute,
+        ),
         recordedByName: widget.actorName,
         notes: _notes.text,
       ),
@@ -948,7 +999,6 @@ class _ReadingEditorSheetState extends State<_ReadingEditorSheet> {
         padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
             Text('Add a meter reading', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 16),
@@ -977,6 +1027,10 @@ class _ReadingEditorSheetState extends State<_ReadingEditorSheet> {
                 Expanded(child: TextField(controller: _unit, decoration: const InputDecoration(labelText: 'Unit'))),
               ],
             ),
+            const SizedBox(height: 14),
+            HomiDateField(label: 'Date', value: _date, onTap: _pickDate),
+            const SizedBox(height: 12),
+            HomiTimeField(label: 'Time', value: _time, onTap: _pickTime),
             const SizedBox(height: 12),
             TextField(controller: _notes, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'Notes (optional)')),
             const SizedBox(height: 20),
@@ -988,56 +1042,54 @@ class _ReadingEditorSheetState extends State<_ReadingEditorSheet> {
   }
 }
 
-class _DateFields extends StatelessWidget {
-  const _DateFields({required this.day, required this.month, required this.year});
-
-  final TextEditingController day;
-  final TextEditingController month;
-  final TextEditingController year;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: day,
-            keyboardType: TextInputType.number,
-            maxLength: 2,
-            decoration: const InputDecoration(labelText: 'Day', counterText: ''),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            controller: month,
-            keyboardType: TextInputType.number,
-            maxLength: 2,
-            decoration: const InputDecoration(labelText: 'Month', counterText: ''),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 2,
-          child: TextField(
-            controller: year,
-            keyboardType: TextInputType.number,
-            maxLength: 4,
-            decoration: const InputDecoration(labelText: 'Year', counterText: ''),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _FieldLabel extends StatelessWidget {
   const _FieldLabel(this.label);
-
   final String label;
 
   @override
   Widget build(BuildContext context) {
-    return Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900));
+    return Text(
+      label,
+      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
+    );
+  }
+}
+
+class _InfoPoint extends StatelessWidget {
+  const _InfoPoint({required this.icon, required this.title, required this.text});
+  final IconData icon;
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: HomiColors.peach.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, size: 20, color: HomiColors.coral),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                const SizedBox(height: 3),
+                Text(text, style: Theme.of(context).textTheme.bodyMedium),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

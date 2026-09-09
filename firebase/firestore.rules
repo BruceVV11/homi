@@ -43,6 +43,11 @@ service cloud.firestore {
           && secondUid in get(reversePath).data.memberUids);
     }
 
+    function hasHouseholdPreference(ownerUid, otherUid) {
+      let path = /databases/$(database)/documents/peoplePreferences/$(ownerUid)/people/$(otherUid);
+      return exists(path) && get(path).data.scope == 'household';
+    }
+
     function hasActiveLocationShare(ownerUid, viewerUid) {
       return hasAcceptedConnection(ownerUid, viewerUid)
         && exists(/databases/$(database)/documents/locationShares/$(ownerUid)/viewers/$(viewerUid))
@@ -111,7 +116,8 @@ service cloud.firestore {
 
     // One-off assigned tasks share exactly one task between its creator and
     // assignee. They do not grant either person access to Home, supplies,
-    // routines or other household records.
+    // routines or other household records. The creator must have explicitly
+    // labelled the assignee as Household first.
     match /sharedTasks/{taskId} {
       allow get, list: if isSharedTaskMember(resource.data);
 
@@ -123,6 +129,10 @@ service cloud.firestore {
         && request.resource.data.createdByUid in request.resource.data.memberUids
         && request.resource.data.assigneeUid in request.resource.data.memberUids
         && hasAcceptedConnection(
+          request.resource.data.createdByUid,
+          request.resource.data.assigneeUid
+        )
+        && hasHouseholdPreference(
           request.resource.data.createdByUid,
           request.resource.data.assigneeUid
         );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/quick_reset_plan.dart';
 import '../../domain/routine_item.dart';
 import '../../domain/supply_item.dart';
 import '../../theme/homi_theme.dart';
@@ -13,6 +14,7 @@ class TodayPage extends StatelessWidget {
     required this.supplies,
     required this.onAddQuickItem,
     required this.onRemoveQuickItem,
+    required this.onToggleRoutine,
     required this.onOpenRoutines,
     required this.onOpenSupplies,
     super.key,
@@ -24,10 +26,11 @@ class TodayPage extends StatelessWidget {
   final List<SupplyItem> supplies;
   final Future<void> Function(String value) onAddQuickItem;
   final Future<void> Function(String value) onRemoveQuickItem;
+  final Future<void> Function(String id) onToggleRoutine;
   final VoidCallback onOpenRoutines;
   final VoidCallback onOpenSupplies;
 
-  Future<void> _addSomething(BuildContext context) async {
+  Future<void> _quickAdd(BuildContext context) async {
     final controller = TextEditingController();
     final value = await showModalBottomSheet<String>(
       context: context,
@@ -45,10 +48,13 @@ class TodayPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Add something', style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                'Quick add',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const SizedBox(height: 8),
               Text(
-                'Capture a quick reminder without deciding where it belongs yet.',
+                'Save a reminder now and organise it later if you need to.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 16),
@@ -57,14 +63,17 @@ class TodayPage extends StatelessWidget {
                 autofocus: true,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (value) => Navigator.pop(context, value),
-                decoration: const InputDecoration(hintText: 'e.g. Buy dog food'),
+                decoration: const InputDecoration(
+                  labelText: 'Reminder',
+                  hintText: 'e.g. Buy dog food',
+                ),
               ),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () => Navigator.pop(context, controller.text),
-                  child: const Text('Add to Today'),
+                  child: const Text('Add reminder'),
                 ),
               ),
             ],
@@ -73,22 +82,12 @@ class TodayPage extends StatelessWidget {
       ),
     );
     controller.dispose();
-    if (value != null && value.trim().isNotEmpty) await onAddQuickItem(value);
+    if (value != null && value.trim().isNotEmpty) {
+      await onAddQuickItem(value);
+    }
   }
 
-  void _showTimePlan(BuildContext context, int minutes) {
-    final tasks = minutes <= 10
-        ? const [
-            ('Wipe kitchen counters', '4 min'),
-            ('Refill pet water', '2 min'),
-            ('Empty recycling', '3 min'),
-          ]
-        : const [
-            ('Clean bathroom', '12 min'),
-            ('Change bed linen', '8 min'),
-            ('Sweep living areas', '7 min'),
-          ];
-
+  void _showQuickResetInfo(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -99,26 +98,45 @@ class TodayPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('$minutes-minute reset', style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 6),
-              Text(
-                'A small set of useful jobs that fits inside the time you have.',
-                style: Theme.of(context).textTheme.bodyMedium,
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: HomiColors.peach.withValues(alpha: 0.24),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.timelapse_rounded,
+                      color: HomiColors.coral,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'When you have time',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
-              ...tasks.map(
-                (task) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.check_circle_outline_rounded, color: HomiColors.coral),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(task.$1, style: const TextStyle(fontWeight: FontWeight.w800)),
-                      ),
-                      Text(task.$2, style: Theme.of(context).textTheme.bodyMedium),
-                    ],
-                  ),
+              Text(
+                'Choose how much time you have and Homi builds a small Quick Reset that fits inside it. Saved routines come first, using the time estimate you gave them. Any spare minutes can be filled with simple household suggestions.',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Nothing starts automatically. Check off what you finish, and saved routines are updated in Homi.',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Got it'),
                 ),
               ),
             ],
@@ -128,40 +146,106 @@ class TodayPage extends StatelessWidget {
     );
   }
 
+  Future<void> _showTimePlan(BuildContext context, int minutes) async {
+    final tasks = QuickResetPlanner.build(
+      budgetMinutes: minutes,
+      routines: routines,
+    );
+    final completedKeys = <String>{};
+    final plannedMinutes = QuickResetPlanner.plannedMinutes(tasks);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$minutes-minute Quick Reset',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '$plannedMinutes minutes planned from the most useful jobs that fit.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 16),
+                  ...tasks.map((task) {
+                    final key = task.routineId ?? 'suggestion:${task.title}';
+                    final completed = completedKeys.contains(key);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _QuickResetTaskRow(
+                        task: task,
+                        completed: completed,
+                        onDone: () async {
+                          if (completed) return;
+                          if (task.routineId != null) {
+                            await onToggleRoutine(task.routineId!);
+                          }
+                          if (!sheetContext.mounted) return;
+                          setSheetState(() => completedKeys.add(key));
+                        },
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Done for now'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final hour = DateTime.now().hour;
+    final now = DateTime.now();
+    final hour = now.hour;
     final greeting = hour < 12
         ? 'Good morning'
         : (hour < 18 ? 'Good afternoon' : 'Good evening');
     final openRoutines = routines.where((item) => !item.completed).length;
-    final supplyAlerts = supplies.where((item) => item.status != SupplyStatus.okay).length;
+    final supplyAlerts = supplies
+        .where((item) => item.effectiveStatus(now) != SupplyStatus.okay)
+        .length;
+    final hasAttention =
+        openRoutines > 0 || supplyAlerts > 0 || quickItems.isNotEmpty;
 
     return HomiPage(
       title: '$greeting!',
       subtitle: '$homeName is ready when you are.',
       children: [
-        const _SectionLabel(label: 'Today'),
+        const _SectionLabel(label: 'What needs attention'),
         const SizedBox(height: 10),
-        if (openRoutines == 0 && supplyAlerts == 0) ...[
+        if (!hasAttention)
           const _AttentionCard(
-            icon: Icons.pets_rounded,
-            title: 'Milo was fed',
-            detail: '07:42 · completed this morning',
-          ),
-          const SizedBox(height: 10),
-          const _AttentionCard(
-            icon: Icons.kitchen_outlined,
-            title: 'Milk expires in 3 days',
-            detail: 'Use soon',
-          ),
-          const SizedBox(height: 10),
-        ] else ...[
+            icon: Icons.check_circle_outline_rounded,
+            title: 'Nothing needs attention right now',
+            detail: 'Routines, supplies and quick reminders will appear here when they need you.',
+          )
+        else ...[
           if (openRoutines > 0) ...[
             _AttentionCard(
               icon: Icons.checklist_rounded,
-              title: '$openRoutines ${openRoutines == 1 ? 'routine' : 'routines'} waiting',
-              detail: 'Tap to review what needs doing',
+              title:
+                  '$openRoutines ${openRoutines == 1 ? 'routine' : 'routines'} ready to do',
+              detail: 'Review your repeatable home jobs',
               onTap: onOpenRoutines,
             ),
             const SizedBox(height: 10),
@@ -169,20 +253,13 @@ class TodayPage extends StatelessWidget {
           if (supplyAlerts > 0) ...[
             _AttentionCard(
               icon: Icons.inventory_2_outlined,
-              title: '$supplyAlerts ${supplyAlerts == 1 ? 'supply needs' : 'supplies need'} attention',
-              detail: 'Low stock, shopping or expiry items',
+              title:
+                  '$supplyAlerts ${supplyAlerts == 1 ? 'supply needs' : 'supplies need'} attention',
+              detail: 'Expiry, low-stock or shopping items',
               onTap: onOpenSupplies,
             ),
             const SizedBox(height: 10),
           ],
-        ],
-        const _AttentionCard(
-          icon: Icons.bolt_outlined,
-          title: 'Electricity reading due this week',
-          detail: 'Last reading was 29 days ago',
-        ),
-        if (quickItems.isNotEmpty) ...[
-          const SizedBox(height: 10),
           ...quickItems.map(
             (item) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -191,13 +268,19 @@ class TodayPage extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
                   child: Row(
                     children: [
-                      const Icon(Icons.push_pin_outlined, color: HomiColors.coral),
+                      const Icon(
+                        Icons.push_pin_outlined,
+                        color: HomiColors.coral,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(item, style: const TextStyle(fontWeight: FontWeight.w800)),
+                        child: Text(
+                          item,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
                       ),
                       IconButton(
-                        tooltip: 'Done',
+                        tooltip: 'Mark done',
                         onPressed: () => onRemoveQuickItem(item),
                         icon: const Icon(Icons.check_rounded),
                       ),
@@ -209,14 +292,18 @@ class TodayPage extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 18),
-        const _SectionLabel(label: 'When you have time'),
+        _SectionHeader(
+          label: 'When you have time',
+          actionLabel: 'How it works',
+          onAction: () => _showQuickResetInfo(context),
+        ),
         const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
               child: _TimeCard(
                 minutes: 10,
-                detail: '3 quick tasks',
+                detail: 'A quick reset',
                 onTap: () => _showTimePlan(context, 10),
               ),
             ),
@@ -224,7 +311,7 @@ class TodayPage extends StatelessWidget {
             Expanded(
               child: _TimeCard(
                 minutes: 30,
-                detail: '3 useful tasks',
+                detail: 'Get a little more done',
                 onTap: () => _showTimePlan(context, 30),
               ),
             ),
@@ -234,9 +321,9 @@ class TodayPage extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: () => _addSomething(context),
+            onPressed: () => _quickAdd(context),
             icon: const Icon(Icons.add_rounded),
-            label: const Text('Add something'),
+            label: const Text('Quick add'),
           ),
         ),
       ],
@@ -252,6 +339,34 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Text(label, style: Theme.of(context).textTheme.titleLarge);
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.label,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  final String label;
+  final String actionLabel;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(label, style: Theme.of(context).textTheme.titleLarge),
+        ),
+        TextButton.icon(
+          onPressed: onAction,
+          icon: const Icon(Icons.info_outline_rounded, size: 17),
+          label: Text(actionLabel),
+        ),
+      ],
+    );
+  }
 }
 
 class _AttentionCard extends StatelessWidget {
@@ -287,13 +402,17 @@ class _AttentionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
                 const SizedBox(height: 2),
                 Text(detail, style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
           ),
-          if (onTap != null) const Icon(Icons.arrow_forward_rounded, size: 20),
+          if (onTap != null)
+            const Icon(Icons.arrow_forward_rounded, size: 20),
         ],
       ),
     );
@@ -306,6 +425,79 @@ class _AttentionCard extends StatelessWidget {
               onTap: onTap,
               child: content,
             ),
+    );
+  }
+}
+
+class _QuickResetTaskRow extends StatelessWidget {
+  const _QuickResetTaskRow({
+    required this.task,
+    required this.completed,
+    required this.onDone,
+  });
+
+  final QuickResetTask task;
+  final bool completed;
+  final Future<void> Function() onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: completed
+                    ? HomiColors.sage.withValues(alpha: 0.28)
+                    : HomiColors.peach.withValues(alpha: 0.20),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(
+                completed
+                    ? Icons.check_rounded
+                    : (task.isSavedRoutine
+                          ? Icons.repeat_rounded
+                          : Icons.auto_awesome_outlined),
+                size: 20,
+                color: completed ? const Color(0xFF6F8B65) : HomiColors.coral,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    task.title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      decoration: completed ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${task.minutes} min · ${task.isSavedRoutine ? 'From your routines' : 'Quick suggestion'}',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: completed ? 'Done' : 'Mark done',
+              onPressed: completed ? null : () => onDone(),
+              icon: Icon(
+                completed
+                    ? Icons.check_circle_rounded
+                    : Icons.check_circle_outline_rounded,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -332,7 +524,10 @@ class _TimeCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('$minutes minutes', style: const TextStyle(fontWeight: FontWeight.w900)),
+              Text(
+                '$minutes minutes',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 4),
               Text(detail, style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 14),

@@ -125,7 +125,8 @@ class HomePage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('How Home works', style: Theme.of(context).textTheme.headlineSmall),
+              Text('How Home works',
+                  style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               Text(
                 'Home is your practical record for the physical place you live in. Add only the details that will be useful later.',
@@ -219,7 +220,8 @@ class HomePage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Row(
               children: [
-                const Icon(Icons.info_outline_rounded, size: 19, color: HomiColors.muted),
+                const Icon(Icons.info_outline_rounded,
+                    size: 19, color: HomiColors.muted),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
@@ -227,7 +229,8 @@ class HomePage extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: HomiColors.muted),
+                const Icon(Icons.chevron_right_rounded,
+                    color: HomiColors.muted),
               ],
             ),
           ),
@@ -357,7 +360,11 @@ class HomePage extends StatelessWidget {
 }
 
 class _HomeSummary extends StatelessWidget {
-  const _HomeSummary({required this.icon, required this.value, required this.label});
+  const _HomeSummary({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
 
   final IconData icon;
   final String value;
@@ -376,8 +383,14 @@ class _HomeSummary extends StatelessWidget {
         children: [
           Icon(icon, size: 19, color: HomiColors.coral),
           const SizedBox(height: 5),
-          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800)),
+          Text(value,
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
+          ),
         ],
       ),
     );
@@ -385,7 +398,11 @@ class _HomeSummary extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.action, required this.onTap});
+  const _SectionHeader({
+    required this.title,
+    required this.action,
+    required this.onTap,
+  });
   final String title;
   final String action;
   final VoidCallback onTap;
@@ -394,7 +411,8 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
+        Expanded(
+            child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
         TextButton.icon(
           onPressed: onTap,
           icon: const Icon(Icons.add_rounded, size: 18),
@@ -406,7 +424,11 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _ThingCard extends StatelessWidget {
-  const _ThingCard({required this.item, required this.now, required this.onRemove});
+  const _ThingCard({
+    required this.item,
+    required this.now,
+    required this.onRemove,
+  });
 
   final HomeThing item;
   final DateTime now;
@@ -429,20 +451,24 @@ class _ThingCard extends StatelessWidget {
                 color: HomiColors.peach.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(Icons.kitchen_outlined, color: HomiColors.coral),
+              child: const Icon(Icons.kitchen_outlined,
+                  color: HomiColors.coral),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                  Text(item.name,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 3),
                   Text(
                     [
                       item.location,
                       item.category,
-                      if (item.brandModel?.trim().isNotEmpty == true) item.brandModel!,
+                      if (item.brandModel?.trim().isNotEmpty == true)
+                        item.brandModel!,
                     ].join(' · '),
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
@@ -482,7 +508,11 @@ class _ThingCard extends StatelessWidget {
 }
 
 class _EventCard extends StatelessWidget {
-  const _EventCard({required this.item, required this.thingName, required this.onRemove});
+  const _EventCard({
+    required this.item,
+    required this.thingName,
+    required this.onRemove,
+  });
   final HomeEvent item;
   final String? thingName;
   final VoidCallback onRemove;
@@ -506,7 +536,8 @@ class _EventCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                  Text(item.title,
+                      style: const TextStyle(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 3),
                   Text(
                     '${item.type.label} · ${DateFormat('d MMM yyyy').format(item.date)}${thingName == null ? '' : ' · $thingName'}',
@@ -515,7 +546,11 @@ class _EventCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     'Recorded by ${item.completedByName}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: HomiColors.muted),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: HomiColors.muted,
+                    ),
                   ),
                 ],
               ),
@@ -550,7 +585,9 @@ class _ReadingSummary extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            type == UtilityType.electricity ? Icons.bolt_outlined : Icons.water_drop_outlined,
+            type == UtilityType.electricity
+                ? Icons.bolt_outlined
+                : Icons.water_drop_outlined,
             color: HomiColors.coral,
           ),
           const SizedBox(height: 8),
@@ -626,7 +663,11 @@ class _EmptyHomeCard extends StatelessWidget {
             const SizedBox(height: 9),
             Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
             const SizedBox(height: 4),
-            Text(message, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
             const SizedBox(height: 12),
             OutlinedButton(onPressed: onTap, child: Text(action)),
           ],
@@ -683,7 +724,8 @@ class _ThingEditorSheetState extends State<_ThingEditorSheet> {
     final selected = await showHomiDatePicker(
       context,
       title: 'Next service date',
-      initialDate: _serviceDate ?? DateTime.now().add(const Duration(days: 30)),
+      initialDate:
+          _serviceDate ?? DateTime.now().add(const Duration(days: 30)),
       firstDate: DateTime.now().subtract(const Duration(days: 1)),
       lastDate: DateTime.now().add(const Duration(days: 3650)),
     );
@@ -694,7 +736,8 @@ class _ThingEditorSheetState extends State<_ThingEditorSheet> {
     final selected = await showHomiDatePicker(
       context,
       title: 'Warranty end date',
-      initialDate: _warrantyDate ?? DateTime.now().add(const Duration(days: 365)),
+      initialDate:
+          _warrantyDate ?? DateTime.now().add(const Duration(days: 365)),
       firstDate: DateTime.now().subtract(const Duration(days: 3650)),
       lastDate: DateTime.now().add(const Duration(days: 7300)),
     );
@@ -724,24 +767,41 @@ class _ThingEditorSheetState extends State<_ThingEditorSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          4,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Add a home item', style: Theme.of(context).textTheme.headlineSmall),
+            Text('Add a home item',
+                style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 6),
-            Text('Save the details you are most likely to need later.', style: Theme.of(context).textTheme.bodyMedium),
+            Text(
+              'Save the details you are most likely to need later.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _name,
               autofocus: true,
-              decoration: InputDecoration(labelText: 'Item', hintText: 'e.g. Geyser', errorText: _error),
+              decoration: InputDecoration(
+                labelText: 'Item',
+                hintText: 'e.g. Geyser',
+                errorText: _error,
+              ),
               onChanged: (_) {
                 if (_error != null) setState(() => _error = null);
               },
             ),
             const SizedBox(height: 12),
-            TextField(controller: _brandModel, decoration: const InputDecoration(labelText: 'Brand / model (optional)')),
+            TextField(
+              controller: _brandModel,
+              decoration:
+                  const InputDecoration(labelText: 'Brand / model (optional)'),
+            ),
             const SizedBox(height: 18),
             const _FieldLabel('Type'),
             const SizedBox(height: 9),
@@ -768,7 +828,9 @@ class _ThingEditorSheetState extends State<_ThingEditorSheet> {
               value: _serviceDate,
               optional: true,
               onTap: _pickServiceDate,
-              onClear: _serviceDate == null ? null : () => setState(() => _serviceDate = null),
+              onClear: _serviceDate == null
+                  ? null
+                  : () => setState(() => _serviceDate = null),
             ),
             const SizedBox(height: 14),
             HomiDateField(
@@ -776,7 +838,9 @@ class _ThingEditorSheetState extends State<_ThingEditorSheet> {
               value: _warrantyDate,
               optional: true,
               onTap: _pickWarrantyDate,
-              onClear: _warrantyDate == null ? null : () => setState(() => _warrantyDate = null),
+              onClear: _warrantyDate == null
+                  ? null
+                  : () => setState(() => _warrantyDate = null),
             ),
             const SizedBox(height: 14),
             TextField(
@@ -786,7 +850,13 @@ class _ThingEditorSheetState extends State<_ThingEditorSheet> {
               decoration: const InputDecoration(labelText: 'Notes (optional)'),
             ),
             const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: FilledButton(onPressed: _submit, child: const Text('Add item'))),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _submit,
+                child: const Text('Add item'),
+              ),
+            ),
           ],
         ),
       ),
@@ -849,7 +919,10 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final thingValues = <String>['__home__', ...widget.things.map((item) => item.id)];
+    final thingValues = <String>[
+      '__home__',
+      ...widget.things.map((item) => item.id),
+    ];
     String labelForThing(String id) {
       if (id == '__home__') return 'General home';
       for (final item in widget.things) {
@@ -860,11 +933,17 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          4,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Log maintenance or repair', style: Theme.of(context).textTheme.headlineSmall),
+            Text('Log maintenance or repair',
+                style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 16),
             HomiChoiceGroup<HomeEventType>(
               values: HomeEventType.values,
@@ -907,7 +986,13 @@ class _EventEditorSheetState extends State<_EventEditorSheet> {
               decoration: const InputDecoration(labelText: 'Notes (optional)'),
             ),
             const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: FilledButton(onPressed: _submit, child: const Text('Save to history'))),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _submit,
+                child: const Text('Save to history'),
+              ),
+            ),
           ],
         ),
       ),
@@ -925,9 +1010,9 @@ class _ReadingEditorSheet extends StatefulWidget {
 
 class _ReadingEditorSheetState extends State<_ReadingEditorSheet> {
   final _value = TextEditingController();
-  final _unit = TextEditingController(text: 'kWh');
   final _notes = TextEditingController();
   UtilityType _type = UtilityType.electricity;
+  String _unit = UtilityType.electricity.defaultUnit;
   DateTime _date = DateTime.now();
   TimeOfDay _time = TimeOfDay.now();
   String? _error;
@@ -935,7 +1020,6 @@ class _ReadingEditorSheetState extends State<_ReadingEditorSheet> {
   @override
   void dispose() {
     _value.dispose();
-    _unit.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -943,7 +1027,7 @@ class _ReadingEditorSheetState extends State<_ReadingEditorSheet> {
   void _setType(UtilityType value) {
     setState(() {
       _type = value;
-      _unit.text = value.defaultUnit;
+      _unit = value.defaultUnit;
     });
   }
 
@@ -978,7 +1062,7 @@ class _ReadingEditorSheetState extends State<_ReadingEditorSheet> {
       UtilityReadingInput(
         type: _type,
         value: reading,
-        unit: _unit.text,
+        unit: _unit,
         recordedAt: DateTime(
           _date.year,
           _date.month,
@@ -996,11 +1080,17 @@ class _ReadingEditorSheetState extends State<_ReadingEditorSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          4,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Add a meter reading', style: Theme.of(context).textTheme.headlineSmall),
+            Text('Add a meter reading',
+                style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 16),
             HomiChoiceGroup<UtilityType>(
               values: UtilityType.values,
@@ -1009,32 +1099,46 @@ class _ReadingEditorSheetState extends State<_ReadingEditorSheet> {
               onSelected: _setType,
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    controller: _value,
-                    autofocus: true,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(labelText: 'Reading', errorText: _error),
-                    onChanged: (_) {
-                      if (_error != null) setState(() => _error = null);
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(child: TextField(controller: _unit, decoration: const InputDecoration(labelText: 'Unit'))),
-              ],
+            TextField(
+              controller: _value,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration:
+                  InputDecoration(labelText: 'Reading', errorText: _error),
+              onChanged: (_) {
+                if (_error != null) setState(() => _error = null);
+              },
+            ),
+            const SizedBox(height: 16),
+            const _FieldLabel('Unit'),
+            const SizedBox(height: 8),
+            HomiChoiceGroup<String>(
+              values: _type.unitOptions,
+              selected: _unit,
+              labelFor: (value) => value,
+              onSelected: (value) => setState(() => _unit = value),
+              compact: true,
             ),
             const SizedBox(height: 14),
             HomiDateField(label: 'Date', value: _date, onTap: _pickDate),
             const SizedBox(height: 12),
             HomiTimeField(label: 'Time', value: _time, onTap: _pickTime),
             const SizedBox(height: 12),
-            TextField(controller: _notes, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'Notes (optional)')),
+            TextField(
+              controller: _notes,
+              minLines: 2,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Notes (optional)'),
+            ),
             const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: FilledButton(onPressed: _submit, child: const Text('Save reading'))),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _submit,
+                child: const Text('Save reading'),
+              ),
+            ),
           ],
         ),
       ),
@@ -1056,7 +1160,11 @@ class _FieldLabel extends StatelessWidget {
 }
 
 class _InfoPoint extends StatelessWidget {
-  const _InfoPoint({required this.icon, required this.title, required this.text});
+  const _InfoPoint({
+    required this.icon,
+    required this.title,
+    required this.text,
+  });
   final IconData icon;
   final String title;
   final String text;
@@ -1082,7 +1190,8 @@ class _InfoPoint extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                Text(title,
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
                 const SizedBox(height: 3),
                 Text(text, style: Theme.of(context).textTheme.bodyMedium),
               ],

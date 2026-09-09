@@ -26,13 +26,13 @@ class HomiBottomNav extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         const itemCount = 5;
-        const activeSize = 50.0;
+        const activeSize = 54.0;
         final itemWidth = constraints.maxWidth / itemCount;
         final centerX = itemWidth * (selectedIndex + 0.5);
         final activeLeft = centerX - (activeSize / 2);
 
         return SizedBox(
-          height: 82,
+          height: 88,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -42,10 +42,10 @@ class HomiBottomNav extends StatelessWidget {
                 ),
               ),
               AnimatedPositioned(
-                duration: const Duration(milliseconds: 260),
+                duration: const Duration(milliseconds: 240),
                 curve: Curves.easeOutCubic,
                 left: activeLeft,
-                top: 0,
+                top: 1,
                 width: activeSize,
                 height: activeSize,
                 child: IgnorePointer(
@@ -56,7 +56,7 @@ class HomiBottomNav extends StatelessWidget {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                height: 68,
+                height: 70,
                 child: Row(
                   children: List<Widget>.generate(itemCount, (index) {
                     final selected = index == selectedIndex;
@@ -65,47 +65,44 @@ class HomiBottomNav extends StatelessWidget {
                         button: true,
                         selected: selected,
                         label: _labels[index],
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(24),
-                            onTap: () => onSelected(index),
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(2, 8, 2, 6),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  if (selected)
-                                    const SizedBox(height: 29)
-                                  else ...[
-                                    _NavIcon(
-                                      index: index,
-                                      selected: false,
-                                      inBubble: false,
-                                    ),
-                                    const SizedBox(height: 4),
-                                  ],
-                                  AnimatedDefaultTextStyle(
-                                    duration: const Duration(milliseconds: 180),
-                                    style: TextStyle(
-                                      fontSize: 11.2,
-                                      height: 1,
-                                      fontWeight: selected
-                                          ? FontWeight.w900
-                                          : FontWeight.w700,
-                                      color: selected
-                                          ? HomiColors.coral
-                                          : HomiColors.slate,
-                                    ),
-                                    child: Text(
-                                      _labels[index],
-                                      maxLines: 1,
-                                      overflow: TextOverflow.fade,
-                                      softWrap: false,
-                                    ),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => onSelected(index),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(2, 4, 2, 7),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                if (selected)
+                                  const SizedBox(height: 31)
+                                else ...[
+                                  _NavIcon(
+                                    index: index,
+                                    selected: false,
+                                    inBubble: false,
                                   ),
+                                  const SizedBox(height: 5),
                                 ],
-                              ),
+                                AnimatedDefaultTextStyle(
+                                  duration: const Duration(milliseconds: 160),
+                                  style: TextStyle(
+                                    fontSize: 11.2,
+                                    height: 1,
+                                    fontWeight: selected
+                                        ? FontWeight.w900
+                                        : FontWeight.w700,
+                                    color: selected
+                                        ? HomiColors.coral
+                                        : HomiColors.slate,
+                                  ),
+                                  child: Text(
+                                    _labels[index],
+                                    maxLines: 1,
+                                    overflow: TextOverflow.fade,
+                                    softWrap: false,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -135,14 +132,14 @@ class _ActiveBubble extends StatelessWidget {
         color: isHome ? HomiColors.cream : HomiColors.coral,
         shape: BoxShape.circle,
         border: Border.all(
-          color: isHome ? HomiColors.border : HomiColors.coral,
-          width: isHome ? 1 : 0,
+          color: isHome ? HomiColors.coral.withValues(alpha: 0.35) : HomiColors.coral,
+          width: isHome ? 1.5 : 0,
         ),
         boxShadow: const [
           BoxShadow(
-            blurRadius: 16,
-            offset: Offset(0, 6),
-            color: Color(0x1C000000),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+            color: Color(0x18000000),
           ),
         ],
       ),
@@ -185,7 +182,7 @@ class _NavIcon extends StatelessWidget {
     return Icon(
       icon,
       size: inBubble ? 24 : 22,
-      color: inBubble ? Colors.white : HomiColors.slate,
+      color: inBubble && index != 2 ? Colors.white : HomiColors.slate,
     );
   }
 }
@@ -198,7 +195,7 @@ class _HomiNavBackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final path = _path(size);
-    canvas.drawShadow(path, const Color(0x26000000), 14, false);
+    canvas.drawShadow(path, const Color(0x20000000), 12, false);
 
     final fill = Paint()
       ..color = Colors.white
@@ -213,30 +210,45 @@ class _HomiNavBackgroundPainter extends CustomPainter {
   }
 
   Path _path(Size size) {
-    const top = 14.0;
-    const corner = 27.0;
-    const bumpHalf = 38.0;
+    const top = 20.0;
+    const topCorner = 23.0;
+    const bottomCorner = 20.0;
+    const moundHalf = 39.0;
     final cx = centerX.clamp(42.0, size.width - 42.0).toDouble();
 
-    return Path()
-      ..moveTo(corner, top)
-      ..lineTo(cx - bumpHalf, top)
-      ..cubicTo(cx - 27, top, cx - 27, 1, cx, 1)
-      ..cubicTo(cx + 27, 1, cx + 27, top, cx + bumpHalf, top)
-      ..lineTo(size.width - corner, top)
-      ..quadraticBezierTo(size.width, top, size.width, top + corner)
-      ..lineTo(size.width, size.height - corner)
-      ..quadraticBezierTo(
-        size.width,
-        size.height,
-        size.width - corner,
-        size.height,
-      )
-      ..lineTo(corner, size.height)
-      ..quadraticBezierTo(0, size.height, 0, size.height - corner)
-      ..lineTo(0, top + corner)
-      ..quadraticBezierTo(0, top, corner, top)
-      ..close();
+    final path = Path()..moveTo(topCorner, top);
+    path.lineTo(cx - moundHalf, top);
+    path.cubicTo(
+      cx - 30,
+      top,
+      cx - 31,
+      5,
+      cx,
+      5,
+    );
+    path.cubicTo(
+      cx + 31,
+      5,
+      cx + 30,
+      top,
+      cx + moundHalf,
+      top,
+    );
+    path.lineTo(size.width - topCorner, top);
+    path.quadraticBezierTo(size.width, top, size.width, top + topCorner);
+    path.lineTo(size.width, size.height - bottomCorner);
+    path.quadraticBezierTo(
+      size.width,
+      size.height,
+      size.width - bottomCorner,
+      size.height,
+    );
+    path.lineTo(bottomCorner, size.height);
+    path.quadraticBezierTo(0, size.height, 0, size.height - bottomCorner);
+    path.lineTo(0, top + topCorner);
+    path.quadraticBezierTo(0, top, topCorner, top);
+    path.close();
+    return path;
   }
 
   @override

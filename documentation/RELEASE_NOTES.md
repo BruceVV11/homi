@@ -1,5 +1,59 @@
 # Homi Release Notes
 
+## 0.2.0 - Shell refinement and local household tools
+
+### Device baseline confirmed - 2026-09-09
+
+- The first Homi Android build launched successfully on the real Samsung S25 Ultra.
+- The verified Gradle daemon now starts on JDK 21 with a 4 GB heap, one worker and parallel project execution disabled on the current ~12 GB development PC.
+- The previously observed D8 `Java heap space` failure was caused by Gradle falling back to a 512 MB daemon heap because the first `gradle.properties` key was not being recognised. The self-verifying memory helper now confirms the effective daemon heap before device builds.
+
+### Shell and navigation refinement
+
+- Moved the exact Homi logo into a single persistent shell header at the top-left, aligned with the persistent account/profile control at the top-right.
+- Removed the duplicate in-page logo from Today so the greeting now begins directly below the persistent shell header.
+- Replaced the fixed `IndexedStack` shell with a `PageView` so the five primary destinations can be changed by horizontal swipe while the top shell remains intact.
+- Preserved Android Back behavior so Back from a secondary primary destination returns to Today before normal root exit behavior.
+- Reworked page scrolling to use clamped physics and normal bottom content padding instead of the previous large 120 px tail, removing the unnecessary blank-scroll area on short pages.
+- Replaced the stock Material `NavigationBar` with a custom Homi bottom navigation treatment using a raised animated active bubble, persistent labels and brand colors.
+- The exact Homi mark is now used as the Home destination icon with the `Home` label retained.
+
+### Functional expansion
+
+- Added a real local-first Routine model with stable UUID identity, title, category, frequency, completion state and last-completed timestamp.
+- Added local Routine create, complete/reopen and remove flows with branded sheets and destructive confirmation.
+- Added a real local-first Supply model with stable UUID identity, category, status and optional expiry date.
+- Added Supply create, status update, optional expiry-date selection and remove flows.
+- Routine and Supply records persist through SharedPreferences and survive app restarts without requiring an account.
+- Today now surfaces real open-Routine and Supply-attention counts when the user has created data, with direct navigation into the relevant page.
+- Added JSON round-trip unit coverage for the new Routine and Supply local models.
+
+### People refinement
+
+- Removed the large location/privacy callout that previously dominated the top of People.
+- Added a compact opt-in disclosure below the current-device location card.
+- The disclosure opens a fuller privacy/location bottom sheet explaining that sharing is explicit, invitations do not start tracking, the current build stores only the latest location/battery snapshot, and future continuous sharing must remain easy to stop.
+- Existing foreground location/battery capture and latest-snapshot private Firestore sync remain unchanged.
+
+### Documentation and continuity
+
+- Bumped the Flutter app version to `0.2.0+2`.
+- Added top-level `NEXT_CHAT_PROMPT.md` as the handoff prompt for the next development chat and established that it should be refreshed every pass.
+- Updated architecture notes to reflect local Routine/Supply persistence and the persistent PageView shell.
+
+### 0.2.0 verification checkpoint
+
+This source pass has been implemented in GitHub but must still be compiled and reviewed on the local Flutter/Android toolchain before it is called device-verified.
+
+Required checkpoint:
+
+1. pull `main` locally;
+2. run `flutter analyze` and resolve any analyzer issues;
+3. run `flutter test` and resolve any failing tests;
+4. run Homi on the Samsung S25 Ultra;
+5. verify the persistent header, horizontal swiping, custom bottom navigation, no blank-scroll tail, Routine persistence, Supply persistence, Android Back behavior and People location disclosure;
+6. re-check local-only and signed-in behavior plus current location/battery capture.
+
 ## 0.1.0 - First installable source pass
 
 ### Cloud foundation complete - 2026-09-08
@@ -65,16 +119,6 @@
 - Root cause investigation identified the UTF-8 BOM risk on the first Gradle property, but the first BOM-safe helper revision itself failed in Windows PowerShell because its mandatory string-array parameter rejected an empty line already present in `gradle.properties`; therefore the file was never rewritten and the fresh daemon correctly remained at `-Xmx512m`.
 - Reworked both `scripts/tune-gradle-memory.ps1` and `scripts/configure-gradle-jdk.ps1` to write the complete file directly with `.NET WriteAllText` using UTF-8 without BOM, avoiding PowerShell array binding entirely.
 - The memory tuner now removes irrelevant blank lines, verifies the file does not start with BOM bytes, stops stale daemons, starts a fresh Gradle daemon itself, reads the newest daemon log, and fails unless the real daemon reports the requested heap such as `-Xmx4G`.
-- The corrected tuner has now completed successfully on the development PC. `gradle.properties` begins with bytes `6F 72 67`, confirming no UTF-8 BOM, and a fresh Gradle 8.14 daemon started on JDK 21 with `-Xmx4G`, 2 GB metaspace, one worker and parallel project execution disabled.
+- The corrected tuner completed successfully on the development PC. `gradle.properties` begins with bytes `6F 72 67`, confirming no UTF-8 BOM, and a fresh Gradle 8.14 daemon started on JDK 21 with `-Xmx4G`, 2 GB metaspace, one worker and parallel project execution disabled.
 - The verification build completed successfully and the daemon log explicitly reported `Starting build in new daemon [memory: 4 GiB]`.
-
-### Compile/device checkpoint still required
-
-The source pass is not yet claimed as an installed device build.
-
-Next checkpoint:
-
-1. reopen Android Studio with the S25 Ultra selected;
-2. run Homi again and confirm the previous D8 `Java heap space` failure is gone;
-3. capture/register the Firebase App Check debug token from the first successful debug launch;
-4. verify onboarding, launcher icon/splash, email/password auth, Google sign-in, navigation, location permission and foreground location/battery sync on the real device.
+- The first real Homi Android build subsequently launched successfully on the Samsung S25 Ultra.

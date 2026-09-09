@@ -9,6 +9,8 @@ import '../features/today/today_page.dart';
 import '../services/auth_service.dart';
 import '../state/homi_app_controller.dart';
 import '../theme/homi_theme.dart';
+import '../widgets/homi_bottom_nav.dart';
+import '../widgets/homi_brand.dart';
 
 class HomiShell extends StatefulWidget {
   const HomiShell({
@@ -30,6 +32,19 @@ class HomiShell extends StatefulWidget {
 
 class _HomiShellState extends State<HomiShell> {
   int _index = 0;
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   Future<void> _openAccount() async {
     final user = widget.authService.currentUser;
@@ -71,64 +86,120 @@ class _HomiShellState extends State<HomiShell> {
     );
   }
 
-  List<Widget> _pages(bool signedIn) => [
+  void _selectPage(int index) {
+    if (index == _index) return;
+    setState(() => _index = index);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  List<Widget> _pages() => [
         TodayPage(
           homeName: widget.controller.homeName,
-          signedIn: signedIn,
           quickItems: widget.controller.quickItems,
+          routines: widget.controller.routines,
+          supplies: widget.controller.supplies,
           onAddQuickItem: widget.controller.addQuickItem,
           onRemoveQuickItem: widget.controller.removeQuickItem,
-          onAccountTap: _openAccount,
+          onOpenRoutines: () => _selectPage(2),
+          onOpenSupplies: () => _selectPage(3),
         ),
-        HomePage(homeName: widget.controller.homeName, homeType: widget.controller.homeType),
-        const RoutinesPage(),
-        const SuppliesPage(),
+        HomePage(
+          homeName: widget.controller.homeName,
+          homeType: widget.controller.homeType,
+        ),
+        RoutinesPage(
+          items: widget.controller.routines,
+          onAdd: widget.controller.addRoutine,
+          onToggle: widget.controller.toggleRoutine,
+          onRemove: widget.controller.removeRoutine,
+        ),
+        SuppliesPage(
+          items: widget.controller.supplies,
+          onAdd: widget.controller.addSupply,
+          onUpdateStatus: widget.controller.updateSupplyStatus,
+          onRemove: widget.controller.removeSupply,
+        ),
         PeoplePage(firebaseReady: widget.firebaseReady),
       ];
 
   @override
   Widget build(BuildContext context) {
     final signedIn = widget.firebaseReady && FirebaseAuth.instance.currentUser != null;
+
     return PopScope(
       canPop: _index == 0,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _index != 0) setState(() => _index = 0);
+        if (!didPop && _index != 0) _selectPage(0);
       },
       child: Scaffold(
         body: SafeArea(
           bottom: false,
-          child: IndexedStack(index: _index, children: _pages(signedIn)),
+          child: Column(
+            children: [
+              _PersistentHeader(
+                signedIn: signedIn,
+                onAccountTap: _openAccount,
+              ),
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: (index) {
+                    if (index != _index) setState(() => _index = index);
+                  },
+                  children: _pages(),
+                ),
+              ),
+            ],
+          ),
         ),
         bottomNavigationBar: SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: HomiColors.border),
-                boxShadow: const [BoxShadow(blurRadius: 24, offset: Offset(0, 8), color: Color(0x14000000))],
-              ),
-              child: NavigationBar(
-                height: 68,
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                selectedIndex: _index,
-                indicatorColor: HomiColors.coral.withValues(alpha: 0.13),
-                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-                onDestinationSelected: (value) => setState(() => _index = value),
-                destinations: const [
-                  NavigationDestination(icon: Icon(Icons.today_outlined), selectedIcon: Icon(Icons.today_rounded), label: 'Today'),
-                  NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'Home'),
-                  NavigationDestination(icon: Icon(Icons.checklist_outlined), selectedIcon: Icon(Icons.checklist_rounded), label: 'Routines'),
-                  NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2_rounded), label: 'Supplies'),
-                  NavigationDestination(icon: Icon(Icons.people_outline_rounded), selectedIcon: Icon(Icons.people_rounded), label: 'People'),
-                ],
-              ),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+            child: HomiBottomNav(
+              selectedIndex: _index,
+              onSelected: _selectPage,
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PersistentHeader extends StatelessWidget {
+  const _PersistentHeader({
+    required this.signedIn,
+    required this.onAccountTap,
+  });
+
+  final bool signedIn;
+  final VoidCallback onAccountTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+      child: Row(
+        children: [
+          const HomiLogo(width: 94),
+          const Spacer(),
+          IconButton.filledTonal(
+            onPressed: onAccountTap,
+            tooltip: signedIn ? 'Account' : 'Sign in',
+            style: IconButton.styleFrom(
+              backgroundColor: HomiColors.sage.withValues(alpha: 0.72),
+              foregroundColor: HomiColors.slate,
+            ),
+            icon: Icon(
+              signedIn ? Icons.person_rounded : Icons.person_outline_rounded,
+            ),
+          ),
+        ],
       ),
     );
   }

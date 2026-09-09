@@ -1,26 +1,31 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/routine_item.dart';
+import '../../domain/supply_item.dart';
 import '../../theme/homi_theme.dart';
-import '../../widgets/homi_brand.dart';
 import '../../widgets/homi_page.dart';
 
 class TodayPage extends StatelessWidget {
   const TodayPage({
     required this.homeName,
-    required this.signedIn,
     required this.quickItems,
+    required this.routines,
+    required this.supplies,
     required this.onAddQuickItem,
     required this.onRemoveQuickItem,
-    required this.onAccountTap,
+    required this.onOpenRoutines,
+    required this.onOpenSupplies,
     super.key,
   });
 
   final String homeName;
-  final bool signedIn;
   final List<String> quickItems;
+  final List<RoutineItem> routines;
+  final List<SupplyItem> supplies;
   final Future<void> Function(String value) onAddQuickItem;
   final Future<void> Function(String value) onRemoveQuickItem;
-  final VoidCallback onAccountTap;
+  final VoidCallback onOpenRoutines;
+  final VoidCallback onOpenSupplies;
 
   Future<void> _addSomething(BuildContext context) async {
     final controller = TextEditingController();
@@ -42,7 +47,10 @@ class TodayPage extends StatelessWidget {
             children: [
               Text('Add something', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
-              Text('Capture a quick home reminder. We will expand this into smart categorisation in the next passes.', style: Theme.of(context).textTheme.bodyMedium),
+              Text(
+                'Capture a quick reminder without deciding where it belongs yet.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: controller,
@@ -93,19 +101,26 @@ class TodayPage extends StatelessWidget {
             children: [
               Text('$minutes-minute reset', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 6),
-              Text('A small set of useful jobs that fits inside the time you have.', style: Theme.of(context).textTheme.bodyMedium),
+              Text(
+                'A small set of useful jobs that fits inside the time you have.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
               const SizedBox(height: 16),
-              ...tasks.map((task) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.check_circle_outline_rounded, color: HomiColors.coral),
-                        const SizedBox(width: 10),
-                        Expanded(child: Text(task.$1, style: const TextStyle(fontWeight: FontWeight.w800))),
-                        Text(task.$2, style: Theme.of(context).textTheme.bodyMedium),
-                      ],
-                    ),
-                  )),
+              ...tasks.map(
+                (task) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_outline_rounded, color: HomiColors.coral),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(task.$1, style: const TextStyle(fontWeight: FontWeight.w800)),
+                      ),
+                      Text(task.$2, style: Theme.of(context).textTheme.bodyMedium),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -116,56 +131,103 @@ class TodayPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hour = DateTime.now().hour;
-    final greeting = hour < 12 ? 'Good morning' : (hour < 18 ? 'Good afternoon' : 'Good evening');
+    final greeting = hour < 12
+        ? 'Good morning'
+        : (hour < 18 ? 'Good afternoon' : 'Good evening');
+    final openRoutines = routines.where((item) => !item.completed).length;
+    final supplyAlerts = supplies.where((item) => item.status != SupplyStatus.okay).length;
+
     return HomiPage(
       title: '$greeting!',
       subtitle: '$homeName is ready when you are.',
-      trailing: IconButton.filledTonal(
-        onPressed: onAccountTap,
-        tooltip: signedIn ? 'Account' : 'Sign in',
-        icon: Icon(signedIn ? Icons.person_rounded : Icons.person_outline_rounded),
-      ),
       children: [
-        const HomiLogo(width: 150),
-        const SizedBox(height: 24),
         const _SectionLabel(label: 'Today'),
         const SizedBox(height: 10),
-        const _AttentionCard(icon: Icons.pets_rounded, title: 'Milo was fed', detail: '07:42 · completed this morning'),
-        const SizedBox(height: 10),
-        const _AttentionCard(icon: Icons.kitchen_outlined, title: 'Milk expires in 3 days', detail: 'Use soon'),
-        const SizedBox(height: 10),
-        const _AttentionCard(icon: Icons.bolt_outlined, title: 'Electricity reading due this week', detail: 'Last reading was 29 days ago'),
+        if (openRoutines == 0 && supplyAlerts == 0) ...[
+          const _AttentionCard(
+            icon: Icons.pets_rounded,
+            title: 'Milo was fed',
+            detail: '07:42 · completed this morning',
+          ),
+          const SizedBox(height: 10),
+          const _AttentionCard(
+            icon: Icons.kitchen_outlined,
+            title: 'Milk expires in 3 days',
+            detail: 'Use soon',
+          ),
+          const SizedBox(height: 10),
+        ] else ...[
+          if (openRoutines > 0) ...[
+            _AttentionCard(
+              icon: Icons.checklist_rounded,
+              title: '$openRoutines ${openRoutines == 1 ? 'routine' : 'routines'} waiting',
+              detail: 'Tap to review what needs doing',
+              onTap: onOpenRoutines,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (supplyAlerts > 0) ...[
+            _AttentionCard(
+              icon: Icons.inventory_2_outlined,
+              title: '$supplyAlerts ${supplyAlerts == 1 ? 'supply needs' : 'supplies need'} attention',
+              detail: 'Low stock, shopping or expiry items',
+              onTap: onOpenSupplies,
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
+        const _AttentionCard(
+          icon: Icons.bolt_outlined,
+          title: 'Electricity reading due this week',
+          detail: 'Last reading was 29 days ago',
+        ),
         if (quickItems.isNotEmpty) ...[
           const SizedBox(height: 10),
-          ...quickItems.map((item) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.push_pin_outlined, color: HomiColors.coral),
-                        const SizedBox(width: 12),
-                        Expanded(child: Text(item, style: const TextStyle(fontWeight: FontWeight.w800))),
-                        IconButton(
-                          tooltip: 'Done',
-                          onPressed: () => onRemoveQuickItem(item),
-                          icon: const Icon(Icons.check_rounded),
-                        ),
-                      ],
-                    ),
+          ...quickItems.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.push_pin_outlined, color: HomiColors.coral),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(item, style: const TextStyle(fontWeight: FontWeight.w800)),
+                      ),
+                      IconButton(
+                        tooltip: 'Done',
+                        onPressed: () => onRemoveQuickItem(item),
+                        icon: const Icon(Icons.check_rounded),
+                      ),
+                    ],
                   ),
                 ),
-              )),
+              ),
+            ),
+          ),
         ],
         const SizedBox(height: 18),
         const _SectionLabel(label: 'When you have time'),
         const SizedBox(height: 10),
         Row(
           children: [
-            Expanded(child: _TimeCard(minutes: 10, detail: '3 quick tasks', onTap: () => _showTimePlan(context, 10))),
+            Expanded(
+              child: _TimeCard(
+                minutes: 10,
+                detail: '3 quick tasks',
+                onTap: () => _showTimePlan(context, 10),
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _TimeCard(minutes: 30, detail: '3 useful tasks', onTap: () => _showTimePlan(context, 30))),
+            Expanded(
+              child: _TimeCard(
+                minutes: 30,
+                detail: '3 useful tasks',
+                onTap: () => _showTimePlan(context, 30),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 20),
@@ -184,50 +246,77 @@ class TodayPage extends StatelessWidget {
 
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel({required this.label});
+
   final String label;
+
   @override
-  Widget build(BuildContext context) => Text(label, style: Theme.of(context).textTheme.titleLarge);
+  Widget build(BuildContext context) =>
+      Text(label, style: Theme.of(context).textTheme.titleLarge);
 }
 
 class _AttentionCard extends StatelessWidget {
-  const _AttentionCard({required this.icon, required this.title, required this.detail});
+  const _AttentionCard({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    this.onTap,
+  });
+
   final IconData icon;
   final String title;
   final String detail;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(color: HomiColors.peach.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(15)),
-              child: Icon(icon, color: HomiColors.coral),
+    final content = Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: HomiColors.peach.withValues(alpha: 0.22),
+              borderRadius: BorderRadius.circular(15),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 2),
-                  Text(detail, style: Theme.of(context).textTheme.bodyMedium),
-                ],
-              ),
+            child: Icon(icon, color: HomiColors.coral),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text(detail, style: Theme.of(context).textTheme.bodyMedium),
+              ],
             ),
-          ],
-        ),
+          ),
+          if (onTap != null) const Icon(Icons.arrow_forward_rounded, size: 20),
+        ],
       ),
+    );
+
+    return Card(
+      child: onTap == null
+          ? content
+          : InkWell(
+              borderRadius: BorderRadius.circular(22),
+              onTap: onTap,
+              child: content,
+            ),
     );
   }
 }
 
 class _TimeCard extends StatelessWidget {
-  const _TimeCard({required this.minutes, required this.detail, required this.onTap});
+  const _TimeCard({
+    required this.minutes,
+    required this.detail,
+    required this.onTap,
+  });
+
   final int minutes;
   final String detail;
   final VoidCallback onTap;
@@ -247,7 +336,10 @@ class _TimeCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(detail, style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 14),
-              const Align(alignment: Alignment.centerRight, child: Icon(Icons.arrow_forward_rounded)),
+              const Align(
+                alignment: Alignment.centerRight,
+                child: Icon(Icons.arrow_forward_rounded),
+              ),
             ],
           ),
         ),

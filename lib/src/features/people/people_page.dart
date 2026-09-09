@@ -37,10 +37,75 @@ class _PeoplePageState extends State<PeoplePage> {
       final snapshot = await _locationService.captureCurrentStatus();
       if (mounted) setState(() => _snapshot = snapshot);
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString().replaceFirst('Bad state: ', ''));
+      if (mounted) {
+        setState(() => _error = error.toString().replaceFirst('Bad state: ', ''));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _showLocationPrivacy(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: HomiColors.sage.withValues(alpha: 0.24),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.shield_outlined),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Location stays in your control',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const _PrivacyPoint(
+                icon: Icons.touch_app_outlined,
+                text: 'Sharing is always opt-in on the device being shared.',
+              ),
+              const _PrivacyPoint(
+                icon: Icons.person_add_alt_1_outlined,
+                text: 'Adding or inviting someone never starts tracking automatically.',
+              ),
+              const _PrivacyPoint(
+                icon: Icons.location_searching_rounded,
+                text: 'This build stores the latest location and battery snapshot, not a movement history.',
+              ),
+              const _PrivacyPoint(
+                icon: Icons.stop_circle_outlined,
+                text: 'Future continuous sharing must stay visible and easy to stop at any time.',
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Got it'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -50,34 +115,6 @@ class _PeoplePageState extends State<PeoplePage> {
       title: 'People',
       subtitle: 'Stay connected with the people you choose.',
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: HomiColors.sage.withValues(alpha: 0.20),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.shield_outlined, size: 27),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text('Location sharing stays in your control', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Homi will never start continuous sharing just because someone joins your household. Each person opts in on their own device.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
         Text('This phone', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 10),
         Card(
@@ -102,9 +139,14 @@ class _PeoplePageState extends State<PeoplePage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Current status', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                          const Text(
+                            'Current status',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                          ),
                           Text(
-                            _snapshot == null ? 'Not checked yet' : 'Updated ${DateFormat.Hm().format(_snapshot!.updatedAt)}',
+                            _snapshot == null
+                                ? 'Not checked yet'
+                                : 'Updated ${DateFormat.Hm().format(_snapshot!.updatedAt)}',
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ],
@@ -114,9 +156,17 @@ class _PeoplePageState extends State<PeoplePage> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(_snapshot!.isCharging ? Icons.battery_charging_full_rounded : Icons.battery_std_rounded, size: 20),
+                          Icon(
+                            _snapshot!.isCharging
+                                ? Icons.battery_charging_full_rounded
+                                : Icons.battery_std_rounded,
+                            size: 20,
+                          ),
                           const SizedBox(width: 3),
-                          Text('${_snapshot!.batteryPercent}%', style: const TextStyle(fontWeight: FontWeight.w800)),
+                          Text(
+                            '${_snapshot!.batteryPercent}%',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
                         ],
                       ),
                   ],
@@ -128,15 +178,27 @@ class _PeoplePageState extends State<PeoplePage> {
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 3),
-                  Text('Accuracy about ${_snapshot!.accuracyMeters.round()} m', style: Theme.of(context).textTheme.bodyMedium),
+                  Text(
+                    'Accuracy about ${_snapshot!.accuracyMeters.round()} m',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                   if (user != null) ...[
                     const SizedBox(height: 8),
-                    Text('Synced privately to your Homi account.', style: Theme.of(context).textTheme.bodyMedium),
+                    Text(
+                      'Synced privately to your Homi account.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ],
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 12),
-                  Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.w700)),
+                  Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 16),
                 SizedBox(
@@ -151,28 +213,88 @@ class _PeoplePageState extends State<PeoplePage> {
             ),
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 10),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => _showLocationPrivacy(context),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.shield_outlined, size: 19, color: HomiColors.muted),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      'Location sharing is always opt-in. See how Homi handles it.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, color: HomiColors.muted),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
         Text('Trusted people', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 10),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(20),
-            child: Column(
+            child: Row(
               children: [
-                Icon(Icons.people_outline_rounded, size: 34, color: HomiColors.muted),
-                const SizedBox(height: 10),
-                const Text('No trusted people yet', style: TextStyle(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 4),
-                Text(
-                  'Invites, mutual sharing controls and Places alerts are the next People pass. This first build establishes secure device location and battery snapshots.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: HomiColors.sage.withValues(alpha: 0.20),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.people_outline_rounded),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('No trusted people yet', style: TextStyle(fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Invites and mutual sharing controls will build on the secure location foundation already in place.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PrivacyPoint extends StatelessWidget {
+  const _PrivacyPoint({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: HomiColors.coral),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text, style: Theme.of(context).textTheme.bodyLarge)),
+        ],
+      ),
     );
   }
 }

@@ -28,22 +28,55 @@ Primary destinations are:
 
 **Overview · Tasks · Home · Supplies · People**
 
-The exact Homi mark is the centre Home icon. The persistent Homi logo/profile row remains outside the PageView so it does not move when swiping between primary destinations.
+The exact Homi mark is the centre Home icon. The persistent Homi logo/profile row remains outside the PageView so it does not move when swiping between destinations.
 
-The Tasks destination contains two deliberately different concepts:
+The bottom navigation uses a rounded white base plus a true circular white halo behind the active destination. The halo is generated as a geometric union rather than hand-drawn mound control points so edge destinations do not develop pointed corners.
 
-- **Tasks** — one-off jobs such as “Take the mince out to defrost”. A task may be left open or given a due date/time, may be assigned, remains visible after completion and records who completed it and when.
-- **Routines** — repeating household work such as feeding pets or taking bins out. Routines recur daily, weekdays, selected weekdays or monthly, record completion attribution and calculate the next due occurrence.
+## Tasks vs routines
 
-One-off work must not be forced into a recurrence model merely to fit the old Routines page.
+The Tasks destination contains two deliberately different concepts.
+
+### Tasks
+
+Tasks are one-off jobs such as “Take the mince out to defrost”.
+
+- optional due date/time or **No due time**
+- optional assignee
+- completion records who completed it and when
+- completed tasks remain visible for 48 hours
+- expired completed tasks are hidden immediately by the client and deleted on a later authorised cloud/local cleanup
+
+A task assigned to **Me** remains private/local. A task assigned to another household person, or to **Anyone at home**, can be written as a household task visible to the creator's chosen Household people. Every viewer sees the assignee, completion person and due time. Location-only friends are excluded from household task assignment and visibility.
+
+### Routines
+
+Routines are repeating household responsibilities. Current recurrence options are:
+
+- Daily
+- Weekdays
+- Weekly, including selected weekdays
+- Bi-weekly, anchored to one weekday on a 14-day cadence
+- Monthly
+
+Routine completion stores the actor and timestamp and calculates the next occurrence. `RoutineCompletion.occurrenceDueAt` makes accidental unticks reversible: reopening restores the same occurrence rather than advancing the schedule twice.
+
+Routine durations include the launch-facing **60+ min** option; internally it remains a 60-minute planning value for Quick Reset budgeting.
+
+## Overview / Quick Reset
+
+Overview aggregates real attention from open Tasks, due Routines, Supplies and Home service dates.
+
+The Overview **Quick add** action is now a destination launcher rather than another unclassified reminder field. It routes the user to Task, Routine, Supply or Home so new information enters the correct product model. Existing legacy Quick Add reminder strings remain readable/removable for migration compatibility but new vague reminders are no longer created by the Overview UI.
+
+`When you have time` / Quick Reset prioritises due saved Routines, fills remaining time with rotating common household suggestions and never intentionally exceeds the chosen time budget.
 
 ## Local-first state
 
 The following continue to work without an account:
 
 - onboarding/home name/type
-- Quick Add reminders
-- local one-off Tasks
+- legacy Quick Add reminders
+- private/local one-off Tasks
 - recurring Routines
 - Supplies and expiry state
 - Home Things
@@ -51,98 +84,81 @@ The following continue to work without an account:
 - utility readings
 - cached current-device location state
 
-Local records are encoded as version-tolerant JSON strings in SharedPreferences. Model changes must preserve old records with safe defaults instead of requiring a reset.
-
-### Routine migration / recurrence
-
-`RoutineCompletion` stores:
-
-- completion timestamp
-- completing person's display name
-- optional Firebase UID
-- optional `occurrenceDueAt`
-
-`occurrenceDueAt` makes an accidental untick reversible. When a completed recurring Routine is reopened, Homi restores the same scheduled occurrence instead of losing it or advancing a second time. Older completion JSON without this field remains valid.
-
-### Supply icon migration
-
-Supply records now store a stable `iconKey`. Existing records with no icon key fall back to `inventory`. UI resolves the key through `SupplyIconCatalog`; raw framework icon codepoints are not persisted.
+Local records are encoded as version-tolerant JSON strings in SharedPreferences. Model changes preserve older records with safe defaults rather than requiring storage resets.
 
 ## Shared cloud state
 
-Cloud sharing remains additive and intentionally narrow.
+Cloud sharing remains additive and narrow.
 
-### Trusted connections
+### Trusted connections and private labels
 
-A `connections/{connectionId}` document establishes that two authenticated users have accepted a trusted-person connection. That relationship alone grants no location or household access.
+`connections/{connectionId}` establishes that two authenticated users accepted a trusted-person connection. The connection alone grants no location or household access.
 
-Each user may privately classify a connected person under:
+Each user may privately classify another connected person at:
 
 `peoplePreferences/{ownerUid}/people/{otherUid}`
 
-The preference contains:
+The preference stores a relationship label plus a scope of `household` or `friend`. Preferences are private to their owner.
 
-- relationship label such as Partner, Mother, Roommate or Friend
-- scope: `household` or `friend`
+### Household tasks
 
-Preferences are private to the owner. One person can describe the relationship differently from the other.
+`sharedTasks/{taskId}` contains only one Task's title/note, creator, optional assignee, visibility member UIDs, due state and completion state.
 
-### Location-only friends
+The creator builds `memberUids` from people they explicitly marked Household. Tasks assigned to the creator do not enter this collection. A specific non-self assignee must be an accepted trusted connection that the creator marked Household.
 
-A person marked `friend` remains eligible for separately consented location sharing but is omitted from household task assignment. A trusted connection or friend label never grants access to Home, Supplies, Routines or other household records.
-
-### Assigned one-off tasks
-
-A household-labelled connected person can be assigned a single one-off task through `sharedTasks/{taskId}`.
-
-A shared task contains only the fields needed for that task: title/note, creator, assignee, due time and completion state. Security rules restrict the document to its two members and require:
-
-- an accepted trusted connection; and
-- the creator's explicit `household` preference for the assignee.
-
-This is intentionally **not** full household synchronization. Sharing one task does not expose the creator's Home, Supplies or Routine database.
-
-Full household membership/sync for Routines, Supplies and Home requires a later merge/conflict model and must not be inferred from trusted-person connections.
+This is still not full household database synchronization. Sharing one Task does not expose Home, Supplies or Routines.
 
 ## People / location architecture
 
 The tracked device controls sharing.
 
-- Foreground location can be enabled for the current device without starting a share to anyone.
-- Live background updates require sign-in, Android background location permission and explicit user action.
+- Foreground location may be enabled without sharing it with anybody.
+- Live background updates require sign-in, Android background-location permission and explicit user action.
 - Android live sharing uses a visible foreground-service notification.
-- The current strategy uses medium accuracy, a movement threshold and spaced update requests to reduce battery pressure.
-- The latest current-device location is cached locally.
-- Signed-in current location/battery status is written to `locations/{uid}`.
-- A viewer may read another user's location only when an accepted connection exists **and** the owner has an active `locationShares/{ownerUid}/viewers/{viewerUid}` document.
+- Current settings use medium accuracy, a 100 m movement threshold and spaced update requests to reduce battery pressure.
+- The latest current-device location is cached locally and reused immediately when returning to People.
+- Signed-in location/battery state is written to `locations/{uid}`.
+- Another user may read it only when an accepted connection exists and the owner created an active `locationShares/{ownerUid}/viewers/{viewerUid}` share.
 - Long-term movement history is not stored by default.
 
-A stored preference that says `household` does not enable location sharing. A location share does not enable household access. These are separate authorization decisions.
+People uses keep-alive state plus the app-level `LocationStatusService` so swiping away and back should not briefly reset live-sharing UI to its initial state before the cache/stream catches up.
 
-## People map and identity
+## People maps and focus
 
-- Homi codes are six-character exact-lookup connection identifiers.
-- Homi codes cannot be used to browse a user directory.
-- Accepted trusted people can be represented by profile-photo map markers, with initials as fallback.
-- Location details can expose last update, address, coordinates, battery, charging state and accuracy to an authorized viewer.
-- Address/coordinates can be copied and the coordinates can open in Google Maps.
+People now has two map surfaces:
 
-## Home boundary
+1. the embedded People map, which remains pannable/zoomable and includes an **Open map** action;
+2. a full-screen People map with branded back/focus controls.
 
-Home is the local operating record for the physical place:
+Available people are represented by their profile picture as the map marker, with initials as fallback. Person chips let the user focus the map on a particular person. Selecting a marker can open location details with last update, address, coordinates, accuracy, battery and charging state.
+
+Address and coordinates have individual copy actions; **Copy all** copies both and Google Maps opens the coordinates externally.
+
+A sync failure does not erase the last known location state. People exposes a retry action and distinguishes secure-sync/unavailable errors from an actual lack of connections instead of presenting raw Firestore error codes.
+
+## Home
+
+Home remains the local operating record for the physical place:
 
 - Things / appliances / equipment
 - service and warranty dates
 - maintenance and repair history
-- utility readings
+- electricity/water meter readings
 
-The Home UI explicitly explains that a trusted or location-only connection is not a Home member. Household-data sharing, when added, must use its own explicit membership and merge rules.
+Utility units are controlled choices rather than free-form text:
+
+- electricity: `kWh`, `Wh`, `MWh`, `units`
+- water: `kL`, `L`, `m³`, `units`
+
+A trusted or location-only connection is not automatically a Home member.
+
+## Supplies
+
+Supply records persist a stable `iconKey` resolved through `SupplyIconCatalog`. Existing records without an icon key fall back to `inventory`. The catalog covers common food, cleaning, medical, pet, garden, hardware, utility and other household cases.
 
 ## Input / interaction standards
 
-Stable fixed choices use Homi inline selection controls instead of awkward platform dropdown menus.
-
-Dates and times use Homi-branded calendar/time controls rather than text fields. Numeric text entry is reserved for values that are genuinely numeric free-form data, such as a meter reading.
+Stable fixed choices use Homi inline selection controls instead of awkward native dropdown menus. Dates and times use Homi-branded calendar/time controls rather than text fields. Numeric text entry is reserved for genuinely free-form numbers such as meter readings.
 
 Destructive confirmations and action menus should use Homi sheets rather than unstyled platform popups wherever practical.
 
@@ -169,6 +185,6 @@ Anything not explicitly allowed by Firestore rules fails closed.
 - App Check enforcement remains off until valid debug/release traffic is proven.
 - No privacy or stop-sharing control may ever depend on payment.
 
-## Current verification state
+## Verification state
 
-Source is at the 0.5.0 feature-pass stage. GitHub is the tracked-source source of truth, but local `flutter analyze`, `flutter test` and real S25 Ultra device testing remain the authority for compile/runtime success. Do not call this pass device-verified until those checks succeed.
+Source is at the `0.6.0+6` feature-pass stage. GitHub is the tracked-source source of truth, but Bruce's local `flutter analyze`, `flutter test` and real Samsung S25 Ultra device run remain the authority for compile/runtime success. Do not call 0.6.0 device-verified until those checks succeed.

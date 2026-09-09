@@ -35,11 +35,9 @@ class TrustedConnection {
 
   bool isIncomingFor(String uid) => pending && recipientUid == uid;
 
-  String otherUid(String currentUid) =>
-      aUid == currentUid ? bUid : aUid;
+  String otherUid(String currentUid) => aUid == currentUid ? bUid : aUid;
 
-  String otherName(String currentUid) =>
-      aUid == currentUid ? bName : aName;
+  String otherName(String currentUid) => aUid == currentUid ? bName : aName;
 
   String? otherPhotoUrl(String currentUid) =>
       aUid == currentUid ? bPhotoUrl : aPhotoUrl;
@@ -190,8 +188,8 @@ class TrustedPeopleService {
           photoUrl: user.photoURL,
         );
       } on FirebaseException {
-        // A rare code collision is retried with another code. Other Firebase
-        // failures will eventually surface after the bounded attempts.
+        // A rare code collision is retried with another code. A persistent
+        // configuration/network failure surfaces after the bounded attempts.
       }
     }
     throw StateError('Homi could not create a connection code. Try again.');
@@ -224,33 +222,34 @@ class TrustedPeopleService {
     final connectionId = '${ids[0]}_${ids[1]}';
     final aIsCurrent = ids[0] == user.uid;
     final connectionRef = _firestore.collection('connections').doc(connectionId);
-    final existing = await connectionRef.get();
-    final existingStatus = existing.data()?['status'] as String?;
-    if (existingStatus == 'accepted') {
-      throw StateError('You are already connected with this person.');
-    }
-    if (existingStatus == 'pending') {
-      throw StateError('There is already a pending connection request.');
-    }
 
-    await connectionRef.set({
-      'memberUids': ids,
-      'initiatorUid': user.uid,
-      'recipientUid': targetUid,
-      'status': 'pending',
-      'aUid': ids[0],
-      'aName': aIsCurrent
-          ? own.displayName
-          : (targetName?.isNotEmpty == true ? targetName : 'Homi user'),
-      'aPhotoUrl': aIsCurrent ? own.photoUrl : targetPhoto,
-      'bUid': ids[1],
-      'bName': aIsCurrent
-          ? (targetName?.isNotEmpty == true ? targetName : 'Homi user')
-          : own.displayName,
-      'bPhotoUrl': aIsCurrent ? targetPhoto : own.photoUrl,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      await connectionRef.set({
+        'memberUids': ids,
+        'initiatorUid': user.uid,
+        'recipientUid': targetUid,
+        'status': 'pending',
+        'aUid': ids[0],
+        'aName': aIsCurrent
+            ? own.displayName
+            : (targetName?.isNotEmpty == true ? targetName : 'Homi user'),
+        'aPhotoUrl': aIsCurrent ? own.photoUrl : targetPhoto,
+        'bUid': ids[1],
+        'bName': aIsCurrent
+            ? (targetName?.isNotEmpty == true ? targetName : 'Homi user')
+            : own.displayName,
+        'bPhotoUrl': aIsCurrent ? targetPhoto : own.photoUrl,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied' || error.code == 'already-exists') {
+        throw StateError(
+          'A connection request already exists, or you are already connected.',
+        );
+      }
+      rethrow;
+    }
   }
 
   Stream<List<TrustedConnection>> watchConnections() {
@@ -295,13 +294,17 @@ class TrustedPeopleService {
     }
     final otherUid = connection.otherUid(user.uid);
     await _firestore.collection('connections').doc(connection.id).delete();
-    await _firestore
-        .collection('locationShares')
-        .doc(user.uid)
-        .collection('viewers')
-        .doc(otherUid)
-        .delete()
-        .catchError((_) {});
+    try {
+      await _firestore
+          .collection('locationShares')
+          .doc(user.uid)
+          .collection('viewers')
+          .doc(otherUid)
+          .delete();
+    } on FirebaseException {
+      // The connection is already removed. A missing share document does not
+      // need to turn that successful removal into an error.
+    }
   }
 
   Stream<bool> watchMyShareTo(String viewerUid) {

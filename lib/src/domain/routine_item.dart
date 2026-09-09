@@ -30,16 +30,23 @@ class RoutineCompletion {
     required this.at,
     required this.byName,
     this.byUid,
+    this.occurrenceDueAt,
   });
 
   final DateTime at;
   final String byName;
   final String? byUid;
 
+  /// The scheduled occurrence that was marked complete. Keeping this makes an
+  /// accidental uncheck reversible: Homi can reopen the same occurrence rather
+  /// than jumping to an unrelated future date.
+  final DateTime? occurrenceDueAt;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'at': at.toIso8601String(),
         'byName': byName,
         'byUid': byUid,
+        'occurrenceDueAt': occurrenceDueAt?.toIso8601String(),
       };
 
   factory RoutineCompletion.fromJson(Map<String, dynamic> json) {
@@ -53,6 +60,8 @@ class RoutineCompletion {
           ? (json['byName'] as String).trim()
           : 'You',
       byUid: json['byUid'] as String?,
+      occurrenceDueAt:
+          DateTime.tryParse(json['occurrenceDueAt'] as String? ?? ''),
     );
   }
 }
@@ -206,28 +215,35 @@ class RoutineItem {
     required String byName,
     String? byUid,
   }) {
+    final occurrenceDueAt = repeat == RoutineRepeat.once
+        ? null
+        : (nextDueAt ?? initialDueAt());
     final history = <RoutineCompletion>[
       ...completions,
-      RoutineCompletion(at: at, byName: byName, byUid: byUid),
+      RoutineCompletion(
+        at: at,
+        byName: byName,
+        byUid: byUid,
+        occurrenceDueAt: occurrenceDueAt,
+      ),
     ];
     final trimmedHistory = history.length <= 20
         ? history
         : history.sublist(history.length - 20);
     return copyWith(
       completions: trimmedHistory,
-      nextDueAt: repeats ? nextOccurrenceAfter(at) : null,
+      nextDueAt: repeats ? nextOccurrenceAfter(occurrenceDueAt ?? at) : null,
       clearNextDueAt: !repeats,
     );
   }
 
   RoutineItem undoLastCompletion() {
     if (completions.isEmpty) return this;
+    final removed = completions.last;
     final remaining = List<RoutineCompletion>.of(completions)..removeLast();
     DateTime? next;
     if (repeats) {
-      next = remaining.isEmpty
-          ? initialDueAt()
-          : nextOccurrenceAfter(remaining.last.at);
+      next = removed.occurrenceDueAt ?? removed.at;
     }
     return copyWith(
       completions: remaining,

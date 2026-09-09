@@ -1,7 +1,7 @@
 name: homi
 description: Homi - happy homes, easier days.
 publish_to: "none"
-version: 0.3.0+3
+version: 0.4.0+4
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -16,7 +16,10 @@ dependencies:
   firebase_messaging: ^16.0.1
   firebase_app_check: ^0.4.0+1
   google_sign_in: ^6.2.2
-  geolocator: ^14.0.2
+  geolocator: ^14.0.3
+  geocoding: ^5.0.0
+  google_maps_flutter: ^2.18.0
+  url_launcher: ^6.3.2
   battery_plus: ^7.0.0
   shared_preferences: ^2.5.3
   intl: ^0.20.2

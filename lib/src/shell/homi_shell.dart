@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../domain/household_task.dart';
 import '../features/home/home_page.dart';
 import '../features/people/people_page.dart';
 import '../features/profile/profile_settings_page.dart';
@@ -11,6 +12,7 @@ import '../features/supplies/supplies_page.dart';
 import '../features/today/today_page.dart';
 import '../services/auth_service.dart';
 import '../services/location_status_service.dart';
+import '../services/shared_task_service.dart';
 import '../services/trusted_people_service.dart';
 import '../state/homi_app_controller.dart';
 import '../theme/homi_theme.dart';
@@ -41,6 +43,7 @@ class _HomiShellState extends State<HomiShell> {
   late final PageController _pageController;
   late final LocationStatusService _locationService;
   late final TrustedPeopleService _trustedPeopleService;
+  late final SharedTaskService _sharedTaskService;
 
   @override
   void initState() {
@@ -50,6 +53,9 @@ class _HomiShellState extends State<HomiShell> {
       firebaseReady: widget.firebaseReady,
     );
     _trustedPeopleService = TrustedPeopleService(
+      firebaseReady: widget.firebaseReady,
+    );
+    _sharedTaskService = SharedTaskService(
       firebaseReady: widget.firebaseReady,
     );
     unawaited(_resumeLocationSharing());
@@ -224,6 +230,7 @@ class _HomiShellState extends State<HomiShell> {
       TodayPage(
         homeName: widget.controller.homeName,
         quickItems: widget.controller.quickItems,
+        tasks: widget.controller.tasks,
         routines: widget.controller.routines,
         supplies: widget.controller.supplies,
         homeThings: widget.controller.homeThings,
@@ -240,6 +247,11 @@ class _HomiShellState extends State<HomiShell> {
       ),
       RoutinesPage(
         items: widget.controller.routines,
+        tasks: widget.controller.tasks,
+        actorName: actorName,
+        actorUid: actorUid,
+        trustedPeopleService: _trustedPeopleService,
+        sharedTaskService: _sharedTaskService,
         onAdd: (data) => widget.controller.addRoutine(
           title: data.title,
           category: data.category,
@@ -256,6 +268,21 @@ class _HomiShellState extends State<HomiShell> {
           actorUid: actorUid,
         ),
         onRemove: widget.controller.removeRoutine,
+        onAddTask: (HouseholdTaskInput input) => widget.controller.addTask(
+          title: input.title,
+          createdByName: actorName,
+          createdByUid: actorUid,
+          notes: input.notes,
+          assigneeName: input.assigneeName,
+          assigneeUid: input.assigneeUid,
+          dueAt: input.dueAt,
+        ),
+        onToggleTask: (id) => widget.controller.toggleTask(
+          id,
+          actorName: actorName,
+          actorUid: actorUid,
+        ),
+        onRemoveTask: widget.controller.removeTask,
       ),
       HomePage(
         homeName: widget.controller.homeName,
@@ -295,7 +322,14 @@ class _HomiShellState extends State<HomiShell> {
       ),
       SuppliesPage(
         items: widget.controller.supplies,
-        onAdd: widget.controller.addSupply,
+        onAdd: (name, category, status, expiryDate, iconKey) =>
+            widget.controller.addSupply(
+          name,
+          category,
+          status,
+          expiryDate,
+          iconKey: iconKey,
+        ),
         onUpdateStatus: widget.controller.updateSupplyStatus,
         onRemove: widget.controller.removeSupply,
       ),

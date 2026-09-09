@@ -76,10 +76,7 @@ class RoutinesPage extends StatelessWidget {
     if (draft != null) await onAdd(draft);
   }
 
-  Future<void> _showRoutineOptions(
-    BuildContext context,
-    RoutineItem item,
-  ) async {
+  Future<void> _showOptions(BuildContext context, RoutineItem item) async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -92,10 +89,7 @@ class RoutinesPage extends StatelessWidget {
             children: [
               Text(item.title, style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 5),
-              Text(
-                'Routine options',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              Text('Routine options', style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 18),
               SizedBox(
                 width: double.infinity,
@@ -177,7 +171,7 @@ class RoutinesPage extends StatelessWidget {
                 item: item,
                 now: now,
                 onToggle: () => onToggle(item.id),
-                onOptions: () => _showRoutineOptions(context, item),
+                onOptions: () => _showOptions(context, item),
               ),
             ),
           ),
@@ -220,78 +214,98 @@ class _RoutineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final due = item.isDue(now);
     final last = item.lastCompletion;
-    final checked = !due && last != null;
+    final completedForCurrentCycle = !due && last != null;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 12, 8, 12),
+        padding: const EdgeInsets.fromLTRB(12, 13, 7, 13),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Checkbox(
-              value: checked,
-              activeColor: HomiColors.coral,
-              onChanged: (_) => onToggle(),
+            GestureDetector(
+              onTap: onToggle,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: completedForCurrentCycle
+                      ? HomiColors.coral
+                      : HomiColors.peach.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: completedForCurrentCycle
+                        ? HomiColors.coral
+                        : HomiColors.border,
+                  ),
+                ),
+                child: Icon(
+                  completedForCurrentCycle
+                      ? Icons.check_rounded
+                      : Icons.check_rounded,
+                  color: completedForCurrentCycle
+                      ? Colors.white
+                      : HomiColors.muted,
+                  size: 21,
+                ),
+              ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 11),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        if (item.repeats) ...[
-                          const Icon(
-                            Icons.repeat_rounded,
-                            size: 17,
-                            color: HomiColors.coral,
-                          ),
-                          const SizedBox(width: 6),
-                        ],
-                        Expanded(
-                          child: Text(
-                            item.title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                            ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (item.repeats) ...[
+                        const Icon(
+                          Icons.repeat_rounded,
+                          size: 17,
+                          color: HomiColors.coral,
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
-                      ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${item.category} · ${_scheduleLabel(item)} · about ${item.estimatedMinutes} min',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  if (last != null) ...[
+                    const SizedBox(height: 7),
+                    Text(
+                      'Done ${DateFormat('d MMM · HH:mm').format(last.at)} by ${last.byName}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF6F8B65),
+                      ),
                     ),
+                  ],
+                  if (item.repeats) ...[
                     const SizedBox(height: 4),
                     Text(
-                      '${item.category} · ${_scheduleLabel(item)} · about ${item.estimatedMinutes} min',
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      due
+                          ? 'Due now'
+                          : 'Next ${DateFormat('EEE d MMM · HH:mm').format(item.nextDueAt ?? item.initialDueAt())}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: due ? HomiColors.coral : HomiColors.muted,
+                      ),
                     ),
-                    if (last != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        'Done ${DateFormat('EEE d MMM · HH:mm').format(last.at)} by ${last.byName}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF6F8B65),
-                        ),
-                      ),
-                    ],
-                    if (item.repeats) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        due
-                            ? 'Due now'
-                            : 'Next ${DateFormat('EEE d MMM · HH:mm').format(item.nextDueAt ?? item.initialDueAt())}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                          color: due ? HomiColors.coral : HomiColors.muted,
-                        ),
-                      ),
-                    ],
                   ],
-                ),
+                ],
               ),
             ),
             IconButton(
@@ -308,7 +322,8 @@ class _RoutineCard extends StatelessWidget {
 
 String _scheduleLabel(RoutineItem item) {
   if (!item.repeats) return 'As needed';
-  final time = '${item.dueHour.toString().padLeft(2, '0')}:${item.dueMinute.toString().padLeft(2, '0')}';
+  final time =
+      '${item.dueHour.toString().padLeft(2, '0')}:${item.dueMinute.toString().padLeft(2, '0')}';
   switch (item.repeat) {
     case RoutineRepeat.once:
       return 'As needed';
@@ -328,7 +343,8 @@ String _scheduleLabel(RoutineItem item) {
 
 String _shortDay(int weekday) {
   const days = <String>['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  return days[(weekday - 1).clamp(0, 6)];
+  final index = (weekday - 1).clamp(0, 6).toInt();
+  return days[index];
 }
 
 class _EmptyRoutineCard extends StatelessWidget {
@@ -343,16 +359,9 @@ class _EmptyRoutineCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Icon(
-              Icons.repeat_rounded,
-              size: 34,
-              color: HomiColors.coral,
-            ),
+            const Icon(Icons.repeat_rounded, size: 34, color: HomiColors.coral),
             const SizedBox(height: 10),
-            const Text(
-              'No routines yet',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
+            const Text('No routines yet', style: TextStyle(fontWeight: FontWeight.w900)),
             const SizedBox(height: 4),
             Text(
               'Add the things that repeat around home. Homi can show when they are due, who last completed them and when they come around again.',
@@ -373,10 +382,7 @@ class _EmptyRoutineCard extends StatelessWidget {
 }
 
 class _RoutineExampleTile extends StatelessWidget {
-  const _RoutineExampleTile({
-    required this.template,
-    required this.onTap,
-  });
+  const _RoutineExampleTile({required this.template, required this.onTap});
 
   final _RoutineTemplate template;
   final VoidCallback onTap;
@@ -405,10 +411,7 @@ class _RoutineExampleTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      template.title,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
+                    Text(template.title, style: const TextStyle(fontWeight: FontWeight.w900)),
                     const SizedBox(height: 2),
                     Text(
                       '${_templateSchedule(template)} · about ${template.estimatedMinutes} min',
@@ -427,7 +430,8 @@ class _RoutineExampleTile extends StatelessWidget {
 }
 
 String _templateSchedule(_RoutineTemplate template) {
-  final time = '${template.dueHour.toString().padLeft(2, '0')}:${template.dueMinute.toString().padLeft(2, '0')}';
+  final time =
+      '${template.dueHour.toString().padLeft(2, '0')}:${template.dueMinute.toString().padLeft(2, '0')}';
   if (template.repeat == RoutineRepeat.daily) return 'Daily at $time';
   if (template.repeat == RoutineRepeat.weekly) {
     return '${template.repeatDays.map(_shortDay).join(', ')} at $time';
@@ -472,11 +476,11 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
   late final TextEditingController _titleController;
   late final TextEditingController _hourController;
   late final TextEditingController _minuteController;
+  late final TextEditingController _dayOfMonthController;
   late String _category;
   late RoutineRepeat _repeat;
   late int _estimatedMinutes;
   late Set<int> _repeatDays;
-  late int _dayOfMonth;
   String? _error;
 
   static const _categories = <String>[
@@ -511,12 +515,14 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
     if (_repeat == RoutineRepeat.weekly && _repeatDays.isEmpty) {
       _repeatDays = <int>{DateTime.now().weekday};
     }
-    _dayOfMonth = template?.dayOfMonth ?? DateTime.now().day;
     _hourController = TextEditingController(
       text: (template?.dueHour ?? 9).toString().padLeft(2, '0'),
     );
     _minuteController = TextEditingController(
       text: (template?.dueMinute ?? 0).toString().padLeft(2, '0'),
+    );
+    _dayOfMonthController = TextEditingController(
+      text: (template?.dayOfMonth ?? DateTime.now().day).toString(),
     );
   }
 
@@ -525,6 +531,7 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
     _titleController.dispose();
     _hourController.dispose();
     _minuteController.dispose();
+    _dayOfMonthController.dispose();
     super.dispose();
   }
 
@@ -560,6 +567,19 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
       minute = parsedMinute;
     }
 
+    int? dayOfMonth;
+    if (_repeat == RoutineRepeat.monthly) {
+      dayOfMonth = int.tryParse(_dayOfMonthController.text.trim());
+      if (dayOfMonth == null || dayOfMonth < 1 || dayOfMonth > 31) {
+        setState(() => _error = 'Enter a day from 1 to 31.');
+        return;
+      }
+    }
+
+    final repeatDays = _repeat == RoutineRepeat.weekly
+        ? (List<int>.of(_repeatDays)..sort())
+        : const <int>[];
+
     Navigator.pop(
       context,
       RoutineCreateData(
@@ -569,10 +589,8 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
         estimatedMinutes: _estimatedMinutes,
         dueHour: hour,
         dueMinute: minute,
-        repeatDays: _repeat == RoutineRepeat.weekly
-            ? _repeatDays.toList()..sort()
-            : const <int>[],
-        dayOfMonth: _repeat == RoutineRepeat.monthly ? _dayOfMonth : null,
+        repeatDays: repeatDays,
+        dayOfMonth: dayOfMonth,
       ),
     );
   }
@@ -591,10 +609,7 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Add a routine',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
+            Text('Add a routine', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 6),
             Text(
               'Set when it repeats and Homi will bring it back when it is due again.',
@@ -654,14 +669,15 @@ class _RoutineEditorSheetState extends State<_RoutineEditorSheet> {
             ],
             if (_repeat == RoutineRepeat.monthly) ...[
               const SizedBox(height: 18),
-              const _FieldLabel('Day of the month'),
-              const SizedBox(height: 9),
-              HomiChoiceGroup<int>(
-                values: List<int>.generate(31, (index) => index + 1),
-                selected: _dayOfMonth,
-                labelFor: (value) => '$value',
-                onSelected: (value) => setState(() => _dayOfMonth = value),
-                compact: true,
+              TextField(
+                controller: _dayOfMonthController,
+                keyboardType: TextInputType.number,
+                maxLength: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Day of the month',
+                  hintText: '15',
+                  counterText: '',
+                ),
               ),
             ],
             if (_repeat != RoutineRepeat.once) ...[
@@ -738,9 +754,6 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
-    );
+    return Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900));
   }
 }

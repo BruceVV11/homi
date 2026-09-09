@@ -10,6 +10,24 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function isConnectionMember(data) {
+      return signedIn()
+        && data.memberUids is list
+        && request.auth.uid in data.memberUids;
+    }
+
+    function connectionCoreUnchanged() {
+      return request.resource.data.memberUids == resource.data.memberUids
+        && request.resource.data.initiatorUid == resource.data.initiatorUid
+        && request.resource.data.recipientUid == resource.data.recipientUid
+        && request.resource.data.aUid == resource.data.aUid
+        && request.resource.data.bUid == resource.data.bUid
+        && request.resource.data.aName == resource.data.aName
+        && request.resource.data.bName == resource.data.bName
+        && request.resource.data.aPhotoUrl == resource.data.aPhotoUrl
+        && request.resource.data.bPhotoUrl == resource.data.bPhotoUrl;
+    }
+
     function hasActiveLocationShare(ownerUid, viewerUid) {
       return exists(/databases/$(database)/documents/locationShares/$(ownerUid)/viewers/$(viewerUid))
         && get(/databases/$(database)/documents/locationShares/$(ownerUid)/viewers/$(viewerUid)).data.active == true;
@@ -24,10 +42,53 @@ service cloud.firestore {
       }
     }
 
+    // A Homi code is an authenticated, exact-lookup contact card. Collection
+    // listing is disabled so users cannot browse the directory.
+    match /homiCodes/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid;
+    }
+
+    // A trusted connection only establishes a relationship. It does not grant
+    // location access. Location consent remains a separate owner-controlled
+    // document below.
+    match /connections/{connectionId} {
+      allow get, list: if isConnectionMember(resource.data);
+
+      allow create: if signedIn()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.initiatorUid == request.auth.uid
+        && request.resource.data.recipientUid != request.auth.uid
+        && request.resource.data.memberUids is list
+        && request.resource.data.memberUids.size() == 2
+        && request.resource.data.initiatorUid in request.resource.data.memberUids
+        && request.resource.data.recipientUid in request.resource.data.memberUids
+        && request.resource.data.aUid in request.resource.data.memberUids
+        && request.resource.data.bUid in request.resource.data.memberUids
+        && request.resource.data.aUid != request.resource.data.bUid;
+
+      allow update: if signedIn()
+        && resource.data.status == 'pending'
+        && resource.data.recipientUid == request.auth.uid
+        && request.resource.data.status == 'accepted'
+        && connectionCoreUnchanged();
+
+      allow delete: if isConnectionMember(resource.data);
+    }
+
     // The location owner controls exactly which authenticated viewer may read.
     match /locationShares/{ownerUid}/viewers/{viewerUid} {
       allow read: if isSelf(ownerUid) || isSelf(viewerUid);
-      allow create, update, delete: if isSelf(ownerUid);
+      allow create, update, delete: if isSelf(ownerUid)
+        && request.resource.data.ownerUid == ownerUid
+        && request.resource.data.viewerUid == viewerUid;
     }
 
     // v0.x stores only the latest location/battery snapshot by default.
@@ -38,8 +99,6 @@ service cloud.firestore {
         || (signedIn() && hasActiveLocationShare(ownerUid, request.auth.uid));
     }
 
-    // Household/shared-domain rules will be added alongside their first
-    // implemented cloud feature. Until then they fail closed by default.
     match /{document=**} {
       allow read, write: if false;
     }

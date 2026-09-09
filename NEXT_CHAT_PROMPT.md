@@ -1,204 +1,203 @@
-# Homi - Next Chat Prompt
+# Homi — Next Chat Prompt
 
-Continue development of **Homi** from the current GitHub `main` branch. Treat GitHub as the source of truth for tracked source/docs and inspect the latest code plus `documentation/RELEASE_NOTES.md`, `documentation/ARCHITECTURE.md` and `documentation/LOCATION_SAFETY.md` before changing anything.
+Continue development of **Homi** from the current GitHub `main` branch. Treat GitHub as the source of truth for tracked source/docs. Before changing anything, inspect the current source plus:
 
-Use the **mobile-app-development** workflow first. Preserve approved behaviour/design, exact brand assets and local user data. Do not claim a pass compiled or worked on device until Bruce's local Flutter/Android toolchain proves it.
+- `documentation/releases/0.5.0.md`
+- `documentation/ARCHITECTURE.md`
+- `documentation/LOCATION_SAFETY.md`
+- `documentation/RELEASE_NOTES.md`
+
+Use the **mobile-app-development** workflow first. Preserve approved behaviour/design, exact brand assets and existing user data. Do not claim a pass compiled or worked on-device until Bruce's local Flutter/Android toolchain proves it.
 
 ## Permanent project context
 
-- Local Windows project root: `C:\ConceptLab\Projects\homi`
+- Local project root: `C:\ConceptLab\Projects\homi`
 - GitHub: `BruceVV11/homi`
 - Android application ID: `za.co.theconceptlab.homi`
 - Firebase / Google Cloud project: `homi-ee80a`
 - Firebase project number: `883068189841`
 - Firestore region: `africa-south1` (Johannesburg)
 - Flutter baseline: 3.41.5 stable
-- Development phone: Samsung S25 Ultra
+- Dart baseline: 3.11.3
+- Development device: Samsung S25 Ultra
+- JDK 21 / Gradle 8.14
+- Verified local Gradle profile on the development PC: 4 GB heap, one worker, parallel execution off
 - Android host under `android/` is intentionally local/untracked at this stage.
-- Existing local Firebase/Maps config must be preserved; never ask Bruce to paste the Maps key into chat.
-- Approved brand: coral `#FF6B5E`, peach `#FFB08A`, sage `#A7B89F`, cream `#FFF8F2`, slate `#2E2E2E`, Nunito.
-- Exact Homi logo/mark assets already exist in `assets/brand/`; never redraw or approximate them with framework shapes.
+- Existing local Firebase/Maps config must be preserved.
+- Never ask Bruce to paste the Maps API key into chat.
+- The deleted project `homi-508000` must never be used.
 
-The deleted project `homi-508000` must never be used.
+## Approved brand
+
+- Coral `#FF6B5E`
+- Peach `#FFB08A`
+- Sage `#A7B89F`
+- Cream `#FFF8F2`
+- Slate `#2E2E2E`
+- Nunito typography
+- Exact Homi logo/mark artwork already exists in `assets/brand/` and must never be redrawn or approximated with framework shapes.
 
 ## Product direction
 
-Homi is a local-first household operating system. Primary navigation is:
+Homi is a local-first household operating system with a broader trusted-person/location layer.
 
-**Overview · Routines · Home · Supplies · People**
+Primary navigation is now:
 
-Home is deliberately the centre destination and uses the exact Homi mark.
+**Overview · Tasks · Home · Supplies · People**
 
-Account creation must remain optional for basic/local-only household use. Cloud features should add sharing, backup and trusted-person functionality rather than gate local value.
+Home remains the centre destination and uses the exact Homi mark.
 
-All visible wording must read like production Homi copy, never like developer/tester instructions or roadmap notes.
+The persistent Homi logo/profile header must stay fixed while swiping primary pages.
 
-Trusted-person location is a first-class Life360-style direction, but the privacy model is non-negotiable:
+## Tasks vs Routines
 
-- connecting/inviting someone does not start location sharing;
-- the tracked person explicitly controls each viewer's access;
-- live/background sharing is separately opt-in and visibly active;
-- stopping/revoking location must remain easy and never paywalled;
-- no stealth tracking;
-- no indefinite movement history by default.
+This distinction is intentional and must be preserved:
 
-## Current source state - 0.4.0+4
+### Tasks
 
-This 0.4 pass has been implemented in GitHub but has **not yet been locally analyzed/tested/compiled/device-reviewed**. Fix local verification issues before starting another broad feature pass.
+Tasks happen once.
 
-### Navigation / branded controls
+Examples:
+- Take the mince out to defrost
+- Put the bins at the gate tonight
+- Call the plumber
 
-- Primary order remains **Overview, Routines, Home, Supplies, People** with Home centred.
-- `HomiBottomNav` was rebuilt from Bruce's latest S25 Ultra/reference feedback.
-- The selected destination now uses a circular active button integrated into a custom-painted rise/mound in the white navigation surface.
-- Material ink/splash handling was removed from the custom nav to eliminate the grey rectangular selection block seen around selected items.
-- Homi inline single/multi-choice controls now replace fixed-choice dropdowns in new/refined forms.
-- `showHomiConfirmSheet` provides branded confirmations/destructive actions.
-- Routines/Supplies/Home no longer use generic popup menus for their primary destructive/update flows.
+A task can:
+- have no due time, or an optional date/time;
+- be local-only;
+- be assigned to the user;
+- be assigned to an accepted Homi person marked **Household**;
+- remain visible in Completed after completion;
+- record who completed it and when;
+- be reopened if ticked by mistake.
+
+Cloud-assigned tasks use `sharedTasks/{taskId}` and share only that task with creator/assignee. They do not grant Home/Supplies/Routine access.
 
 ### Routines
 
-Routine frequency is now a real recurrence model, not descriptive metadata.
+Routines are repeating jobs only:
+- Daily
+- Weekdays
+- Selected weekdays
+- Monthly
 
-`RoutineItem` contains:
+Each occurrence records who completed it and when, calculates the next due time, stays visible in Up to date after completion, and can be unticked/re-ticked for the same occurrence if it was marked by mistake.
 
-- UUID
-- title/category
-- estimated minutes
-- repeat type: one-off, daily, weekdays, weekly, monthly
-- selected weekly days / monthly day-of-month
-- exact due hour/minute
-- computed `nextDueAt`
-- bounded `RoutineCompletion` history
-- each completion includes exact timestamp, actor display name and optional Firebase UID
+`RoutineCompletion.occurrenceDueAt` exists specifically to make this reversible.
 
-Creation uses inline Homi choices plus exact 24-hour schedule fields. Recurring cards show a repeat icon, previous completion (`Done 9 Sep · 14:00 by Bruce`) and `Due now` / next due timestamp.
+## Date/time controls
 
-Existing pre-0.4 Routine JSON is migrated from the older `frequency`, `completed` and `lastCompletedAt` shape where possible.
+Do not bring back typed date/time fields or awkward dropdowns for stable choices.
 
-**Critical boundary:** Routines are still local-only. The completion attribution model exists, but Bruce's wife on another phone will NOT see the completion yet. Shared household membership + cloud Routine/Home/Supply synchronization is the major next architecture feature after 0.4 is stable.
+Current reusable branded controls are in:
 
-### Supplies
+`lib/src/widgets/homi_date_time_controls.dart`
 
-- Common Quick Adds: Milk, Bread, Eggs, Dog food, Toilet paper, Dishwashing liquid.
-- Quick Adds prefill the editor rather than saving blindly.
-- Category/status use inline Homi choices, not dropdowns.
-- Expiry input uses Homi-consistent numeric day/month/year fields rather than native date-picker UI.
-- Expiry-aware `Use soon` / `Expired` behaviour remains.
-- Status updates/removal use Homi-styled sheets.
+They include:
+- Homi calendar sheet
+- Homi 24-hour time wheel
+- Homi day-of-month selector
+- Homi date/time display fields
 
-### Overview / When you have time
+Use inline Homi choice controls for fixed categories/statuses/frequencies wherever practical.
 
-- Overview considers actual due Routines, supply attention, Home service attention and Quick Add reminders.
-- Quick Reset (`When you have time`) still honours a 10/30-minute budget.
-- Due saved Routines are prioritised.
-- Homi has a larger common-household suggestion pool which is shuffled every invocation, so repeated resets should not feel identical.
-- Completing a saved recurring Routine from Quick Reset records who/when and computes next due.
-- The `How it works` sheet explains this in user-facing copy.
+## Supplies
 
-### Home
+Supplies now have:
+- quick adds such as Milk, Bread, Eggs, Dog food, Toilet paper, Dishwashing liquid;
+- a broad icon picker using `SupplyIconCatalog`;
+- persisted `iconKey` with legacy fallback to `inventory`;
+- inline category/status choices;
+- branded expiry-date picker;
+- expiry-derived Use soon/Expired behaviour.
 
-Home is no longer placeholder cards.
+Keep adding icons to the catalog when a real missing household use case appears rather than storing raw IconData codepoints in user data.
 
-Local-first features now include:
+## Home
 
-- **Things:** appliances/equipment/home items, category, room/location, optional brand/model, service date, notes.
-- service due/soon status and Overview attention.
-- **Maintenance & repairs:** history type, title, date, optional linked Thing, notes and who completed/logged it.
-- **Utilities:** electricity/water readings, units, timestamps and recorder attribution.
-- local persistence through SharedPreferences.
+Home currently supports:
+- Things/appliances/equipment
+- service dates
+- warranty dates
+- maintenance/repair history
+- utility readings
 
-Google Drive/home-document UX remains intentionally unfinished rather than faked.
+The page has a compact **How Home works** explanation. Trusted/location-only friends do not get Home access. Full household Home/Routine/Supply synchronization is not implemented yet and must not be implied.
 
-### People / trusted location
+## People / trusted location
 
-People was substantially expanded.
+People is intentionally broader than family/household.
 
-- Persistent Google Map.
-- cached latest self location/battery state.
-- if foreground location permission already exists, People refreshes automatically without requiring a repeated `Check my location` action.
-- custom person markers use profile photo when available, otherwise initials.
-- tapping a marker opens Homi location details with last update, battery/charging, accuracy, reverse-geocoded address and coordinates.
-- address/coordinates can be copied and opened externally in Google Maps.
-- signed-in users receive a six-character Homi code.
-- Homi-code connection request -> recipient accepts/declines.
-- accepted connection alone grants no location access.
-- each user independently chooses `Share mine` / `Stop my share` for each trusted person.
-- Firestore rules enforce the owner-controlled share before `/locations/{uid}` is readable by another user.
+A connected person can be privately labelled by the current user as:
+- Partner
+- Wife / Husband
+- Mother / Father / Parent
+- Son / Daughter / Child
+- Sibling
+- Roommate
+- Friend
+- Family
+- Caregiver
+- Trusted person
 
-### Live/background sharing
+Each private relationship also has scope:
+- **Household**
+- **Friend · location only**
 
-A signed-in user may explicitly enable `Live updates`.
+A location-only friend:
+- may receive location only after the owner separately enables sharing;
+- must not gain Home, Supplies, Routines or household records;
+- must not appear as a household task assignee.
 
-Current Android source configuration:
+A Household person may be eligible for separately scoped collaboration such as an assigned task, but household status still does not start location sharing.
 
-- Geolocator Android foreground-service location stream
-- Android `Allow all the time` permission required for background updates
-- visible foreground-service notification
-- medium accuracy
-- 100 m distance filter
-- approximately 2-minute requested interval
-- wake lock disabled
-- latest snapshot only; no default route-history collection
-- explicit Stop clears the stored live-sharing preference
-- sign-out stops live updates
-- previously opted-in live sharing attempts to resume on a later signed-in app session if Android still grants the needed permission
+Connection acceptance, relationship scope and location consent are three separate decisions.
 
-Do **not** claim full Life360-grade process resilience yet. Force-stop, reboot, OEM battery optimisation, long-stationary behaviour and Google Play background-location review still need release hardening and real-device validation.
+People currently includes:
+- Homi codes
+- connection requests / accept / remove
+- private relationship/scope preferences
+- current-location map
+- profile-photo/initial map markers
+- battery and charging state
+- reverse-geocoded address
+- coordinates
+- copy-address button
+- copy-coordinates button
+- **Copy all**
+- open in Google Maps
+- explicit per-person Share mine / Stop my share
+- opt-in Live updates with Android foreground-service notification
 
-### Firestore rules added for trusted people
+`LocationStatusService` currently uses medium accuracy, a 100 m distance filter and roughly two-minute requested Android updates while live sharing is active. This is designed to reduce battery pressure, but do not claim full Life360 force-stop/reboot resilience until it is actually implemented and proven on real devices.
 
-Updated `firebase/firestore.rules` now includes:
+Latest location is stored; long-term route history is not on by default.
 
-- self-only user profiles
-- authenticated exact Homi-code lookup, with directory listing denied
-- two-member pending/accepted connection documents
-- only recipient can accept pending connection
-- connection and location consent remain separate
-- location owner controls each viewer's share document
-- latest location readable by another user only when that active share exists
-- unspecified data remains fail-closed
+## Important People regression
 
-These rules must be deployed before trusted-person/Homi-code testing.
+A prior red framework screen appeared after opening Connect and then closing it:
 
-### Android host integration
+`'_dependents.isEmpty': is not true`
 
-Because the generated Android host is local/untracked, run:
+The Connect flow was rewritten as a stateful modal that owns/disposes its own TextEditingController. Re-test opening/closing Connect repeatedly on the real S25 Ultra before calling it fixed.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\enable-location-map-android.ps1
-```
+Raw Firestore permission codes should not appear in user-visible People UI. Friendly user wording is now used.
 
-The script idempotently enforces:
+## Firestore rules
 
-- Internet permission
-- coarse/fine location
-- background location
-- foreground service + foreground service location
-- notifications
-- Google Maps metadata pointing to the existing local `@string/google_maps_key`
-- Android min SDK 24
+Current rules include:
+- private user/device data
+- exact-lookup Homi codes
+- accepted trusted connections
+- private per-user `peoplePreferences`
+- `sharedTasks` creator/assignee authorization
+- accepted-connection + household-scope requirement for shared task creation
+- accepted-connection + explicit active location share for location reads
+- latest location/battery only by default
 
-It does not print or replace the API key.
+**The latest rules have not yet been confirmed deployed after the 0.5.0 changes.** People previously showed `permission-denied` because source rules were ahead of deployed rules.
 
-## Immediate verification checkpoint
-
-First pull and verify 0.4 locally:
-
-```powershell
-cd C:\ConceptLab\Projects\homi
-git pull
-flutter pub get
-powershell -ExecutionPolicy Bypass -File .\scripts\enable-location-map-android.ps1
-flutter analyze
-flutter test
-```
-
-Do not run `flutter clean` unless an actual cache-related problem appears.
-
-If analyze/test pass, run normally from Android Studio on the S25 Ultra.
-
-Before testing Homi-code/trusted-person connections, deploy current Firestore rules from Cloud Shell:
+After analyzer/tests are clean, deploy from Google Cloud Shell:
 
 ```bash
 cd ~/homi
@@ -206,42 +205,51 @@ git pull
 bash scripts/deploy-firestore-rules.sh
 ```
 
-For explicit live-background testing, if Homi asks for stronger Android location permission, use:
+Do not deploy before the local source checkpoint is clean unless specifically debugging rules.
 
-**Android Settings → Apps → Homi → Permissions → Location → Allow all the time**
+## Navbar direction
 
-The app should offer an `Open settings` action; it cannot silently grant this permission.
+Bruce wants the selected circular item to look like the supplied reference: a white navigation surface whose top edge forms a smooth symmetric dome around the active button, leaving an **equal visible white gap around the top and sides of the active circle**. The bar must not visually touch the top of the active circle, and first/last destinations must not look pinched.
 
-## Device review checklist
+Current source was reworked again in 0.5.0 but still requires physical-device screenshot approval. Do not call it visually locked until Bruce approves it.
 
-Review the actual S25 Ultra screenshots/behaviour before any further visual redesign:
+## Current verification checkpoint
 
-- nav selected in Overview, Routines, Home and a side destination; compare mound/active-circle treatment against Bruce's supplied reference;
-- no grey rectangular selection block around a nav item;
-- Routine editor fixed choices, weekly/monthly scheduling and exact time;
-- completed recurring Routine showing who/when and next due;
-- Routine branded removal flow;
-- Supply Quick Adds and inline editor controls;
-- Home Things, service attention, maintenance/repair history and utility readings;
-- Overview Home attention and rotating 10/30-minute Quick Reset;
-- People map, own marker, trusted-person markers, location detail copy/Google Maps action;
-- Homi-code request/accept flow on two signed-in accounts if available;
-- per-person share grant/revoke;
-- foreground auto refresh after permission is already granted;
-- live updates, visible Android foreground-service notification, backgrounding/reopening Homi;
-- local-only use remains valid;
-- sign-out stops live location.
+The 0.5.0 source has been implemented in GitHub but is **not yet compile/device verified**.
 
-## Priorities after 0.4 is stable
+Bruce's next local commands are:
 
-1. Fix every analyzer/test/device regression first; do not stack new architecture on a broken pass.
-2. Refine the nav only from the new physical-device screenshots if the shape/alignment still differs from the approved reference.
-3. Build **shared household membership + merge/sync** for Routines, Supplies and Home so multiple household phones genuinely see the same state and `who completed it` works across devices. Define first-sync/local-vs-cloud conflict behaviour before writing data automatically.
-4. Harden location lifecycle: reboot/process death/OEM battery restrictions, notification behaviour, stale/offline states and realistic battery measurements across devices.
-5. Add Places / arrivals / departures only after live-current sharing is stable and consent UX remains explicit.
-6. Build Home documents/manuals/receipts around user-owned Google Drive with narrow `drive.file` scope.
-7. Continue replacing any remaining generic/native notice/toast/modal treatment with reusable Homi UI where practical without fighting unavoidable Android permission/system screens.
-8. Prepare Play Store background-location disclosure/privacy policy evidence before production release.
-9. Continue updating `documentation/RELEASE_NOTES.md`, architecture/location docs, tests and this top-level `NEXT_CHAT_PROMPT.md` in every pass.
+```powershell
+cd C:\ConceptLab\Projects\homi
+git pull
+flutter analyze
+flutter test
+```
 
-Preserve the working architecture; prefer additive migrations over resets. Never delete local user data to simplify a model change unless Bruce explicitly approves it.
+If clean, deploy the Firestore rules from Cloud Shell, then use Android Studio → Samsung S25 Ultra → Run.
+
+Re-test specifically:
+- navbar: Overview, Tasks, Home, Supplies, People selected states, including first/last;
+- Task create with no due time;
+- Task create with Homi date/time pickers;
+- completed Task remains visible and reopens cleanly;
+- Household-person assignment;
+- Friend/location-only person does not appear as task assignee;
+- recurring Routine complete → untick → tick again;
+- Routine time/weekdays/monthly selectors;
+- Home service/warranty/maintenance/reading date/time pickers;
+- Supplies icon picker + restart persistence;
+- People Connect open/close repeatedly;
+- People relationship/scoping;
+- location details individual copy buttons + Copy all + Google Maps;
+- People permission error after rules deployment;
+- live-location foreground/background behaviour and battery impact.
+
+If analyzer or build produces an error, fix the exact source/tooling layer that failed. Do not reset Firebase, JDK, Gradle, signing, Maps or Android host setup unless the error actually points there.
+
+## Documentation rule
+
+At the end of every pass:
+- update relevant documentation;
+- update a release note under `documentation/releases/`;
+- refresh this top-level `NEXT_CHAT_PROMPT.md` with the newest source-of-truth state.

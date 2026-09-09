@@ -33,7 +33,6 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/locationShares/$(ownerUid)/viewers/$(viewerUid)).data.active == true;
     }
 
-    // Private account/profile data.
     match /users/{uid} {
       allow read, create, update, delete: if isSelf(uid);
 
@@ -42,8 +41,8 @@ service cloud.firestore {
       }
     }
 
-    // A Homi code is an authenticated, exact-lookup contact card. Collection
-    // listing is disabled so users cannot browse the directory.
+    // Homi codes are authenticated exact-lookups only. They are not a
+    // browseable people directory.
     match /homiCodes/{code} {
       allow get: if signedIn();
       allow list: if false;
@@ -56,9 +55,8 @@ service cloud.firestore {
         && resource.data.uid == request.auth.uid;
     }
 
-    // A trusted connection only establishes a relationship. It does not grant
-    // location access. Location consent remains a separate owner-controlled
-    // document below.
+    // A connection establishes a trusted-person relationship only. It does
+    // not grant location access; location consent remains separate below.
     match /connections/{connectionId} {
       allow get, list: if isConnectionMember(resource.data);
 
@@ -83,16 +81,16 @@ service cloud.firestore {
       allow delete: if isConnectionMember(resource.data);
     }
 
-    // The location owner controls exactly which authenticated viewer may read.
     match /locationShares/{ownerUid}/viewers/{viewerUid} {
       allow read: if isSelf(ownerUid) || isSelf(viewerUid);
-      allow create, update, delete: if isSelf(ownerUid)
+      allow create, update: if isSelf(ownerUid)
         && request.resource.data.ownerUid == ownerUid
         && request.resource.data.viewerUid == viewerUid;
+      allow delete: if isSelf(ownerUid);
     }
 
-    // v0.x stores only the latest location/battery snapshot by default.
-    // History is deliberately not enabled here.
+    // Homi stores only the latest shared location/battery snapshot here.
+    // Movement history is deliberately not enabled by default.
     match /locations/{ownerUid} {
       allow create, update, delete: if isSelf(ownerUid);
       allow read: if isSelf(ownerUid)

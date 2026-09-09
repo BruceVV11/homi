@@ -28,8 +28,24 @@ service cloud.firestore {
         && request.resource.data.bPhotoUrl == resource.data.bPhotoUrl;
     }
 
+    function hasAcceptedConnection(firstUid, secondUid) {
+      let forwardId = firstUid + '_' + secondUid;
+      let reverseId = secondUid + '_' + firstUid;
+      let forwardPath = /databases/$(database)/documents/connections/$(forwardId);
+      let reversePath = /databases/$(database)/documents/connections/$(reverseId);
+      return (exists(forwardPath)
+          && get(forwardPath).data.status == 'accepted'
+          && firstUid in get(forwardPath).data.memberUids
+          && secondUid in get(forwardPath).data.memberUids)
+        || (exists(reversePath)
+          && get(reversePath).data.status == 'accepted'
+          && firstUid in get(reversePath).data.memberUids
+          && secondUid in get(reversePath).data.memberUids);
+    }
+
     function hasActiveLocationShare(ownerUid, viewerUid) {
-      return exists(/databases/$(database)/documents/locationShares/$(ownerUid)/viewers/$(viewerUid))
+      return hasAcceptedConnection(ownerUid, viewerUid)
+        && exists(/databases/$(database)/documents/locationShares/$(ownerUid)/viewers/$(viewerUid))
         && get(/databases/$(database)/documents/locationShares/$(ownerUid)/viewers/$(viewerUid)).data.active == true;
     }
 
@@ -85,7 +101,8 @@ service cloud.firestore {
       allow read: if isSelf(ownerUid) || isSelf(viewerUid);
       allow create, update: if isSelf(ownerUid)
         && request.resource.data.ownerUid == ownerUid
-        && request.resource.data.viewerUid == viewerUid;
+        && request.resource.data.viewerUid == viewerUid
+        && hasAcceptedConnection(ownerUid, viewerUid);
       allow delete: if isSelf(ownerUid);
     }
 

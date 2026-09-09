@@ -14,9 +14,9 @@ class HomiBottomNav extends StatelessWidget {
   final ValueChanged<int> onSelected;
 
   static const _labels = <String>[
-    'Today',
-    'Home',
+    'Overview',
     'Routines',
+    'Home',
     'Supplies',
     'People',
   ];
@@ -26,77 +26,37 @@ class HomiBottomNav extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         const itemCount = 5;
-        const bubbleSize = 54.0;
+        const activeSize = 50.0;
         final itemWidth = constraints.maxWidth / itemCount;
-        final bubbleLeft =
-            (itemWidth * selectedIndex) + ((itemWidth - bubbleSize) / 2);
+        final centerX = itemWidth * (selectedIndex + 0.5);
+        final activeLeft = centerX - (activeSize / 2);
 
         return SizedBox(
-          height: 84,
+          height: 82,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: 72,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: HomiColors.border),
-                    boxShadow: const [
-                      BoxShadow(
-                        blurRadius: 26,
-                        offset: Offset(0, 10),
-                        color: Color(0x14000000),
-                      ),
-                    ],
-                  ),
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _HomiNavBackgroundPainter(centerX: centerX),
                 ),
               ),
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 260),
                 curve: Curves.easeOutCubic,
-                left: bubbleLeft,
+                left: activeLeft,
                 top: 0,
-                width: bubbleSize,
-                height: bubbleSize,
+                width: activeSize,
+                height: activeSize,
                 child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: HomiColors.border),
-                      boxShadow: const [
-                        BoxShadow(
-                          blurRadius: 18,
-                          offset: Offset(0, 6),
-                          color: Color(0x16000000),
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: HomiColors.peach.withValues(alpha: 0.30),
-                          shape: BoxShape.circle,
-                        ),
-                        alignment: Alignment.center,
-                        child: _NavIcon(index: selectedIndex, selected: true),
-                      ),
-                    ),
-                  ),
+                  child: _ActiveBubble(index: selectedIndex),
                 ),
               ),
               Positioned(
                 left: 0,
                 right: 0,
                 bottom: 0,
-                height: 72,
+                height: 68,
                 child: Row(
                   children: List<Widget>.generate(itemCount, (index) {
                     final selected = index == selectedIndex;
@@ -105,40 +65,47 @@ class HomiBottomNav extends StatelessWidget {
                         button: true,
                         selected: selected,
                         label: _labels[index],
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(24),
-                          onTap: () => onSelected(index),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(2, 7, 2, 6),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                if (selected)
-                                  const SizedBox(height: 29)
-                                else ...[
-                                  _NavIcon(index: index, selected: false),
-                                  const SizedBox(height: 4),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(24),
+                            onTap: () => onSelected(index),
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(2, 8, 2, 6),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  if (selected)
+                                    const SizedBox(height: 29)
+                                  else ...[
+                                    _NavIcon(
+                                      index: index,
+                                      selected: false,
+                                      inBubble: false,
+                                    ),
+                                    const SizedBox(height: 4),
+                                  ],
+                                  AnimatedDefaultTextStyle(
+                                    duration: const Duration(milliseconds: 180),
+                                    style: TextStyle(
+                                      fontSize: 11.2,
+                                      height: 1,
+                                      fontWeight: selected
+                                          ? FontWeight.w900
+                                          : FontWeight.w700,
+                                      color: selected
+                                          ? HomiColors.coral
+                                          : HomiColors.slate,
+                                    ),
+                                    child: Text(
+                                      _labels[index],
+                                      maxLines: 1,
+                                      overflow: TextOverflow.fade,
+                                      softWrap: false,
+                                    ),
+                                  ),
                                 ],
-                                AnimatedDefaultTextStyle(
-                                  duration: const Duration(milliseconds: 180),
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    height: 1,
-                                    fontWeight: selected
-                                        ? FontWeight.w900
-                                        : FontWeight.w700,
-                                    color: selected
-                                        ? HomiColors.coral
-                                        : HomiColors.slate,
-                                  ),
-                                  child: Text(
-                                    _labels[index],
-                                    maxLines: 1,
-                                    overflow: TextOverflow.fade,
-                                    softWrap: false,
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
@@ -155,30 +122,125 @@ class HomiBottomNav extends StatelessWidget {
   }
 }
 
-class _NavIcon extends StatelessWidget {
-  const _NavIcon({required this.index, required this.selected});
+class _ActiveBubble extends StatelessWidget {
+  const _ActiveBubble({required this.index});
 
   final int index;
-  final bool selected;
 
   @override
   Widget build(BuildContext context) {
-    if (index == 1) {
-      return HomiMark(size: selected ? 30 : 24);
+    final isHome = index == 2;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: isHome ? HomiColors.cream : HomiColors.coral,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isHome ? HomiColors.border : HomiColors.coral,
+          width: isHome ? 1 : 0,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 16,
+            offset: Offset(0, 6),
+            color: Color(0x1C000000),
+          ),
+        ],
+      ),
+      child: Center(
+        child: _NavIcon(index: index, selected: true, inBubble: true),
+      ),
+    );
+  }
+}
+
+class _NavIcon extends StatelessWidget {
+  const _NavIcon({
+    required this.index,
+    required this.selected,
+    required this.inBubble,
+  });
+
+  final int index;
+  final bool selected;
+  final bool inBubble;
+
+  @override
+  Widget build(BuildContext context) {
+    if (index == 2) {
+      return HomiMark(size: inBubble ? 31 : 23);
     }
 
     final icon = switch (index) {
-      0 => selected ? Icons.today_rounded : Icons.today_outlined,
-      2 => selected ? Icons.checklist_rounded : Icons.checklist_outlined,
-      3 => selected ? Icons.inventory_2_rounded : Icons.inventory_2_outlined,
+      0 => selected
+          ? Icons.space_dashboard_rounded
+          : Icons.space_dashboard_outlined,
+      1 => selected ? Icons.checklist_rounded : Icons.checklist_outlined,
+      3 => selected
+          ? Icons.inventory_2_rounded
+          : Icons.inventory_2_outlined,
       4 => selected ? Icons.people_rounded : Icons.people_outline_rounded,
       _ => Icons.circle_outlined,
     };
 
     return Icon(
       icon,
-      size: selected ? 25 : 23,
-      color: selected ? HomiColors.coral : HomiColors.slate,
+      size: inBubble ? 24 : 22,
+      color: inBubble ? Colors.white : HomiColors.slate,
     );
+  }
+}
+
+class _HomiNavBackgroundPainter extends CustomPainter {
+  const _HomiNavBackgroundPainter({required this.centerX});
+
+  final double centerX;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _path(size);
+    canvas.drawShadow(path, const Color(0x26000000), 14, false);
+
+    final fill = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(path, fill);
+
+    final border = Paint()
+      ..color = HomiColors.border
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.drawPath(path, border);
+  }
+
+  Path _path(Size size) {
+    const top = 14.0;
+    const corner = 27.0;
+    const bumpHalf = 38.0;
+    final cx = centerX.clamp(42.0, size.width - 42.0).toDouble();
+
+    return Path()
+      ..moveTo(corner, top)
+      ..lineTo(cx - bumpHalf, top)
+      ..cubicTo(cx - 27, top, cx - 27, 1, cx, 1)
+      ..cubicTo(cx + 27, 1, cx + 27, top, cx + bumpHalf, top)
+      ..lineTo(size.width - corner, top)
+      ..quadraticBezierTo(size.width, top, size.width, top + corner)
+      ..lineTo(size.width, size.height - corner)
+      ..quadraticBezierTo(
+        size.width,
+        size.height,
+        size.width - corner,
+        size.height,
+      )
+      ..lineTo(corner, size.height)
+      ..quadraticBezierTo(0, size.height, 0, size.height - corner)
+      ..lineTo(0, top + corner)
+      ..quadraticBezierTo(0, top, corner, top)
+      ..close();
+  }
+
+  @override
+  bool shouldRepaint(covariant _HomiNavBackgroundPainter oldDelegate) {
+    return oldDelegate.centerX != centerX;
   }
 }

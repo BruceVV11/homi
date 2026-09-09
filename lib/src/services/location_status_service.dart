@@ -178,10 +178,10 @@ class LocationStatusService {
 
     final LocationSettings settings;
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      settings = const AndroidSettings(
+      settings = AndroidSettings(
         accuracy: LocationAccuracy.medium,
         distanceFilter: 100,
-        intervalDuration: Duration(minutes: 2),
+        intervalDuration: const Duration(minutes: 2),
         foregroundNotificationConfig: ForegroundNotificationConfig(
           notificationTitle: 'Homi location sharing is on',
           notificationText:

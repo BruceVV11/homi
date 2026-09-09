@@ -17,6 +17,8 @@ class HouseholdTask {
     this.shared = false,
   });
 
+  static const completedRetention = Duration(days: 2);
+
   final String id;
   final String title;
   final String? notes;
@@ -32,6 +34,20 @@ class HouseholdTask {
   final bool shared;
 
   bool get completed => completedAt != null;
+
+  DateTime? get removeAfter => completedAt?.add(completedRetention);
+
+  bool completedWithinRetention(DateTime now) {
+    final completed = completedAt;
+    if (completed == null) return false;
+    return now.isBefore(completed.add(completedRetention));
+  }
+
+  bool shouldPurge(DateTime now) {
+    final completed = completedAt;
+    if (completed == null) return false;
+    return !now.isBefore(completed.add(completedRetention));
+  }
 
   HouseholdTask complete({
     required DateTime at,

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'routine_item.dart';
 
 enum QuickResetTaskSource {
@@ -53,16 +55,53 @@ abstract final class QuickResetPlanner {
       minutes: 10,
       source: QuickResetTaskSource.suggestion,
     ),
+    QuickResetTask(
+      title: 'Clear one kitchen surface',
+      minutes: 5,
+      source: QuickResetTaskSource.suggestion,
+    ),
+    QuickResetTask(
+      title: 'Put shoes and bags back in place',
+      minutes: 5,
+      source: QuickResetTaskSource.suggestion,
+    ),
+    QuickResetTask(
+      title: 'Check the fridge for food to use soon',
+      minutes: 5,
+      source: QuickResetTaskSource.suggestion,
+    ),
+    QuickResetTask(
+      title: 'Tidy one bedside table',
+      minutes: 4,
+      source: QuickResetTaskSource.suggestion,
+    ),
+    QuickResetTask(
+      title: 'Wipe bathroom mirrors',
+      minutes: 6,
+      source: QuickResetTaskSource.suggestion,
+    ),
+    QuickResetTask(
+      title: 'Start a load of laundry',
+      minutes: 5,
+      source: QuickResetTaskSource.suggestion,
+    ),
   ];
 
   static List<QuickResetTask> build({
     required int budgetMinutes,
     required List<RoutineItem> routines,
+    DateTime? now,
+    int? suggestionSeed,
   }) {
     if (budgetMinutes <= 0) return const <QuickResetTask>[];
 
-    final candidates = routines.where((item) => !item.completed).toList()
+    final referenceTime = now ?? DateTime.now();
+    final candidates = routines.where((item) => item.isDue(referenceTime)).toList()
       ..sort((a, b) {
+        final aDue = a.nextDueAt ?? a.initialDueAt();
+        final bDue = b.nextDueAt ?? b.initialDueAt();
+        final due = aDue.compareTo(bDue);
+        if (due != 0) return due;
         final duration = a.estimatedMinutes.compareTo(b.estimatedMinutes);
         if (duration != 0) return duration;
         return a.title.toLowerCase().compareTo(b.title.toLowerCase());
@@ -71,7 +110,7 @@ abstract final class QuickResetPlanner {
     final tasks = <QuickResetTask>[];
     final usedTitles = <String>{};
     var remaining = budgetMinutes;
-    final maxTasks = budgetMinutes <= 10 ? 3 : 4;
+    final maxTasks = budgetMinutes <= 10 ? 3 : 5;
 
     for (final routine in candidates) {
       if (tasks.length >= maxTasks) break;
@@ -88,7 +127,13 @@ abstract final class QuickResetPlanner {
       remaining -= routine.estimatedMinutes;
     }
 
-    for (final suggestion in _starterSuggestions) {
+    final random = Random(
+      suggestionSeed ?? DateTime.now().microsecondsSinceEpoch,
+    );
+    final suggestions = List<QuickResetTask>.of(_starterSuggestions)
+      ..shuffle(random);
+
+    for (final suggestion in suggestions) {
       if (tasks.length >= maxTasks || remaining <= 0) break;
       if (suggestion.minutes > remaining) continue;
       if (usedTitles.contains(suggestion.title.toLowerCase())) continue;

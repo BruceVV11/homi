@@ -26,7 +26,7 @@ class HomiBottomNav extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         const itemCount = 5;
-        const activeSize = 54.0;
+        const activeSize = 50.0;
         final itemWidth = constraints.maxWidth / itemCount;
         final centerX = itemWidth * (selectedIndex + 0.5);
         final activeLeft = centerX - (activeSize / 2);
@@ -42,10 +42,10 @@ class HomiBottomNav extends StatelessWidget {
                 ),
               ),
               AnimatedPositioned(
-                duration: const Duration(milliseconds: 240),
+                duration: const Duration(milliseconds: 230),
                 curve: Curves.easeOutCubic,
                 left: activeLeft,
-                top: 1,
+                top: 7,
                 width: activeSize,
                 height: activeSize,
                 child: IgnorePointer(
@@ -56,7 +56,7 @@ class HomiBottomNav extends StatelessWidget {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                height: 70,
+                height: 69,
                 child: Row(
                   children: List<Widget>.generate(itemCount, (index) {
                     final selected = index == selectedIndex;
@@ -74,7 +74,7 @@ class HomiBottomNav extends StatelessWidget {
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
                                 if (selected)
-                                  const SizedBox(height: 31)
+                                  const SizedBox(height: 30)
                                 else ...[
                                   _NavIcon(
                                     index: index,
@@ -132,14 +132,16 @@ class _ActiveBubble extends StatelessWidget {
         color: isHome ? HomiColors.cream : HomiColors.coral,
         shape: BoxShape.circle,
         border: Border.all(
-          color: isHome ? HomiColors.coral.withValues(alpha: 0.35) : HomiColors.coral,
-          width: isHome ? 1.5 : 0,
+          color: isHome
+              ? HomiColors.coral.withValues(alpha: 0.28)
+              : HomiColors.coral,
+          width: isHome ? 1.2 : 0,
         ),
         boxShadow: const [
           BoxShadow(
-            blurRadius: 12,
-            offset: Offset(0, 4),
-            color: Color(0x18000000),
+            blurRadius: 10,
+            offset: Offset(0, 3),
+            color: Color(0x15000000),
           ),
         ],
       ),
@@ -164,7 +166,7 @@ class _NavIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (index == 2) {
-      return HomiMark(size: inBubble ? 31 : 23);
+      return HomiMark(size: inBubble ? 29 : 22);
     }
 
     final icon = switch (index) {
@@ -181,7 +183,7 @@ class _NavIcon extends StatelessWidget {
 
     return Icon(
       icon,
-      size: inBubble ? 24 : 22,
+      size: inBubble ? 23 : 22,
       color: inBubble && index != 2 ? Colors.white : HomiColors.slate,
     );
   }
@@ -195,7 +197,7 @@ class _HomiNavBackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final path = _path(size);
-    canvas.drawShadow(path, const Color(0x20000000), 12, false);
+    canvas.drawShadow(path, const Color(0x1C000000), 11, false);
 
     final fill = Paint()
       ..color = Colors.white
@@ -210,32 +212,42 @@ class _HomiNavBackgroundPainter extends CustomPainter {
   }
 
   Path _path(Size size) {
-    const top = 20.0;
-    const topCorner = 23.0;
+    const bodyTop = 24.0;
+    const topCorner = 22.0;
     const bottomCorner = 20.0;
-    const moundHalf = 39.0;
-    final cx = centerX.clamp(42.0, size.width - 42.0).toDouble();
+    const moundHalf = 34.0;
+    final cx = centerX.clamp(moundHalf + 1, size.width - moundHalf - 1).toDouble();
 
-    final path = Path()..moveTo(topCorner, top);
-    path.lineTo(cx - moundHalf, top);
+    final path = Path()..moveTo(topCorner, bodyTop);
+    path.lineTo(cx - moundHalf, bodyTop);
+
+    // A symmetric dome surrounds the 50 px active button. The dome reaches
+    // y=0 while the button starts at y=7, leaving a visible and even white
+    // halo around the selected destination instead of touching its top edge.
     path.cubicTo(
-      cx - 30,
-      top,
-      cx - 31,
-      5,
+      cx - 24,
+      bodyTop,
+      cx - 24,
+      0,
       cx,
-      5,
+      0,
     );
     path.cubicTo(
-      cx + 31,
-      5,
-      cx + 30,
-      top,
+      cx + 24,
+      0,
+      cx + 24,
+      bodyTop,
       cx + moundHalf,
-      top,
+      bodyTop,
     );
-    path.lineTo(size.width - topCorner, top);
-    path.quadraticBezierTo(size.width, top, size.width, top + topCorner);
+
+    path.lineTo(size.width - topCorner, bodyTop);
+    path.quadraticBezierTo(
+      size.width,
+      bodyTop,
+      size.width,
+      bodyTop + topCorner,
+    );
     path.lineTo(size.width, size.height - bottomCorner);
     path.quadraticBezierTo(
       size.width,
@@ -245,8 +257,8 @@ class _HomiNavBackgroundPainter extends CustomPainter {
     );
     path.lineTo(bottomCorner, size.height);
     path.quadraticBezierTo(0, size.height, 0, size.height - bottomCorner);
-    path.lineTo(0, top + topCorner);
-    path.quadraticBezierTo(0, top, topCorner, top);
+    path.lineTo(0, bodyTop + topCorner);
+    path.quadraticBezierTo(0, bodyTop, topCorner, bodyTop);
     path.close();
     return path;
   }

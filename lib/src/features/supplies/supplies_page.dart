@@ -23,6 +23,12 @@ class SuppliesPage extends StatelessWidget {
   final Future<void> Function(String id, SupplyStatus status) onUpdateStatus;
   final Future<void> Function(String id) onRemove;
 
+  static const _editableStatuses = <SupplyStatus>[
+    SupplyStatus.okay,
+    SupplyStatus.runningLow,
+    SupplyStatus.needToBuy,
+  ];
+
   Future<void> _addSupply(BuildContext context) async {
     final draft = await showModalBottomSheet<_SupplyDraft>(
       context: context,
@@ -46,10 +52,13 @@ class SuppliesPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Remove item?', style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                'Remove item?',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const SizedBox(height: 8),
               Text(
-                'This removes “${item.name}” from your supplies on this device.',
+                '“${item.name}” will be removed from your supplies on this phone.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 18),
@@ -58,7 +67,7 @@ class SuppliesPage extends StatelessWidget {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Keep it'),
+                      child: const Text('Keep item'),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -80,21 +89,32 @@ class SuppliesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final eatSoon = items.where((item) => item.status == SupplyStatus.eatSoon).length;
-    final runningLow = items.where((item) => item.status == SupplyStatus.runningLow).length;
-    final needToBuy = items.where((item) => item.status == SupplyStatus.needToBuy).length;
+    final now = DateTime.now();
+    final useSoon = items
+        .where((item) => item.effectiveStatus(now) == SupplyStatus.eatSoon)
+        .length;
+    final runningLow = items
+        .where((item) => item.effectiveStatus(now) == SupplyStatus.runningLow)
+        .length;
+    final needToBuy = items
+        .where((item) => item.effectiveStatus(now) == SupplyStatus.needToBuy)
+        .length;
 
     return HomiPage(
       title: 'Supplies',
-      subtitle: 'Keep an eye on what is expiring or running low.',
+      subtitle: 'Track expiry dates and the things you are running low on.',
       children: [
         Row(
           children: [
-            Expanded(child: _SummaryChip(label: 'Eat soon', count: eatSoon)),
+            Expanded(child: _SummaryCard(label: 'Use soon', count: useSoon)),
             const SizedBox(width: 8),
-            Expanded(child: _SummaryChip(label: 'Running low', count: runningLow)),
+            Expanded(
+              child: _SummaryCard(label: 'Running low', count: runningLow),
+            ),
             const SizedBox(width: 8),
-            Expanded(child: _SummaryChip(label: 'Need to buy', count: needToBuy)),
+            Expanded(
+              child: _SummaryCard(label: 'Need to buy', count: needToBuy),
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -115,6 +135,7 @@ class SuppliesPage extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 10),
               child: _SupplyCard(
                 item: item,
+                now: now,
                 onStatus: (status) => onUpdateStatus(item.id, status),
                 onDelete: () => _confirmDelete(context, item),
               ),
@@ -125,8 +146,8 @@ class SuppliesPage extends StatelessWidget {
   }
 }
 
-class _SummaryChip extends StatelessWidget {
-  const _SummaryChip({required this.label, required this.count});
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({required this.label, required this.count});
 
   final String label;
   final int count;
@@ -142,7 +163,10 @@ class _SummaryChip extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text('$count', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          Text(
+            '$count',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
           const SizedBox(height: 2),
           Text(
             label,
@@ -160,11 +184,13 @@ class _SummaryChip extends StatelessWidget {
 class _SupplyCard extends StatelessWidget {
   const _SupplyCard({
     required this.item,
+    required this.now,
     required this.onStatus,
     required this.onDelete,
   });
 
   final SupplyItem item;
+  final DateTime now;
   final ValueChanged<SupplyStatus> onStatus;
   final VoidCallback onDelete;
 
@@ -172,6 +198,9 @@ class _SupplyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayStatus = item.effectiveStatus(now);
+    final displayLabel = item.displayStatusLabel(now);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
@@ -184,14 +213,23 @@ class _SupplyCard extends StatelessWidget {
                 color: HomiColors.peach.withValues(alpha: 0.20),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(Icons.inventory_2_outlined, color: HomiColors.coral),
+              child: const Icon(
+                Icons.inventory_2_outlined,
+                color: HomiColors.coral,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                  Text(
+                    item.name,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                   const SizedBox(height: 3),
                   Text(
                     item.expiryDate == null
@@ -200,7 +238,7 @@ class _SupplyCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 8),
-                  _StatusPill(status: item.status),
+                  _StatusLine(status: displayStatus, label: displayLabel),
                 ],
               ),
             ),
@@ -211,11 +249,13 @@ class _SupplyCard extends StatelessWidget {
                   onDelete();
                   return;
                 }
-                final status = SupplyStatus.values.firstWhere((item) => item.name == value);
+                final status = _editableStatuses.firstWhere(
+                  (item) => item.name == value,
+                );
                 onStatus(status);
               },
               itemBuilder: (context) => [
-                ...SupplyStatus.values.map(
+                ..._editableStatuses.map(
                   (status) => PopupMenuItem<String>(
                     value: status.name,
                     child: Text(status.label),
@@ -235,30 +275,39 @@ class _SupplyCard extends StatelessWidget {
   }
 }
 
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.status});
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({required this.status, required this.label});
 
   final SupplyStatus status;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    final background = switch (status) {
-      SupplyStatus.okay => HomiColors.sage.withValues(alpha: 0.28),
-      SupplyStatus.runningLow => HomiColors.peach.withValues(alpha: 0.30),
-      SupplyStatus.needToBuy => HomiColors.coral.withValues(alpha: 0.16),
-      SupplyStatus.eatSoon => HomiColors.peach.withValues(alpha: 0.42),
+    final color = switch (status) {
+      SupplyStatus.okay => const Color(0xFF6F8B65),
+      SupplyStatus.runningLow => const Color(0xFFC57643),
+      SupplyStatus.needToBuy => HomiColors.coral,
+      SupplyStatus.eatSoon => const Color(0xFFD28B43),
     };
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        status.label,
-        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900),
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 7),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -275,12 +324,19 @@ class _EmptySupplyCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Icon(Icons.shopping_bag_outlined, size: 34, color: HomiColors.coral),
+            const Icon(
+              Icons.shopping_bag_outlined,
+              size: 34,
+              color: HomiColors.coral,
+            ),
             const SizedBox(height: 10),
-            const Text('Nothing tracked yet', style: TextStyle(fontWeight: FontWeight.w900)),
+            const Text(
+              'Nothing tracked yet',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
             const SizedBox(height: 4),
             Text(
-              'Add pantry, fridge, medicine or household items when they are useful to keep an eye on.',
+              'Add pantry, fridge, medicine or household items that are useful to keep an eye on.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
@@ -373,10 +429,13 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Add a supply', style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              'Add a supply',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
             const SizedBox(height: 6),
             Text(
-              'Track only the things that are useful to remember.',
+              'Track the items that are useful to remember, including optional expiry dates.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
@@ -397,7 +456,12 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
               value: _category,
               decoration: const InputDecoration(labelText: 'Where is it?'),
               items: _categories
-                  .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                  .map(
+                    (value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(value),
+                    ),
+                  )
                   .toList(growable: false),
               onChanged: (value) {
                 if (value != null) setState(() => _category = value);
@@ -406,8 +470,8 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
             const SizedBox(height: 12),
             DropdownButtonFormField<SupplyStatus>(
               value: _status,
-              decoration: const InputDecoration(labelText: 'Status'),
-              items: SupplyStatus.values
+              decoration: const InputDecoration(labelText: 'Stock status'),
+              items: SuppliesPage._editableStatuses
                   .map(
                     (value) => DropdownMenuItem(
                       value: value,

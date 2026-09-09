@@ -9,6 +9,8 @@ class HouseholdPeopleService extends TrustedPeopleService {
 
   @override
   Stream<List<TrustedConnection>> watchConnections() {
+    final baseConnections = super.watchConnections();
+    final basePreferences = super.watchPreferences();
     late final StreamController<List<TrustedConnection>> controller;
     StreamSubscription<List<TrustedConnection>>? connectionSub;
     StreamSubscription<Map<String, TrustedPersonPreference>>? preferenceSub;
@@ -31,14 +33,14 @@ class HouseholdPeopleService extends TrustedPeopleService {
 
     controller = StreamController<List<TrustedConnection>>(
       onListen: () {
-        connectionSub = super.watchConnections().listen(
+        connectionSub = baseConnections.listen(
           (value) {
             connections = value;
             emit();
           },
           onError: controller.addError,
         );
-        preferenceSub = super.watchPreferences().listen(
+        preferenceSub = basePreferences.listen(
           (value) {
             preferences = value;
             emit();

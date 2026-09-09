@@ -5,6 +5,7 @@ enum RoutineRepeat {
   daily,
   weekdays,
   weekly,
+  biweekly,
   monthly,
 }
 
@@ -19,6 +20,8 @@ extension RoutineRepeatLabel on RoutineRepeat {
         return 'Weekdays';
       case RoutineRepeat.weekly:
         return 'Weekly';
+      case RoutineRepeat.biweekly:
+        return 'Bi-weekly';
       case RoutineRepeat.monthly:
         return 'Monthly';
     }
@@ -102,6 +105,9 @@ class RoutineItem {
 
   String get frequency => repeat.label;
 
+  String get durationLabel =>
+      estimatedMinutes >= 60 ? '60+ min' : '$estimatedMinutes min';
+
   bool isDue(DateTime now) {
     if (repeat == RoutineRepeat.once) return completions.isEmpty;
     final due = nextDueAt ?? initialDueAt();
@@ -109,6 +115,10 @@ class RoutineItem {
   }
 
   DateTime initialDueAt() {
+    if (repeat == RoutineRepeat.biweekly) {
+      return _nextBiweekly(createdAt);
+    }
+
     final base = DateTime(
       createdAt.year,
       createdAt.month,
@@ -139,6 +149,8 @@ class RoutineItem {
       case RoutineRepeat.weekly:
         final days = repeatDays.isEmpty ? <int>[createdAt.weekday] : repeatDays;
         return _nextForWeekdays(start, days);
+      case RoutineRepeat.biweekly:
+        return _nextBiweekly(start);
       case RoutineRepeat.monthly:
         return _nextMonthly(start);
     }
@@ -181,6 +193,45 @@ class RoutineItem {
     );
   }
 
+  DateTime _biweeklyAnchor() {
+    final wantedDay = repeatDays.isEmpty ? createdAt.weekday : repeatDays.first;
+    for (var offset = 0; offset < 8; offset++) {
+      final day = createdAt.add(Duration(days: offset));
+      if (day.weekday != wantedDay) continue;
+      final candidate = DateTime(
+        day.year,
+        day.month,
+        day.day,
+        dueHour,
+        dueMinute,
+      );
+      if (!candidate.isBefore(createdAt)) return candidate;
+    }
+    final fallback = createdAt.add(const Duration(days: 7));
+    return DateTime(
+      fallback.year,
+      fallback.month,
+      fallback.day,
+      dueHour,
+      dueMinute,
+    );
+  }
+
+  DateTime _nextBiweekly(DateTime start) {
+    final anchor = _biweeklyAnchor();
+    if (!anchor.isBefore(start)) return anchor;
+
+    const period = Duration(days: 14);
+    final elapsedMinutes = start.difference(anchor).inMinutes;
+    final periodMinutes = period.inMinutes;
+    final periods = (elapsedMinutes / periodMinutes).floor();
+    var candidate = anchor.add(Duration(days: periods * 14));
+    while (candidate.isBefore(start)) {
+      candidate = candidate.add(period);
+    }
+    return candidate;
+  }
+
   DateTime _nextMonthly(DateTime start) {
     final targetDay = (dayOfMonth ?? createdAt.day).clamp(1, 31).toInt();
     for (var addMonths = 0; addMonths < 14; addMonths++) {
@@ -205,6 +256,8 @@ class RoutineItem {
       case RoutineRepeat.weekly:
         final days = repeatDays.isEmpty ? <int>[createdAt.weekday] : repeatDays;
         return _nextForWeekdays(candidate, days);
+      case RoutineRepeat.biweekly:
+        return _nextBiweekly(candidate);
       case RoutineRepeat.monthly:
         return _nextMonthly(candidate);
     }
@@ -381,6 +434,10 @@ class RoutineItem {
         return RoutineRepeat.weekdays;
       case 'weekly':
         return RoutineRepeat.weekly;
+      case 'bi-weekly':
+      case 'biweekly':
+      case 'fortnightly':
+        return RoutineRepeat.biweekly;
       case 'monthly':
         return RoutineRepeat.monthly;
       default:

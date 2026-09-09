@@ -34,14 +34,16 @@ A person marked **Friend · location only**:
 
 - may receive location only when the owner separately enables a location share;
 - does not receive access to Home, Supplies, Routines or other household records;
-- is not offered as a household task assignee;
+- is not offered as a household task assignee or household-task viewer;
 - can be relabelled later without changing location consent automatically.
 
 This supports the social/check-in value of Life360-style location sharing without treating every trusted person as a member of the same home.
 
 ### Household people
 
-A connected person may be privately marked **Household** when they genuinely participate in the user's home context. Household status can make that person eligible for narrowly scoped collaboration such as an assigned one-off task.
+A connected person may be privately marked **Household** when they genuinely participate in the user's home context. Household status can make that person eligible for narrowly scoped collaboration such as one-off Tasks.
+
+A household Task may be visible to the creator's chosen Household people so everybody can see who it is assigned to and whether it was completed. A Task explicitly assigned to **Me** remains private/local. Household Task visibility does not grant Home, Routine, Supply or location access.
 
 Household status still does not automatically share location, and it is not yet full Home/Routine/Supply membership.
 
@@ -66,11 +68,11 @@ A viewer can read `locations/{ownerUid}` only when:
 
 Removing a connection therefore prevents the old share document from continuing to authorize location access.
 
-### Assigned tasks do not broaden location or Home access
+### Household Tasks do not broaden location or Home access
 
-`sharedTasks/{taskId}` is a narrowly scoped collaboration document between creator and assignee. Creating one requires an accepted connection and the creator's private Household preference for that assignee.
+`sharedTasks/{taskId}` is a narrowly scoped one-off Task document. Its `memberUids` visibility list is built from people the creator explicitly marked Household. A specific non-self assignee must be an accepted Household connection. Tasks assigned to the creator are not stored as shared household Tasks.
 
-It does not grant access to Home, Supplies, Routines or location.
+The Task contains only Task data and does not grant access to Home, Supplies, Routines or location.
 
 ## Current location data
 
@@ -85,11 +87,13 @@ Homi currently works with latest-state data:
 
 Latest location/battery is treated as convenience/safety context, not emergency-grade telemetry.
 
-## Map markers and details
+## Map markers, focus and details
 
 Authorized people can appear on the map with their profile picture, falling back to initials when no image is available.
 
-Tapping a marker may show:
+People has an embedded interactive map plus a full-screen map. The full map allows normal panning/zooming and includes person focus chips so the user can intentionally centre the map on a specific trusted person rather than treating every location as one undifferentiated map view.
+
+Selecting a person or marker may show:
 
 - address
 - coordinates
@@ -97,10 +101,16 @@ Tapping a marker may show:
 - accuracy
 - last update
 - individual copy controls for address and coordinates
-- Copy all
+- **Copy all**
 - open coordinates in Google Maps
 
-The UI should always show freshness so stale location/battery data is not presented as live.
+The UI must always show freshness so stale location/battery data is not presented as live.
+
+## Returning to People / cached state
+
+People reuses the app-level location service, cached latest snapshot and kept-alive page state. Returning to the tab should therefore show the last known live/current state immediately rather than briefly reverting to an uninitialised state while an async refresh completes.
+
+A trusted-person sync failure must not erase the last successfully received locations. The UI should distinguish a secure-sync/unavailable failure from having no connections and offer a retry action without exposing raw Firestore error strings.
 
 ## Background location and battery discipline
 
@@ -111,7 +121,7 @@ The current Android strategy uses:
 - a foreground location service while live sharing is active;
 - visible persistent notification;
 - medium location accuracy rather than maximum accuracy;
-- a movement threshold;
+- a 100 m movement threshold;
 - spaced update requests rather than continuous maximum-frequency GPS.
 
 This is intended to reduce battery cost, but exact battery behavior must be measured on real devices.

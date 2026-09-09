@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../theme/homi_theme.dart';
+import '../../widgets/google_provider_mark.dart';
 import '../../widgets/homi_brand.dart';
 
 class AuthPage extends StatefulWidget {
@@ -47,7 +48,11 @@ class _AuthPageState extends State<AuthPage> {
     } on FirebaseAuthException catch (error) {
       if (mounted) setState(() => _error = _friendlyFirebaseError(error));
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString().replaceFirst('Bad state: ', ''));
+      if (mounted) {
+        setState(
+          () => _error = error.toString().replaceFirst('Bad state: ', ''),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -70,16 +75,33 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   Future<void> _googleAction() async {
-    await _run(() async {
-      final result = await widget.authService.signInWithGoogle();
-      if (result == null) throw StateError('Google sign-in was cancelled.');
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
     });
+    try {
+      final result = await widget.authService.signInWithGoogle();
+      if (result != null && mounted) widget.onDone();
+    } on FirebaseAuthException catch (error) {
+      if (mounted) setState(() => _error = _friendlyFirebaseError(error));
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _error = error.toString().replaceFirst('Bad state: ', ''),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _resetPassword() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) {
-      setState(() => _error = 'Enter your email first, then tap reset password again.');
+      setState(
+        () => _error = 'Enter your email first, then tap reset password again.',
+      );
       return;
     }
     setState(() {
@@ -92,8 +114,8 @@ class _AuthPageState extends State<AuthPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Password reset email sent.')),
       );
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+    } on FirebaseAuthException catch (error) {
+      if (mounted) setState(() => _error = _friendlyFirebaseError(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -113,11 +135,14 @@ class _AuthPageState extends State<AuthPage> {
                 children: [
                   const HomiLogo(width: 220),
                   const SizedBox(height: 30),
-                  Text(_create ? 'Create your Homi account' : 'Welcome back', style: Theme.of(context).textTheme.displaySmall),
+                  Text(
+                    _create ? 'Create your Homi account' : 'Welcome back',
+                    style: Theme.of(context).textTheme.displaySmall,
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     _create
-                        ? 'Use an account when you want shared home features, backup and trusted-person location.'
+                        ? 'Use an account for shared home features, backup and trusted-person location.'
                         : 'Sign in to bring your shared Homi data back to this phone.',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
@@ -129,7 +154,9 @@ class _AuthPageState extends State<AuthPage> {
                         color: HomiColors.peach.withValues(alpha: 0.25),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: const Text('Cloud sign-in is not configured on this Android build yet. You can still continue locally.'),
+                      child: const Text(
+                        'Cloud sign-in is temporarily unavailable. You can keep using Homi on this phone.',
+                      ),
                     ),
                   ],
                   const SizedBox(height: 24),
@@ -143,7 +170,9 @@ class _AuthPageState extends State<AuthPage> {
                   TextField(
                     controller: _passwordController,
                     obscureText: true,
-                    autofillHints: _create ? const [AutofillHints.newPassword] : const [AutofillHints.password],
+                    autofillHints: _create
+                        ? const [AutofillHints.newPassword]
+                        : const [AutofillHints.password],
                     onSubmitted: (_) => _emailAction(),
                     decoration: InputDecoration(
                       labelText: 'Password',
@@ -162,27 +191,41 @@ class _AuthPageState extends State<AuthPage> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: _busy || !widget.authService.firebaseReady ? null : _emailAction,
-                      child: Text(_busy ? 'Please wait…' : (_create ? 'Create account' : 'Sign in')),
+                      onPressed: _busy || !widget.authService.firebaseReady
+                          ? null
+                          : _emailAction,
+                      child: Text(
+                        _busy
+                            ? 'Please wait…'
+                            : (_create ? 'Create account' : 'Sign in'),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: _busy || !widget.authService.firebaseReady ? null : _googleAction,
-                      icon: const Icon(Icons.g_mobiledata_rounded, size: 26),
+                      onPressed: _busy || !widget.authService.firebaseReady
+                          ? null
+                          : _googleAction,
+                      icon: const GoogleProviderMark(size: 20),
                       label: const Text('Continue with Google'),
                     ),
                   ),
                   const SizedBox(height: 10),
                   Center(
                     child: TextButton(
-                      onPressed: _busy ? null : () => setState(() {
-                        _create = !_create;
-                        _error = null;
-                      }),
-                      child: Text(_create ? 'Already have an account? Sign in' : 'New to Homi? Create account'),
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() {
+                              _create = !_create;
+                              _error = null;
+                            }),
+                      child: Text(
+                        _create
+                            ? 'Already have an account? Sign in'
+                            : 'New to Homi? Create account',
+                      ),
                     ),
                   ),
                   const Divider(height: 30),
@@ -216,6 +259,8 @@ class _AuthPageState extends State<AuthPage> {
         return 'Enter a valid email address.';
       case 'network-request-failed':
         return 'Homi could not reach the internet. Try again when you are connected.';
+      case 'too-many-requests':
+        return 'Too many attempts. Wait a moment, then try again.';
       default:
         return error.message ?? 'Something went wrong. Please try again.';
     }

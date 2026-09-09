@@ -453,7 +453,7 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _category,
+              initialValue: _category,
               decoration: const InputDecoration(labelText: 'Where is it?'),
               items: _categories
                   .map(
@@ -469,7 +469,7 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<SupplyStatus>(
-              value: _status,
+              initialValue: _status,
               decoration: const InputDecoration(labelText: 'Stock status'),
               items: SuppliesPage._editableStatuses
                   .map(

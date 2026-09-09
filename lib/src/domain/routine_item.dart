@@ -173,7 +173,7 @@ class RoutineItem {
   }
 
   DateTime _nextMonthly(DateTime start) {
-    final targetDay = (dayOfMonth ?? createdAt.day).clamp(1, 31);
+    final targetDay = (dayOfMonth ?? createdAt.day).clamp(1, 31).toInt();
     for (var addMonths = 0; addMonths < 14; addMonths++) {
       final monthIndex = (start.month - 1) + addMonths;
       final year = start.year + (monthIndex ~/ 12);
@@ -290,15 +290,23 @@ class RoutineItem {
 
     final rawDays = json['repeatDays'];
     final days = rawDays is List
-        ? rawDays.whereType<num>().map((value) => value.toInt()).where((day) => day >= 1 && day <= 7).toList()
+        ? rawDays
+            .whereType<num>()
+            .map((value) => value.toInt())
+            .where((day) => day >= 1 && day <= 7)
+            .toList()
         : <int>[];
     final dueHourRaw = json['dueHour'];
     final dueMinuteRaw = json['dueMinute'];
-    final dueHour = dueHourRaw is num ? dueHourRaw.toInt().clamp(0, 23) : 9;
-    final dueMinute = dueMinuteRaw is num ? dueMinuteRaw.toInt().clamp(0, 59) : 0;
+    final dueHour = dueHourRaw is num
+        ? dueHourRaw.toInt().clamp(0, 23).toInt()
+        : 9;
+    final dueMinute = dueMinuteRaw is num
+        ? dueMinuteRaw.toInt().clamp(0, 59).toInt()
+        : 0;
     final dayOfMonthRaw = json['dayOfMonth'];
     final dayOfMonth = dayOfMonthRaw is num
-        ? dayOfMonthRaw.toInt().clamp(1, 31)
+        ? dayOfMonthRaw.toInt().clamp(1, 31).toInt()
         : null;
 
     final rawCompletions = json['completions'];
@@ -342,7 +350,9 @@ class RoutineItem {
 
     if (item.nextDueAt != null || !item.repeats) return item;
     if (item.lastCompletion != null) {
-      return item.copyWith(nextDueAt: item.nextOccurrenceAfter(item.lastCompletion!.at));
+      return item.copyWith(
+        nextDueAt: item.nextOccurrenceAfter(item.lastCompletion!.at),
+      );
     }
     return item.copyWith(nextDueAt: item.initialDueAt());
   }

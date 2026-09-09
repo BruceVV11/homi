@@ -8,6 +8,8 @@ import '../../domain/supply_item.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/homi_page.dart';
 
+enum QuickAddDestination { task, routine, supply, home }
+
 class TodayPage extends StatelessWidget {
   const TodayPage({
     required this.homeName,
@@ -16,12 +18,15 @@ class TodayPage extends StatelessWidget {
     required this.routines,
     required this.supplies,
     required this.homeThings,
-    required this.onAddQuickItem,
     required this.onRemoveQuickItem,
     required this.onToggleRoutine,
     required this.onOpenRoutines,
     required this.onOpenHome,
     required this.onOpenSupplies,
+    required this.onQuickAddTask,
+    required this.onQuickAddRoutine,
+    required this.onQuickAddSupply,
+    required this.onQuickAddHome,
     super.key,
   });
 
@@ -31,22 +36,32 @@ class TodayPage extends StatelessWidget {
   final List<RoutineItem> routines;
   final List<SupplyItem> supplies;
   final List<HomeThing> homeThings;
-  final Future<void> Function(String value) onAddQuickItem;
   final Future<void> Function(String value) onRemoveQuickItem;
   final Future<void> Function(String id) onToggleRoutine;
   final VoidCallback onOpenRoutines;
   final VoidCallback onOpenHome;
   final VoidCallback onOpenSupplies;
+  final VoidCallback onQuickAddTask;
+  final VoidCallback onQuickAddRoutine;
+  final VoidCallback onQuickAddSupply;
+  final VoidCallback onQuickAddHome;
 
   Future<void> _quickAdd(BuildContext context) async {
-    final value = await showModalBottomSheet<String>(
+    final destination = await showModalBottomSheet<QuickAddDestination>(
       context: context,
-      isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => const _QuickAddSheet(),
     );
-    if (value != null && value.trim().isNotEmpty) {
-      await onAddQuickItem(value);
+    if (destination == null) return;
+    switch (destination) {
+      case QuickAddDestination.task:
+        onQuickAddTask();
+      case QuickAddDestination.routine:
+        onQuickAddRoutine();
+      case QuickAddDestination.supply:
+        onQuickAddSupply();
+      case QuickAddDestination.home:
+        onQuickAddHome();
     }
   }
 
@@ -227,7 +242,7 @@ class TodayPage extends StatelessWidget {
             icon: Icons.check_circle_outline_rounded,
             title: 'Nothing needs attention right now',
             detail:
-                'Open tasks, due routines, supplies, maintenance and quick reminders will appear here.',
+                'Open tasks, due routines, supplies, maintenance and saved reminders will appear here.',
           )
         else ...[
           if (openTasks > 0) ...[
@@ -278,10 +293,12 @@ class TodayPage extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
                   child: Row(
                     children: [
-                      const Icon(Icons.push_pin_outlined, color: HomiColors.coral),
+                      const Icon(Icons.push_pin_outlined,
+                          color: HomiColors.coral),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(item, style: const TextStyle(fontWeight: FontWeight.w800)),
+                        child: Text(item,
+                            style: const TextStyle(fontWeight: FontWeight.w800)),
                       ),
                       IconButton(
                         tooltip: 'Mark done',
@@ -335,64 +352,113 @@ class TodayPage extends StatelessWidget {
   }
 }
 
-class _QuickAddSheet extends StatefulWidget {
+class _QuickAddSheet extends StatelessWidget {
   const _QuickAddSheet();
-
-  @override
-  State<_QuickAddSheet> createState() => _QuickAddSheetState();
-}
-
-class _QuickAddSheetState extends State<_QuickAddSheet> {
-  final TextEditingController _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit() => Navigator.pop(context, _controller.text);
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          4,
-          20,
-          20 + MediaQuery.viewInsetsOf(context).bottom,
-        ),
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Quick add', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
-              'Save a reminder now and organise it later if you need to.',
+              'Choose what you want to add and Homi will take you to the right place.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
-            TextField(
-              controller: _controller,
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _submit(),
-              decoration: const InputDecoration(
-                labelText: 'Reminder',
-                hintText: 'e.g. Buy dog food',
-              ),
+            _QuickAddOption(
+              icon: Icons.task_alt_outlined,
+              title: 'Task',
+              detail: 'A one-off job or reminder',
+              onTap: () => Navigator.pop(context, QuickAddDestination.task),
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _submit,
-                child: const Text('Add reminder'),
-              ),
+            _QuickAddOption(
+              icon: Icons.repeat_rounded,
+              title: 'Routine',
+              detail: 'Something that repeats',
+              onTap: () => Navigator.pop(context, QuickAddDestination.routine),
+            ),
+            _QuickAddOption(
+              icon: Icons.inventory_2_outlined,
+              title: 'Supply',
+              detail: 'Track stock or an expiry date',
+              onTap: () => Navigator.pop(context, QuickAddDestination.supply),
+            ),
+            _QuickAddOption(
+              icon: Icons.home_repair_service_outlined,
+              title: 'Home',
+              detail: 'Add an item, reading or home record',
+              onTap: () => Navigator.pop(context, QuickAddDestination.home),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickAddOption extends StatelessWidget {
+  const _QuickAddOption({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: HomiColors.border),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: HomiColors.peach.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: HomiColors.coral),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 2),
+                      Text(detail, style: Theme.of(context).textTheme.bodyMedium),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -422,7 +488,8 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Text(label, style: Theme.of(context).textTheme.titleLarge)),
+        Expanded(
+            child: Text(label, style: Theme.of(context).textTheme.titleLarge)),
         TextButton.icon(
           onPressed: onAction,
           icon: const Icon(Icons.info_outline_rounded, size: 17),
@@ -488,7 +555,11 @@ class _AttentionCard extends StatelessWidget {
 }
 
 class _QuickResetTaskRow extends StatelessWidget {
-  const _QuickResetTaskRow({required this.task, required this.completed, required this.onDone});
+  const _QuickResetTaskRow({
+    required this.task,
+    required this.completed,
+    required this.onDone,
+  });
   final QuickResetTask task;
   final bool completed;
   final Future<void> Function() onDone;
@@ -512,9 +583,13 @@ class _QuickResetTaskRow extends StatelessWidget {
               child: Icon(
                 completed
                     ? Icons.check_rounded
-                    : (task.isSavedRoutine ? Icons.repeat_rounded : Icons.auto_awesome_outlined),
+                    : (task.isSavedRoutine
+                        ? Icons.repeat_rounded
+                        : Icons.auto_awesome_outlined),
                 size: 20,
-                color: completed ? const Color(0xFF6F8B65) : HomiColors.coral,
+                color: completed
+                    ? const Color(0xFF6F8B65)
+                    : HomiColors.coral,
               ),
             ),
             const SizedBox(width: 12),
@@ -526,7 +601,8 @@ class _QuickResetTaskRow extends StatelessWidget {
                     task.title,
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
-                      decoration: completed ? TextDecoration.lineThrough : null,
+                      decoration:
+                          completed ? TextDecoration.lineThrough : null,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -541,7 +617,9 @@ class _QuickResetTaskRow extends StatelessWidget {
               tooltip: completed ? 'Done' : 'Mark done',
               onPressed: completed ? null : () => onDone(),
               icon: Icon(
-                completed ? Icons.check_circle_rounded : Icons.check_circle_outline_rounded,
+                completed
+                    ? Icons.check_circle_rounded
+                    : Icons.check_circle_outline_rounded,
               ),
             ),
           ],
@@ -552,7 +630,11 @@ class _QuickResetTaskRow extends StatelessWidget {
 }
 
 class _TimeCard extends StatelessWidget {
-  const _TimeCard({required this.minutes, required this.detail, required this.onTap});
+  const _TimeCard({
+    required this.minutes,
+    required this.detail,
+    required this.onTap,
+  });
   final int minutes;
   final String detail;
   final VoidCallback onTap;
@@ -568,7 +650,8 @@ class _TimeCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('$minutes minutes', style: const TextStyle(fontWeight: FontWeight.w900)),
+              Text('$minutes minutes',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
               const SizedBox(height: 4),
               Text(detail, style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 14),

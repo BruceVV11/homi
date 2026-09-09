@@ -1,10 +1,9 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -49,9 +48,13 @@ class _PeoplePageState extends State<PeoplePage> {
 
   StreamSubscription<LocationStatusSnapshot>? _selfSubscription;
   StreamSubscription<List<TrustedConnection>>? _connectionSubscription;
+  StreamSubscription<Map<String, TrustedPersonPreference>>?
+      _preferenceSubscription;
   GoogleMapController? _mapController;
   LocationStatusSnapshot? _selfSnapshot;
   List<TrustedConnection> _connections = const <TrustedConnection>[];
+  Map<String, TrustedPersonPreference> _preferences =
+      const <String, TrustedPersonPreference>{};
   HomiIdentity? _identity;
   String? _error;
   bool _busy = false;
@@ -77,7 +80,7 @@ class _PeoplePageState extends State<PeoplePage> {
       setState(() => _selfSnapshot = snapshot);
       _moveMapTo(snapshot.latitude, snapshot.longitude);
     });
-    _initialise();
+    unawaited(_initialise());
   }
 
   Future<void> _initialise() async {
@@ -89,35 +92,46 @@ class _PeoplePageState extends State<PeoplePage> {
       final refreshed = await widget.locationService.refreshIfAlreadyAllowed();
       if (mounted && refreshed != null) setState(() => _selfSnapshot = refreshed);
     } catch (_) {
-      // Existing cached status remains useful if a passive refresh fails.
+      // A cached location still gives the map a useful starting point.
     }
 
     try {
-      final resumed = await widget.locationService.resumeContinuousSharingIfEnabled();
+      final resumed =
+          await widget.locationService.resumeContinuousSharingIfEnabled();
       if (mounted) setState(() => _liveSharingActive = resumed);
     } catch (_) {
-      // The FAQ/permission controls explain how to restore sharing.
+      // Live sharing never prompts during app start. The controls below explain
+      // how to restore a missing permission.
     }
 
-    if (_user != null) {
-      try {
-        final identity = await widget.trustedPeopleService.ensureIdentity();
-        if (mounted) setState(() => _identity = identity);
-      } catch (error) {
-        if (mounted) setState(() => _error = _friendly(error));
-      }
-      _connectionSubscription = widget.trustedPeopleService
-          .watchConnections()
-          .listen(_syncConnections, onError: (Object error) {
-        if (mounted) setState(() => _error = _friendly(error));
-      });
+    if (_user == null) return;
+
+    try {
+      final identity = await widget.trustedPeopleService.ensureIdentity();
+      if (mounted) setState(() => _identity = identity);
+    } catch (error) {
+      if (mounted) setState(() => _error = _friendly(error));
     }
+
+    _connectionSubscription = widget.trustedPeopleService
+        .watchConnections()
+        .listen(_syncConnections, onError: (Object error) {
+      if (mounted) setState(() => _error = _friendly(error));
+    });
+    _preferenceSubscription = widget.trustedPeopleService
+        .watchPreferences()
+        .listen((value) {
+      if (mounted) setState(() => _preferences = value);
+    }, onError: (Object error) {
+      if (mounted) setState(() => _error = _friendly(error));
+    });
   }
 
   @override
   void dispose() {
     _selfSubscription?.cancel();
     _connectionSubscription?.cancel();
+    _preferenceSubscription?.cancel();
     for (final subscription in _shareSubscriptions.values) {
       subscription.cancel();
     }
@@ -147,10 +161,12 @@ class _PeoplePageState extends State<PeoplePage> {
 
     for (final connection in connections.where((item) => item.accepted)) {
       final otherUid = connection.otherUid(currentUid);
-      _ensureMarker(
-        otherUid,
-        connection.otherName(currentUid),
-        connection.otherPhotoUrl(currentUid),
+      unawaited(
+        _ensureMarker(
+          otherUid,
+          connection.otherName(currentUid),
+          connection.otherPhotoUrl(currentUid),
+        ),
       );
       _shareSubscriptions.putIfAbsent(
         otherUid,
@@ -170,7 +186,12 @@ class _PeoplePageState extends State<PeoplePage> {
       );
     }
 
-    if (mounted) setState(() => _connections = connections);
+    if (mounted) {
+      setState(() {
+        _connections = connections;
+        _error = null;
+      });
+    }
   }
 
   void _listenToLocation(String uid) {
@@ -216,9 +237,10 @@ class _PeoplePageState extends State<PeoplePage> {
       if (mounted) setState(() => _liveSharingActive = true);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = _friendly(error));
-      final needsSettings = _friendly(error).contains('Allow all the time') ||
-          _friendly(error).contains('Android Settings');
+      final message = _friendly(error);
+      setState(() => _error = message);
+      final needsSettings = message.contains('Allow all the time') ||
+          message.contains('Android Settings');
       if (needsSettings) {
         final open = await showHomiConfirmSheet(
           context,
@@ -246,70 +268,44 @@ class _PeoplePageState extends State<PeoplePage> {
       widget.onSignIn();
       return;
     }
-    final controller = TextEditingController();
-    String? error;
-    await showModalBottomSheet<void>(
+    final sent = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              4,
-              20,
-              20 + MediaQuery.viewInsetsOf(context).bottom,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Connect with someone',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Enter their 6-character Homi code. Connecting does not turn location sharing on.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.characters,
-                  maxLength: 6,
-                  decoration: InputDecoration(
-                    labelText: 'Homi code',
-                    hintText: 'ABC123',
-                    errorText: error,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () async {
-                      try {
-                        await widget.trustedPeopleService.connectWithCode(
-                          controller.text,
-                        );
-                        if (sheetContext.mounted) Navigator.pop(sheetContext);
-                      } catch (failure) {
-                        setSheetState(() => error = _friendly(failure));
-                      }
-                    },
-                    child: const Text('Send connection request'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      builder: (context) => _ConnectPersonSheet(
+        service: widget.trustedPeopleService,
       ),
     );
-    controller.dispose();
+    if (sent == true && mounted) {
+      setState(() => _error = null);
+    }
+  }
+
+  Future<void> _editPreference(TrustedConnection connection) async {
+    final currentUid = _user?.uid;
+    if (currentUid == null) return;
+    final otherUid = connection.otherUid(currentUid);
+    final current =
+        _preferences[otherUid] ?? TrustedPersonPreference.fallback;
+    final result = await showModalBottomSheet<TrustedPersonPreference>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _RelationshipSheet(
+        name: connection.otherName(currentUid),
+        initial: current,
+      ),
+    );
+    if (result == null) return;
+    try {
+      await widget.trustedPeopleService.setPreference(
+        otherUid: otherUid,
+        relationship: result.relationship,
+        scope: result.scope,
+      );
+    } catch (error) {
+      if (mounted) setState(() => _error = _friendly(error));
+    }
   }
 
   void _showLocationFaq() {
@@ -335,10 +331,16 @@ class _PeoplePageState extends State<PeoplePage> {
                     'Connecting with someone and sharing your location are separate choices. A connection never starts tracking by itself.',
               ),
               const _FaqPoint(
+                icon: Icons.people_outline_rounded,
+                title: 'Friends can stay location-only',
+                text:
+                    'You can label a person as a friend and keep the connection location-only. That does not give them access to Home, supplies, routines or other household records.',
+              ),
+              const _FaqPoint(
                 icon: Icons.notifications_active_outlined,
                 title: 'Background sharing stays visible',
                 text:
-                    'When live sharing is on, Android keeps a Homi location notification visible. This is what allows updates to continue while you use other apps.',
+                    'When live sharing is on, Android keeps a Homi location notification visible. This allows updates to continue while you use other apps.',
               ),
               const _FaqPoint(
                 icon: Icons.battery_saver_outlined,
@@ -405,7 +407,7 @@ class _PeoplePageState extends State<PeoplePage> {
         if (address.isEmpty) address = 'Address unavailable';
       }
     } catch (_) {
-      // Coordinates remain available even when reverse geocoding fails.
+      // Coordinates remain available if reverse geocoding is unavailable.
     }
     if (!mounted) return;
 
@@ -415,103 +417,19 @@ class _PeoplePageState extends State<PeoplePage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  _PersonAvatar(name: name, photoUrl: photoUrl, size: 54),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          updatedAt == null
-                              ? 'Latest shared location'
-                              : 'Updated ${DateFormat('d MMM · HH:mm').format(updatedAt)}',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    isCharging
-                        ? Icons.battery_charging_full_rounded
-                        : Icons.battery_std_rounded,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '$batteryPercent%',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _DetailBlock(
-                icon: Icons.location_on_outlined,
-                title: address,
-                subtitle: 'Accuracy about ${accuracyMeters.round()} m',
-              ),
-              const SizedBox(height: 10),
-              _DetailBlock(
-                icon: Icons.pin_drop_outlined,
-                title: coordinates,
-                subtitle: 'Coordinates',
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        await Clipboard.setData(
-                          ClipboardData(text: '$address\n$coordinates'),
-                        );
-                        if (!sheetContext.mounted) return;
-                        ScaffoldMessenger.of(sheetContext).showSnackBar(
-                          const SnackBar(content: Text('Location copied')),
-                        );
-                      },
-                      icon: const Icon(Icons.copy_rounded),
-                      label: const Text('Copy'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => _openGoogleMaps(latitude, longitude),
-                      icon: const Icon(Icons.map_outlined),
-                      label: const Text('Google Maps'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+      builder: (context) => _LocationDetailsSheet(
+        name: name,
+        photoUrl: photoUrl,
+        address: address,
+        coordinates: coordinates,
+        latitude: latitude,
+        longitude: longitude,
+        batteryPercent: batteryPercent,
+        isCharging: isCharging,
+        updatedAt: updatedAt,
+        accuracyMeters: accuracyMeters,
       ),
     );
-  }
-
-  Future<void> _openGoogleMaps(double latitude, double longitude) async {
-    final uri = Uri.https(
-      'www.google.com',
-      '/maps/search/',
-      <String, String>{
-        'api': '1',
-        'query': '$latitude,$longitude',
-      },
-    );
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   Future<void> _ensureMarker(
@@ -537,16 +455,8 @@ class _PeoplePageState extends State<PeoplePage> {
     const outerRadius = pixelSize / 2.0;
     const innerRadius = 49.0;
 
-    canvas.drawCircle(
-      center,
-      outerRadius,
-      Paint()..color = HomiColors.coral,
-    );
-    canvas.drawCircle(
-      center,
-      innerRadius,
-      Paint()..color = Colors.white,
-    );
+    canvas.drawCircle(center, outerRadius, Paint()..color = HomiColors.coral);
+    canvas.drawCircle(center, innerRadius, Paint()..color = Colors.white);
 
     ui.Image? photo;
     if (photoUrl != null && photoUrl.isNotEmpty) {
@@ -565,7 +475,8 @@ class _PeoplePageState extends State<PeoplePage> {
     }
 
     if (photo != null) {
-      final clipPath = Path()..addOval(Rect.fromCircle(center: center, radius: 47));
+      final clipPath = Path()
+        ..addOval(Rect.fromCircle(center: center, radius: 47));
       canvas.save();
       canvas.clipPath(clipPath);
       paintImage(
@@ -576,11 +487,7 @@ class _PeoplePageState extends State<PeoplePage> {
       );
       canvas.restore();
     } else {
-      canvas.drawCircle(
-        center,
-        47,
-        Paint()..color = HomiColors.cream,
-      );
+      canvas.drawCircle(center, 47, Paint()..color = HomiColors.cream);
       final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
       final painter = TextPainter(
         text: TextSpan(
@@ -591,7 +498,7 @@ class _PeoplePageState extends State<PeoplePage> {
             color: HomiColors.slate,
           ),
         ),
-        textDirection: TextDirection.ltr,
+        textDirection: ui.TextDirection.ltr,
       )..layout();
       painter.paint(
         canvas,
@@ -604,9 +511,9 @@ class _PeoplePageState extends State<PeoplePage> {
 
     final image = await recorder.endRecording().toImage(pixelSize, pixelSize);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    final png = bytes?.buffer.asUint8List() ?? Uint8List(0);
+    if (bytes == null) return BitmapDescriptor.defaultMarker;
     return BitmapDescriptor.bytes(
-      png,
+      bytes.buffer.asUint8List(),
       width: logicalSize,
       height: logicalSize,
     );
@@ -685,9 +592,7 @@ class _PeoplePageState extends State<PeoplePage> {
     final outgoing = currentUid == null
         ? const <TrustedConnection>[]
         : _connections
-            .where(
-              (item) => item.pending && item.initiatorUid == currentUid,
-            )
+            .where((item) => item.pending && item.initiatorUid == currentUid)
             .toList(growable: false);
     final accepted = _connections.where((item) => item.accepted).toList();
     final initialTarget = _selfSnapshot == null
@@ -752,18 +657,7 @@ class _PeoplePageState extends State<PeoplePage> {
         ),
         if (_error != null) ...[
           const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(13),
-            decoration: BoxDecoration(
-              color: HomiColors.peach.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Text(
-              _error!,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
+          _PeopleNotice(message: _error!),
         ],
         const SizedBox(height: 4),
         GestureDetector(
@@ -781,7 +675,7 @@ class _PeoplePageState extends State<PeoplePage> {
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
-                    'Location sharing is opt-in and can run in the background. See how it works.',
+                    'Location sharing is opt-in. Household members and location-only friends stay separate.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -876,58 +770,59 @@ class _PeoplePageState extends State<PeoplePage> {
           ] else ...[
             const SizedBox(height: 12),
             ...accepted.map(
-              (connection) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _TrustedPersonCard(
-                  connection: connection,
-                  currentUid: currentUid!,
-                  location: _locations[connection.otherUid(currentUid)],
-                  theyShareToMe:
-                      _theyShareToMe[connection.otherUid(currentUid)] == true,
-                  shareStream: widget.trustedPeopleService.watchMyShareTo(
-                    connection.otherUid(currentUid),
+              (connection) {
+                final otherUid = connection.otherUid(currentUid!);
+                final preference = _preferences[otherUid] ??
+                    TrustedPersonPreference.fallback;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _TrustedPersonCard(
+                    connection: connection,
+                    currentUid: currentUid,
+                    preference: preference,
+                    location: _locations[otherUid],
+                    theyShareToMe: _theyShareToMe[otherUid] == true,
+                    shareStream:
+                        widget.trustedPeopleService.watchMyShareTo(otherUid),
+                    onSetMyShare: (active) => widget.trustedPeopleService
+                        .setMyLocationShare(otherUid, active),
+                    onEditRelationship: () => _editPreference(connection),
+                    onShowLocation: _locations[otherUid] == null
+                        ? null
+                        : () {
+                            final location = _locations[otherUid]!;
+                            return _showLocationDetails(
+                              name: connection.otherName(currentUid),
+                              photoUrl:
+                                  connection.otherPhotoUrl(currentUid),
+                              latitude: location.latitude,
+                              longitude: location.longitude,
+                              batteryPercent: location.batteryPercent,
+                              isCharging: location.isCharging,
+                              updatedAt: location.updatedAt,
+                              accuracyMeters: location.accuracyMeters,
+                            );
+                          },
+                    onRemove: () async {
+                      final confirmed = await showHomiConfirmSheet(
+                        context,
+                        title:
+                            'Remove ${connection.otherName(currentUid)}?',
+                        message:
+                            'The trusted connection will end. Your location share to this person will also be switched off.',
+                        confirmLabel: 'Remove connection',
+                        cancelLabel: 'Keep connected',
+                        icon: Icons.person_remove_alt_1_outlined,
+                        destructive: true,
+                      );
+                      if (confirmed) {
+                        await widget.trustedPeopleService
+                            .declineOrRemoveConnection(connection);
+                      }
+                    },
                   ),
-                  onSetMyShare: (active) => widget.trustedPeopleService
-                      .setMyLocationShare(
-                        connection.otherUid(currentUid),
-                        active,
-                      ),
-                  onShowLocation: _locations[
-                              connection.otherUid(currentUid)] ==
-                          null
-                      ? null
-                      : () {
-                          final location = _locations[
-                              connection.otherUid(currentUid)]!;
-                          return _showLocationDetails(
-                            name: connection.otherName(currentUid),
-                            photoUrl: connection.otherPhotoUrl(currentUid),
-                            latitude: location.latitude,
-                            longitude: location.longitude,
-                            batteryPercent: location.batteryPercent,
-                            isCharging: location.isCharging,
-                            updatedAt: location.updatedAt,
-                            accuracyMeters: location.accuracyMeters,
-                          );
-                        },
-                  onRemove: () async {
-                    final confirmed = await showHomiConfirmSheet(
-                      context,
-                      title: 'Remove ${connection.otherName(currentUid)}?',
-                      message:
-                          'The trusted connection will end. Your location share to this person will also be switched off.',
-                      confirmLabel: 'Remove connection',
-                      cancelLabel: 'Keep connected',
-                      icon: Icons.person_remove_alt_1_outlined,
-                      destructive: true,
-                    );
-                    if (confirmed) {
-                      await widget.trustedPeopleService
-                          .declineOrRemoveConnection(connection);
-                    }
-                  },
-                ),
-              ),
+                );
+              },
             ),
           ],
         ],
@@ -936,11 +831,391 @@ class _PeoplePageState extends State<PeoplePage> {
   }
 
   String _friendly(Object error) {
-    return error
+    if (error is FirebaseException) {
+      switch (error.code) {
+        case 'permission-denied':
+          return 'Homi could not sync trusted people right now. Try again after your connection is restored.';
+        case 'unavailable':
+          return 'Trusted people is temporarily unavailable. Your own location still works on this phone.';
+      }
+    }
+    final message = error
         .toString()
         .replaceFirst('Bad state: ', '')
         .replaceFirst('StateError: ', '')
         .replaceFirst('Exception: ', '');
+    if (message.contains('PERMISSION_DENIED') ||
+        message.contains('permission-denied')) {
+      return 'Homi could not sync trusted people right now. Try again shortly.';
+    }
+    return message;
+  }
+}
+
+class _ConnectPersonSheet extends StatefulWidget {
+  const _ConnectPersonSheet({required this.service});
+
+  final TrustedPeopleService service;
+
+  @override
+  State<_ConnectPersonSheet> createState() => _ConnectPersonSheetState();
+}
+
+class _ConnectPersonSheetState extends State<_ConnectPersonSheet> {
+  final TextEditingController _controller = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.service.connectWithCode(_controller.text);
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      var message = error
+          .toString()
+          .replaceFirst('Bad state: ', '')
+          .replaceFirst('StateError: ', '')
+          .replaceFirst('Exception: ', '');
+      if (error is FirebaseException && error.code == 'permission-denied') {
+        message = 'Homi could not send that connection request right now.';
+      }
+      setState(() => _error = message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          4,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Connect with someone',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Enter their 6-character Homi code. Connecting does not turn location sharing on and does not share your Home records.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 6,
+              decoration: InputDecoration(
+                labelText: 'Homi code',
+                hintText: 'ABC123',
+                errorText: _error,
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _busy ? null : _submit,
+                child: Text(_busy ? 'Sending…' : 'Send connection request'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RelationshipSheet extends StatefulWidget {
+  const _RelationshipSheet({
+    required this.name,
+    required this.initial,
+  });
+
+  final String name;
+  final TrustedPersonPreference initial;
+
+  @override
+  State<_RelationshipSheet> createState() => _RelationshipSheetState();
+}
+
+class _RelationshipSheetState extends State<_RelationshipSheet> {
+  static const _relationships = <String>[
+    'Partner',
+    'Wife',
+    'Husband',
+    'Mother',
+    'Father',
+    'Parent',
+    'Son',
+    'Daughter',
+    'Child',
+    'Sibling',
+    'Roommate',
+    'Friend',
+    'Family',
+    'Caregiver',
+    'Trusted person',
+  ];
+
+  late String _relationship;
+  late String _scope;
+
+  @override
+  void initState() {
+    super.initState();
+    _relationship = _relationships.contains(widget.initial.relationship)
+        ? widget.initial.relationship
+        : 'Trusted person';
+    _scope = widget.initial.scope == 'household' ? 'household' : 'friend';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'How do you know ${widget.name}?',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'This label is for your Homi. It helps keep household collaboration separate from location-only friends.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 18),
+            Text('Relationship', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            HomiChoiceGroup<String>(
+              values: _relationships,
+              selected: _relationship,
+              labelFor: (value) => value,
+              onSelected: (value) => setState(() => _relationship = value),
+              compact: true,
+            ),
+            const SizedBox(height: 20),
+            Text('Connection type', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            HomiChoiceGroup<String>(
+              values: const <String>['household', 'friend'],
+              selected: _scope,
+              labelFor: (value) =>
+                  value == 'household' ? 'Household' : 'Friend · location only',
+              onSelected: (value) => setState(() => _scope = value),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _scope == 'household'
+                  ? 'Household people can be offered household-only collaboration such as assigned tasks. Location sharing is still a separate choice.'
+                  : 'Location-only friends never receive access to your Home, supplies, routines or household records.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.pop(
+                  context,
+                  TrustedPersonPreference(
+                    relationship: _relationship,
+                    scope: _scope,
+                  ),
+                ),
+                child: const Text('Save relationship'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LocationDetailsSheet extends StatefulWidget {
+  const _LocationDetailsSheet({
+    required this.name,
+    required this.photoUrl,
+    required this.address,
+    required this.coordinates,
+    required this.latitude,
+    required this.longitude,
+    required this.batteryPercent,
+    required this.isCharging,
+    required this.updatedAt,
+    required this.accuracyMeters,
+  });
+
+  final String name;
+  final String? photoUrl;
+  final String address;
+  final String coordinates;
+  final double latitude;
+  final double longitude;
+  final int batteryPercent;
+  final bool isCharging;
+  final DateTime? updatedAt;
+  final double accuracyMeters;
+
+  @override
+  State<_LocationDetailsSheet> createState() => _LocationDetailsSheetState();
+}
+
+class _LocationDetailsSheetState extends State<_LocationDetailsSheet> {
+  String? _copied;
+
+  Future<void> _copy(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (mounted) setState(() => _copied = label);
+  }
+
+  Future<void> _openMaps() async {
+    final uri = Uri.https(
+      'www.google.com',
+      '/maps/search/',
+      <String, String>{
+        'api': '1',
+        'query': '${widget.latitude},${widget.longitude}',
+      },
+    );
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _PersonAvatar(
+                  name: widget.name,
+                  photoUrl: widget.photoUrl,
+                  size: 54,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.name,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        widget.updatedAt == null
+                            ? 'Latest shared location'
+                            : 'Updated ${DateFormat('d MMM · HH:mm').format(widget.updatedAt!)}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  widget.isCharging
+                      ? Icons.battery_charging_full_rounded
+                      : Icons.battery_std_rounded,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${widget.batteryPercent}%',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _DetailBlock(
+              icon: Icons.location_on_outlined,
+              title: widget.address,
+              subtitle: 'Accuracy about ${widget.accuracyMeters.round()} m',
+              copyTooltip: 'Copy address',
+              onCopy: () => _copy(widget.address, 'Address copied'),
+            ),
+            const SizedBox(height: 10),
+            _DetailBlock(
+              icon: Icons.pin_drop_outlined,
+              title: widget.coordinates,
+              subtitle: 'Coordinates',
+              copyTooltip: 'Copy coordinates',
+              onCopy: () => _copy(widget.coordinates, 'Coordinates copied'),
+            ),
+            if (_copied != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    size: 17,
+                    color: Color(0xFF6F8B65),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _copied!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF6F8B65),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _copy(
+                      '${widget.address}\n${widget.coordinates}',
+                      'Full location copied',
+                    ),
+                    icon: const Icon(Icons.copy_all_rounded),
+                    label: const Text('Copy all'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _openMaps,
+                    icon: const Icon(Icons.map_outlined),
+                    label: const Text('Google Maps'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -1040,7 +1315,7 @@ class _LocationStatusCard extends StatelessWidget {
                   label: Text(busy ? 'Checking…' : 'Enable my location'),
                 ),
               )
-            else ...[
+            else
               Row(
                 children: [
                   Expanded(
@@ -1065,7 +1340,6 @@ class _LocationStatusCard extends StatelessWidget {
                   ),
                 ],
               ),
-            ],
           ],
         ),
       ),
@@ -1213,20 +1487,24 @@ class _TrustedPersonCard extends StatelessWidget {
   const _TrustedPersonCard({
     required this.connection,
     required this.currentUid,
+    required this.preference,
     required this.location,
     required this.theyShareToMe,
     required this.shareStream,
     required this.onSetMyShare,
+    required this.onEditRelationship,
     required this.onShowLocation,
     required this.onRemove,
   });
 
   final TrustedConnection connection;
   final String currentUid;
+  final TrustedPersonPreference preference;
   final TrustedPersonLocation? location;
   final bool theyShareToMe;
   final Stream<bool> shareStream;
   final Future<void> Function(bool active) onSetMyShare;
+  final VoidCallback onEditRelationship;
   final Future<void> Function()? onShowLocation;
   final Future<void> Function() onRemove;
 
@@ -1257,6 +1535,29 @@ class _TrustedPersonCard extends StatelessWidget {
                           fontWeight: FontWeight.w900,
                         ),
                       ),
+                      const SizedBox(height: 2),
+                      GestureDetector(
+                        onTap: onEditRelationship,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${preference.relationship} · ${preference.household ? 'Household' : 'Location only'}',
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w900,
+                                color: HomiColors.coral,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.edit_outlined,
+                              size: 14,
+                              color: HomiColors.coral,
+                            ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 3),
                       Text(
                         !theyShareToMe
@@ -1270,7 +1571,7 @@ class _TrustedPersonCard extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Remove connection',
+                  tooltip: 'Connection options',
                   onPressed: onRemove,
                   icon: const Icon(Icons.more_vert_rounded),
                 ),
@@ -1368,17 +1669,21 @@ class _DetailBlock extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    required this.copyTooltip,
+    required this.onCopy,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
+  final String copyTooltip;
+  final VoidCallback onCopy;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
       decoration: BoxDecoration(
         color: HomiColors.peach.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(17),
@@ -1398,6 +1703,39 @@ class _DetailBlock extends StatelessWidget {
                 Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
+          ),
+          IconButton(
+            tooltip: copyTooltip,
+            onPressed: onCopy,
+            icon: const Icon(Icons.copy_rounded, size: 19),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PeopleNotice extends StatelessWidget {
+  const _PeopleNotice({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: HomiColors.peach.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded, size: 19, color: HomiColors.coral),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(message, style: const TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
       ),

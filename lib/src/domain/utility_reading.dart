@@ -9,6 +9,10 @@ extension UtilityTypeDetails on UtilityType {
   String get label => this == UtilityType.electricity ? 'Electricity' : 'Water';
 
   String get defaultUnit => this == UtilityType.electricity ? 'kWh' : 'kL';
+
+  List<String> get unitOptions => this == UtilityType.electricity
+      ? const <String>['kWh', 'Wh', 'MWh', 'units']
+      : const <String>['kL', 'L', 'm³', 'units'];
 }
 
 class UtilityReading {

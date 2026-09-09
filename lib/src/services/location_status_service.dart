@@ -171,7 +171,7 @@ class LocationStatusService {
     await prefs.setBool(_continuousEnabledKey, false);
   }
 
-  Future<void> openAppSettings() => Geolocator.openAppSettings();
+  Future<bool> openAppSettings() => Geolocator.openAppSettings();
 
   Future<void> _startPositionStream() async {
     if (_positionSubscription != null) return;

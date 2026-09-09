@@ -62,6 +62,13 @@
 - Added tests confirming Quick Reset prioritises saved routines that fit the requested time budget and never exceeds that budget.
 - Bumped the Flutter application version to `0.3.0+3`.
 
+### Compile hotfix - 2026-09-09
+
+- The first 0.3.0 Android Studio build reached Dart compilation and exposed a scope error in `supplies_page.dart`: `_editableStatuses` is a static member of `SuppliesPage`, but `_SupplyCard` referenced it without the owning class qualifier.
+- Updated both Supply-card menu references to `SuppliesPage._editableStatuses`, matching the already-correct editor-sheet usage.
+- This was a source-level compile blocker only; no Supply data model, expiry behavior, Firebase configuration or local data was changed.
+- 0.3.0 must still be re-analyzed, tested and launched on the Samsung S25 Ultra before the pass is marked device-verified.
+
 ### 0.3.0 verification checkpoint
 
 This source pass is implemented in GitHub but has not yet been compiled or device-reviewed on the local Flutter/Android toolchain.
@@ -71,7 +78,7 @@ Required checkpoint:
 1. pull the latest `main` locally;
 2. run `flutter analyze` and resolve any analyzer issues;
 3. run `flutter test` and resolve any failing tests;
-4. run Homi from Android Studio on the Samsung S25 Ultra;
+4. run Homi from Android Studio on the Samsung S25 Ultra and confirm the Supply status-menu scope error is gone;
 5. review the shaped bottom navigation in every selected state, especially the centred Homi Home destination;
 6. verify Overview attention states, Quick Add and both 10- and 30-minute Quick Reset flows;
 7. verify Routine creation with duration, example prefills and persistence after restart;

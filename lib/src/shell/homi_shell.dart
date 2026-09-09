@@ -41,6 +41,8 @@ class HomiShell extends StatefulWidget {
 
 class _HomiShellState extends State<HomiShell> {
   int _index = 0;
+  WorkView _requestedWorkView = WorkView.tasks;
+  int _workViewRequest = 0;
   late final PageController _pageController;
   late final LocationStatusService _locationService;
   late final TrustedPeopleService _trustedPeopleService;
@@ -63,6 +65,7 @@ class _HomiShellState extends State<HomiShell> {
     _sharedTaskService = SharedTaskService(
       firebaseReady: widget.firebaseReady,
     );
+    unawaited(widget.controller.pruneExpiredTasks());
     unawaited(_resumeLocationSharing());
   }
 
@@ -228,6 +231,14 @@ class _HomiShellState extends State<HomiShell> {
     );
   }
 
+  void _openWork(WorkView view) {
+    setState(() {
+      _requestedWorkView = view;
+      _workViewRequest += 1;
+    });
+    _selectPage(1);
+  }
+
   List<Widget> _pages(User? user) {
     final actorName = _actorName(user);
     final actorUid = user?.uid;
@@ -239,16 +250,19 @@ class _HomiShellState extends State<HomiShell> {
         routines: widget.controller.routines,
         supplies: widget.controller.supplies,
         homeThings: widget.controller.homeThings,
-        onAddQuickItem: widget.controller.addQuickItem,
         onRemoveQuickItem: widget.controller.removeQuickItem,
         onToggleRoutine: (id) => widget.controller.toggleRoutine(
           id,
           actorName: actorName,
           actorUid: actorUid,
         ),
-        onOpenRoutines: () => _selectPage(1),
+        onOpenRoutines: () => _openWork(WorkView.tasks),
         onOpenHome: () => _selectPage(2),
         onOpenSupplies: () => _selectPage(3),
+        onQuickAddTask: () => _openWork(WorkView.tasks),
+        onQuickAddRoutine: () => _openWork(WorkView.routines),
+        onQuickAddSupply: () => _selectPage(3),
+        onQuickAddHome: () => _selectPage(2),
       ),
       RoutinesPage(
         items: widget.controller.routines,
@@ -257,6 +271,8 @@ class _HomiShellState extends State<HomiShell> {
         actorUid: actorUid,
         trustedPeopleService: _householdPeopleService,
         sharedTaskService: _sharedTaskService,
+        requestedView: _requestedWorkView,
+        viewRequest: _workViewRequest,
         onAdd: (data) => widget.controller.addRoutine(
           title: data.title,
           category: data.category,

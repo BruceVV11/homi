@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../domain/home_event.dart';
 import '../domain/home_thing.dart';
+import '../domain/household_task.dart';
 import '../domain/routine_item.dart';
 import '../domain/supply_item.dart';
 import '../domain/utility_reading.dart';
@@ -14,6 +15,7 @@ class HomiAppController extends ChangeNotifier {
   static const _homeTypeKey = 'homi.home.type';
   static const _localOnlyKey = 'homi.account.localOnly';
   static const _quickItemsKey = 'homi.today.quickItems';
+  static const _tasksKey = 'homi.tasks.items';
   static const _routinesKey = 'homi.routines.items';
   static const _suppliesKey = 'homi.supplies.items';
   static const _homeThingsKey = 'homi.home.things';
@@ -29,6 +31,7 @@ class HomiAppController extends ChangeNotifier {
   String homeName = 'My home';
   String homeType = 'House';
   List<String> quickItems = <String>[];
+  List<HouseholdTask> tasks = <HouseholdTask>[];
   List<RoutineItem> routines = <RoutineItem>[];
   List<SupplyItem> supplies = <SupplyItem>[];
   List<HomeThing> homeThings = <HomeThing>[];
@@ -42,6 +45,10 @@ class HomiAppController extends ChangeNotifier {
     homeType = _prefs?.getString(_homeTypeKey) ?? 'House';
     localOnly = _prefs?.getBool(_localOnlyKey) ?? true;
     quickItems = _prefs?.getStringList(_quickItemsKey) ?? <String>[];
+    tasks = _decode<HouseholdTask>(
+      _prefs?.getStringList(_tasksKey) ?? <String>[],
+      HouseholdTask.decode,
+    );
     routines = _decode<RoutineItem>(
       _prefs?.getStringList(_routinesKey) ?? <String>[],
       RoutineItem.decode,
@@ -110,6 +117,68 @@ class HomiAppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> addTask({
+    required String title,
+    required String createdByName,
+    String? createdByUid,
+    String? notes,
+    String? assigneeName,
+    String? assigneeUid,
+    DateTime? dueAt,
+  }) async {
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) return;
+    tasks = <HouseholdTask>[
+      ...tasks,
+      HouseholdTask(
+        id: _uuid.v4(),
+        title: trimmed,
+        notes: _cleanOptional(notes),
+        assigneeName: _cleanOptional(assigneeName),
+        assigneeUid: _cleanOptional(assigneeUid),
+        dueAt: dueAt,
+        createdAt: DateTime.now(),
+        createdByName: createdByName.trim().isEmpty
+            ? 'You'
+            : createdByName.trim(),
+        createdByUid: createdByUid,
+      ),
+    ];
+    await _persistTasks();
+    notifyListeners();
+  }
+
+  Future<void> toggleTask(
+    String id, {
+    required String actorName,
+    String? actorUid,
+  }) async {
+    tasks = tasks.map((task) {
+      if (task.id != id) return task;
+      if (task.completed) return task.reopen();
+      return task.complete(
+        at: DateTime.now(),
+        byName: actorName,
+        byUid: actorUid,
+      );
+    }).toList(growable: false);
+    await _persistTasks();
+    notifyListeners();
+  }
+
+  Future<void> removeTask(String id) async {
+    tasks = tasks.where((item) => item.id != id).toList(growable: false);
+    await _persistTasks();
+    notifyListeners();
+  }
+
+  Future<void> _persistTasks() async {
+    await _prefs?.setStringList(
+      _tasksKey,
+      tasks.map((item) => item.encode()).toList(growable: false),
+    );
+  }
+
   Future<void> addRoutine({
     required String title,
     required String category,
@@ -151,14 +220,13 @@ class HomiAppController extends ChangeNotifier {
     final now = DateTime.now();
     routines = routines.map((item) {
       if (item.id != id) return item;
-      if (item.isDue(now)) {
-        return item.recordCompletion(
-          at: now,
-          byName: actorName,
-          byUid: actorUid,
-        );
-      }
-      return item.undoLastCompletion();
+      final canUndo = !item.isDue(now) && item.lastCompletion != null;
+      if (canUndo) return item.undoLastCompletion();
+      return item.recordCompletion(
+        at: now,
+        byName: actorName,
+        byUid: actorUid,
+      );
     }).toList(growable: false);
     await _persistRoutines();
     notifyListeners();
@@ -181,8 +249,9 @@ class HomiAppController extends ChangeNotifier {
     String name,
     String category,
     SupplyStatus status,
-    DateTime? expiryDate,
-  ) async {
+    DateTime? expiryDate, {
+    String iconKey = 'inventory',
+  }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
     supplies = <SupplyItem>[
@@ -192,6 +261,7 @@ class HomiAppController extends ChangeNotifier {
         name: trimmed,
         category: category,
         status: status,
+        iconKey: iconKey,
         expiryDate: expiryDate,
       ),
     ];

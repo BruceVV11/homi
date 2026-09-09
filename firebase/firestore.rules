@@ -114,27 +114,33 @@ service cloud.firestore {
       allow read, create, update, delete: if isSelf(ownerUid);
     }
 
-    // One-off assigned tasks share exactly one task between its creator and
-    // assignee. They do not grant either person access to Home, supplies,
-    // routines or other household records. The creator must have explicitly
-    // labelled the assignee as Household first.
+    // Household tasks carry an explicit memberUids visibility list. A task
+    // assigned to another person may be visible to the creator's other chosen
+    // household members as well. Personal tasks assigned to the creator remain
+    // local-only and never enter this collection.
     match /sharedTasks/{taskId} {
       allow get, list: if isSharedTaskMember(resource.data);
 
       allow create: if signedIn()
         && request.resource.data.memberUids is list
-        && request.resource.data.memberUids.size() == 2
+        && request.resource.data.memberUids.size() >= 2
+        && request.resource.data.memberUids.size() <= 20
         && request.resource.data.createdByUid == request.auth.uid
-        && request.resource.data.assigneeUid != request.auth.uid
         && request.resource.data.createdByUid in request.resource.data.memberUids
-        && request.resource.data.assigneeUid in request.resource.data.memberUids
-        && hasAcceptedConnection(
-          request.resource.data.createdByUid,
-          request.resource.data.assigneeUid
-        )
-        && hasHouseholdPreference(
-          request.resource.data.createdByUid,
-          request.resource.data.assigneeUid
+        && (
+          request.resource.data.assigneeUid == null
+          || (
+            request.resource.data.assigneeUid != request.auth.uid
+            && request.resource.data.assigneeUid in request.resource.data.memberUids
+            && hasAcceptedConnection(
+              request.resource.data.createdByUid,
+              request.resource.data.assigneeUid
+            )
+            && hasHouseholdPreference(
+              request.resource.data.createdByUid,
+              request.resource.data.assigneeUid
+            )
+          )
         );
 
       allow update: if isSharedTaskMember(resource.data)

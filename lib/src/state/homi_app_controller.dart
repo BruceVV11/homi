@@ -96,7 +96,12 @@ class HomiAppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addRoutine(String title, String category, String frequency) async {
+  Future<void> addRoutine(
+    String title,
+    String category,
+    String frequency,
+    int estimatedMinutes,
+  ) async {
     final trimmed = title.trim();
     if (trimmed.isEmpty) return;
     routines = <RoutineItem>[
@@ -106,6 +111,7 @@ class HomiAppController extends ChangeNotifier {
         title: trimmed,
         category: category,
         frequency: frequency,
+        estimatedMinutes: estimatedMinutes,
       ),
     ];
     await _persistRoutines();

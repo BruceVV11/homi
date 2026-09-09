@@ -11,13 +11,13 @@ extension SupplyStatusLabel on SupplyStatus {
   String get label {
     switch (this) {
       case SupplyStatus.okay:
-        return 'All good';
+        return 'In stock';
       case SupplyStatus.runningLow:
         return 'Running low';
       case SupplyStatus.needToBuy:
         return 'Need to buy';
       case SupplyStatus.eatSoon:
-        return 'Eat soon';
+        return 'Use soon';
     }
   }
 }
@@ -50,6 +50,36 @@ class SupplyItem {
       expiryDate: clearExpiryDate ? null : (expiryDate ?? this.expiryDate),
     );
   }
+
+  SupplyStatus effectiveStatus(DateTime now, {int soonWithinDays = 3}) {
+    if (status != SupplyStatus.okay) return status;
+    if (isExpired(now) || isExpiringSoon(now, withinDays: soonWithinDays)) {
+      return SupplyStatus.eatSoon;
+    }
+    return SupplyStatus.okay;
+  }
+
+  String displayStatusLabel(DateTime now, {int soonWithinDays = 3}) {
+    if (status != SupplyStatus.okay) return status.label;
+    if (isExpired(now)) return 'Expired';
+    if (isExpiringSoon(now, withinDays: soonWithinDays)) {
+      return SupplyStatus.eatSoon.label;
+    }
+    return SupplyStatus.okay.label;
+  }
+
+  bool isExpired(DateTime now) {
+    if (expiryDate == null) return false;
+    return _day(expiryDate!).isBefore(_day(now));
+  }
+
+  bool isExpiringSoon(DateTime now, {int withinDays = 3}) {
+    if (expiryDate == null) return false;
+    final difference = _day(expiryDate!).difference(_day(now)).inDays;
+    return difference >= 0 && difference <= withinDays;
+  }
+
+  DateTime _day(DateTime value) => DateTime(value.year, value.month, value.day);
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,

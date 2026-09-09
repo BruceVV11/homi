@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:homi/src/domain/household_task.dart';
 import 'package:homi/src/domain/routine_item.dart';
 import 'package:homi/src/domain/supply_item.dart';
+import 'package:homi/src/domain/utility_reading.dart';
 
 void main() {
   test('one-off task keeps assignee and completion attribution', () {
@@ -27,6 +28,25 @@ void main() {
     expect(restored.completed, isTrue);
     expect(restored.completedByName, 'Sam');
     expect(restored.completedByUid, 'uid-sam');
+  });
+
+  test('completed tasks remain visible for two days then expire', () {
+    final task = HouseholdTask(
+      id: 'done',
+      title: 'Collect parcel',
+      createdAt: DateTime(2026, 9, 8, 8),
+      createdByName: 'Bruce',
+    ).complete(
+      at: DateTime(2026, 9, 10, 10),
+      byName: 'Bruce',
+    );
+
+    expect(
+      task.completedWithinRetention(DateTime(2026, 9, 12, 9, 59)),
+      isTrue,
+    );
+    expect(task.shouldPurge(DateTime(2026, 9, 12, 10)), isTrue);
+    expect(task.removeAfter, DateTime(2026, 9, 12, 10));
   });
 
   test('recurring routine can be completed, undone and completed again', () {
@@ -61,6 +81,38 @@ void main() {
     expect(completedAgain.nextDueAt, DateTime(2026, 9, 11, 7));
   });
 
+  test('bi-weekly routine returns exactly two weeks after completion', () {
+    final dueAt = DateTime(2026, 9, 7, 9);
+    final routine = RoutineItem(
+      id: 'garden',
+      title: 'Water indoor plants',
+      category: 'Plants & garden',
+      repeat: RoutineRepeat.biweekly,
+      repeatDays: const <int>[DateTime.monday],
+      dueHour: 9,
+      createdAt: DateTime(2026, 9, 7, 8),
+      nextDueAt: dueAt,
+    ).recordCompletion(
+      at: DateTime(2026, 9, 7, 9, 5),
+      byName: 'Bruce',
+    );
+
+    expect(routine.nextDueAt, DateTime(2026, 9, 21, 9));
+    expect(routine.frequency, 'Bi-weekly');
+  });
+
+  test('60 minute routine uses launch-ready 60+ label', () {
+    final routine = RoutineItem(
+      id: 'deep-clean',
+      title: 'Deep clean kitchen',
+      category: 'Cleaning',
+      repeat: RoutineRepeat.monthly,
+      estimatedMinutes: 60,
+      createdAt: DateTime(2026, 9, 10),
+    );
+    expect(routine.durationLabel, '60+ min');
+  });
+
   test('legacy supply without icon uses the general supply icon key', () {
     final restored = SupplyItem.decode(
       '{"id":"milk","name":"Milk","category":"Fridge","status":"okay"}',
@@ -77,5 +129,11 @@ void main() {
       iconKey: 'bread',
     );
     expect(SupplyItem.decode(source.encode()).iconKey, 'bread');
+  });
+
+  test('utility unit choices stay controlled by type', () {
+    expect(UtilityType.electricity.unitOptions, contains('kWh'));
+    expect(UtilityType.water.unitOptions, contains('m³'));
+    expect(UtilityType.electricity.unitOptions, isNot(contains('m³')));
   });
 }

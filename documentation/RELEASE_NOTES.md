@@ -1,5 +1,84 @@
 # Homi Release Notes
 
+## 0.3.0 - Navigation identity, Quick Reset and profile controls
+
+### Device feedback incorporated - 2026-09-09
+
+- Reworked the custom bottom navigation from the detached raised-circle treatment after the 0.2.0 Samsung S25 Ultra review.
+- The navigation bar now has a shaped top edge that rises into the selected destination, closer to the integrated active-button reference approved in the device feedback.
+- Reordered the five primary destinations to **Overview, Routines, Home, Supplies, People**, putting Home in the centre.
+- The centre Home destination continues to use the exact approved Homi mark rather than a generic house icon.
+- Renamed the former Today destination to **Overview** in navigation because the page is the at-a-glance home status and quick-action surface rather than a calendar-style Today screen.
+
+### Overview and Quick Reset
+
+- Removed remaining placeholder attention examples from the Overview so its cards are now driven only by real local routines, supply attention and quick reminders.
+- Renamed the leading section to `What needs attention` and added a real empty state when nothing currently needs attention.
+- Renamed the loose capture action to **Quick add** with launch-ready wording.
+- Turned `When you have time` into a real **Quick Reset** feature rather than a fixed demonstration list.
+- Quick Reset now uses incomplete saved routines first and respects a per-routine estimated duration so a 10- or 30-minute plan stays within the selected time budget.
+- When a plan has spare time, Homi can fill it with small household suggestions such as refilling pet water, wiping kitchen counters or emptying recycling.
+- Completing a saved routine inside Quick Reset updates the real persisted Routine record. One-off Homi suggestions are checked only for the current Quick Reset session.
+- Added a user-facing `How it works` explanation so the feature can be understood without setup knowledge.
+
+### Routines
+
+- Added an `estimatedMinutes` field to Routine records, with a safe 10-minute default for existing locally stored routines created before 0.3.0.
+- Added a `Usually takes` selector when creating a Routine.
+- Replaced generic `Useful categories` cards with tappable real-world examples such as feeding pets, taking bins out, changing bed linen and watering indoor plants.
+- Example cards prefill the Routine editor and can be adjusted before saving.
+- Simplified Routine metadata presentation to a single readable line containing category, frequency and approximate duration.
+- Refined Routine wording so the page reads as finished product UI rather than implementation guidance.
+
+### Supplies
+
+- Replaced the rounded status chips on Supply cards with a quieter status line using a small semantic dot and text.
+- Renamed the normal state from `All good` to **In stock** and `Eat soon` to **Use soon**.
+- Expiry dates now contribute automatically to supply attention: an otherwise in-stock item becomes `Use soon` within three days of expiry, and past dates display `Expired`.
+- `Use soon` is therefore derived from the expiry date instead of being a manual stock-status choice.
+- Overview and Supplies summary counts both use the same expiry-aware status logic.
+
+### Account and profile
+
+- Expanded the persistent profile control into a useful account sheet showing the signed-in identity, email-verification state and sign-in provider.
+- Added a **Profile settings** destination from that account sheet.
+- Profile settings now supports changing the Firebase display name, seeing the account email, seeing whether the account uses Google or email/password, checking email-verification status and refreshing that status.
+- Email/password accounts can resend the verification email and request a password reset from Profile settings.
+- Google-authenticated accounts show a Google provider mark beside the displayed account name and in the sign-in-method row so the user can recognise how the account was created.
+- The persistent profile control uses the Firebase profile photo when one is available and falls back to the Homi person icon otherwise.
+- Google cancellation now returns cleanly to the sign-in screen instead of being presented as an error.
+
+### Launch-copy pass
+
+- Removed developer-facing wording such as references to `this build`, future passes and implementation foundations from visible People/Auth/Overview UI.
+- Reworded People privacy information as stable product behaviour: location sharing is opt-in, connecting with someone does not enable sharing automatically, current-location features use the latest status, and location history is not retained by default.
+- Reworded empty and explanatory states across the affected pages to address the user rather than describe development progress.
+
+### Data model and tests
+
+- Added `QuickResetPlanner` and deterministic Quick Reset task/source models.
+- Added tests for Routine duration persistence and migration defaults.
+- Added tests for expiry-derived Supply attention and expired labels.
+- Added tests confirming Quick Reset prioritises saved routines that fit the requested time budget and never exceeds that budget.
+- Bumped the Flutter application version to `0.3.0+3`.
+
+### 0.3.0 verification checkpoint
+
+This source pass is implemented in GitHub but has not yet been compiled or device-reviewed on the local Flutter/Android toolchain.
+
+Required checkpoint:
+
+1. pull the latest `main` locally;
+2. run `flutter analyze` and resolve any analyzer issues;
+3. run `flutter test` and resolve any failing tests;
+4. run Homi from Android Studio on the Samsung S25 Ultra;
+5. review the shaped bottom navigation in every selected state, especially the centred Homi Home destination;
+6. verify Overview attention states, Quick Add and both 10- and 30-minute Quick Reset flows;
+7. verify Routine creation with duration, example prefills and persistence after restart;
+8. verify expiry-driven Supply status and the quieter status-line styling;
+9. verify email/password and Google account sheets, provider indicator, verification state and Profile settings;
+10. recheck horizontal swipe navigation, Android Back, local-only use and People location capture.
+
 ## 0.2.0 - Shell refinement and local household tools
 
 ### Device baseline confirmed - 2026-09-09
@@ -16,7 +95,7 @@
 - Preserved Android Back behavior so Back from a secondary primary destination returns to Today before normal root exit behavior.
 - Reworked page scrolling to use clamped physics and normal bottom content padding instead of the previous large 120 px tail, removing the unnecessary blank-scroll area on short pages.
 - Replaced the stock Material `NavigationBar` with a custom Homi bottom navigation treatment using a raised animated active bubble, persistent labels and brand colors.
-- The exact Homi mark is now used as the Home destination icon with the `Home` label retained.
+- The exact Homi mark is now used as the Home destination icon with the Home label retained.
 
 ### Functional expansion
 

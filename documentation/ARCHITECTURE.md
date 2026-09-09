@@ -8,180 +8,192 @@
 - Local project root: `C:\ConceptLab\Projects\homi`
 - GitHub repository: `BruceVV11/homi`
 
-These identifiers are locked for the Android/Firebase/Play lifecycle.
-
-The existing Firebase project `homi-ee80a` is the backend source of truth. The previously created Google Cloud project `homi-508000` is not part of the Homi architecture.
+These identifiers are locked for the Android/Firebase/Play lifecycle. The deleted `homi-508000` project is not part of Homi.
 
 ## Stack
 
-- Flutter / Dart Android application developed from the project root in Android Studio
-- Local-first persisted state for household data
-- Firebase Authentication for account identity
-- Cloud Firestore Standard for lightweight shared state and real-time listeners
-- Firebase Cloud Messaging for notifications
-- Firebase App Check with Play Integrity for production attestation
-- Google Drive for user-owned documents, media and structured backup
-- Google Maps Platform plus Android/Google Play services location APIs for consensual trusted-person location sharing
-- Cloud Functions / Cloud Run later for trusted server-side notification, entitlement and automation operations
+- Flutter / Dart Android application
+- Android minimum SDK 24 for the current Google Maps Flutter integration
+- SharedPreferences for version-tolerant local-first household records
+- Firebase Authentication for optional account identity
+- Cloud Firestore in `africa-south1` for authenticated shared state and latest trusted-person location
+- Firebase Cloud Messaging for later notifications
+- Firebase App Check: Debug provider during development, Play Integrity for release
+- Google Maps Flutter for People map UI
+- Geolocator for foreground and opt-in Android foreground-service location updates
+- Platform geocoding for human-readable location details
+- Google Drive direction remains user-owned home documents/media; Drive document UX is not yet exposed as a completed feature
 
-## Cloud project
+## Primary navigation
 
-The underlying Google Cloud project for Firebase is also `homi-ee80a`, project number `883068189841`.
+The persistent shell owns the Homi logo/profile header and the custom five-destination navigation:
 
-The default Firestore database is provisioned in `africa-south1` (Johannesburg). Firestore location is treated as a permanent infrastructure decision rather than a runtime preference.
+1. Overview
+2. Routines
+3. Home
+4. Supplies
+5. People
 
-## Why Firestore first
+Home remains deliberately centred and uses the exact approved Homi mark. Primary pages remain inside a horizontally swipeable `PageView`. Android Back from a secondary primary destination returns to Overview before root exit.
 
-The first Homi implementation uses Firestore for shared household state and current trusted-person location/battery snapshots. It provides real-time listeners while keeping the data layer simpler and regionally aligned with the rest of the backend.
-
-Realtime Database is **not** required in v0.x. We will measure real device location-update frequency, battery behaviour and Firestore cost before deciding whether a dedicated high-churn live-state store adds enough value to justify a second database technology.
-
-## Source structure
-
-```text
-lib/
-  main.dart
-  src/
-    app.dart
-    domain/
-      location_snapshot.dart
-      quick_reset_plan.dart
-      routine_item.dart
-      supply_item.dart
-    features/
-      auth/
-      home/
-      onboarding/
-      people/
-      profile/
-      routines/
-      supplies/
-      today/
-    services/
-    shell/
-    state/
-    theme/
-    widgets/
-      google_provider_mark.dart
-      homi_brand.dart
-      homi_bottom_nav.dart
-      homi_page.dart
-android/
-  # generated/maintained Flutter Android host
-firebase/
-  firestore.rules
-  firestore.indexes.json
-documentation/
-scripts/
-```
-
-## Navigation shell
-
-The primary app shell owns persistent chrome rather than each feature page recreating it:
-
-- one persistent top row contains the exact Homi logo on the left and the account/profile control on the right;
-- the five primary destinations are **Overview, Routines, Home, Supplies, People**;
-- Home is the central destination in the custom bottom navigation and uses the exact approved Homi mark instead of a framework-drawn house icon;
-- the active bottom-navigation destination is represented by a circular button integrated into a shaped rise in the white navigation surface rather than a detached floating bubble;
-- the five primary destinations are hosted in a `PageView`, so horizontal swiping changes page content without moving or duplicating the shell header;
-- the custom Homi bottom navigation remains outside the page scrollers and mirrors the `PageView` index;
-- Android Back from a secondary primary destination returns to Overview before root exit behavior;
-- individual feature pages own only their scrollable title/content area and use clamped scrolling with normal bottom padding because the navigation bar already occupies layout space.
-
-The source file remains named `today_page.dart` for continuity while the user-facing destination is now called **Overview**. A file/folder rename is not required merely to change product wording.
+The bottom navigation uses a custom-painted white surface with a raised integrated mound around the active circular destination. Taps use Homi-controlled gesture handling rather than Material ink/splash selection blocks.
 
 ## Overview and Quick Reset
 
-Overview is the returning-user status surface. It should show real actionable state, not static demonstration content.
+Overview shows real state only:
 
-Current sources are:
+- Routines that are actually due according to their recurrence schedule
+- Supplies needing attention, including expiry-derived `Use soon` / `Expired` state
+- Home Things with service due or approaching
+- local Quick Add reminders
 
-- incomplete local Routine records;
-- Supply records that need attention, including expiry-derived attention;
-- Quick Add reminders entered by the user.
+`QuickResetPlanner` powers **When you have time**. The user chooses a time budget such as 10 or 30 minutes. Due saved Routines are prioritised, then a shuffled pool of common household suggestions may fill spare time. The plan never exceeds the selected budget. Built-in suggestions rotate each invocation and remain session-only; saved Routines update their real completion record.
 
-`QuickResetPlanner` powers the `When you have time` feature:
+## Local-first household data
 
-- the user chooses a time budget such as 10 or 30 minutes;
-- incomplete saved Routines are considered first and sorted by their estimated duration;
-- only tasks that fit inside the remaining time are added;
-- small built-in household suggestions may fill spare time;
-- the total planned duration must never exceed the chosen budget;
-- completing a saved Routine from Quick Reset updates the same persisted Routine record;
-- built-in suggestions are intentionally session-only because they are not saved household records.
+### Routines
 
-Quick Reset is local-first and deterministic in v0.3.0. Future Home/maintenance data may feed the same planner when those domains have real task/due-date models, but that is not assumed yet.
+`RoutineItem` now models actual recurrence instead of only a descriptive frequency label:
 
-## Data boundaries
+- stable UUID
+- title/category
+- estimated duration
+- repeat type: one-off, daily, weekdays, weekly, monthly
+- weekly day set or monthly day-of-month
+- exact due hour/minute
+- computed next-due timestamp
+- bounded completion history
+- each completion stores time, display name and optional Firebase UID
 
-### Local-first data
+After a recurring Routine is completed, Homi computes its next occurrence and shows both the previous completion attribution and next due time. Older Routine JSON is migrated from the previous `frequency`, `completed` and `lastCompletedAt` fields where possible.
 
-Household preferences, local task state, cached home records and UI preferences remain usable without connectivity.
+The completion attribution is already suitable for shared household records, but Routine records remain local in this pass. Cross-device household Routine synchronization must not be claimed until a household membership + merge/conflict strategy is implemented and tested.
 
-In v0.3.0 this includes:
+### Supplies
 
-- Quick Add reminders;
-- Routine records with UUID, title, category, frequency, estimated duration, completion state and last-completed timestamp;
-- Supply records with UUID, category, stock status and optional expiry date.
+Supply records contain name, category, stock state and optional expiry date. Fixed choices use Homi inline controls instead of dropdown menus. Common household Quick Adds prefill the editor for items such as milk, bread, eggs, dog food, toilet paper and dishwashing liquid.
 
-Routine `estimatedMinutes` was added after the first persisted Routine version. Decoding therefore defaults missing/invalid duration data to 10 minutes so existing local records remain usable without a reset.
+Manual `Running low` / `Need to buy` states take precedence. Otherwise an in-stock item becomes `Use soon` within three days of expiry and displays `Expired` after its expiry date.
 
-Supply attention is partly derived rather than fully user-entered. A manually `In stock` item becomes `Use soon` for display/attention when its expiry date is within three days, and past expiry dates display `Expired`. Manual `Running low` and `Need to buy` states take precedence.
+### Home
 
-These records are persisted through `SharedPreferences` as version-tolerant JSON strings. Invalid legacy/corrupt entries are skipped during local decode instead of blocking app startup. Cloud collaboration for these records is intentionally deferred until a merge/conflict strategy exists.
+Home is now a real local-first domain rather than placeholder category cards.
 
-### Shared cloud state
+`HomeThing` stores:
 
-Only data requiring collaboration should be synchronized: household memberships, shared routines, trusted-circle membership, location-sharing authorization, current location/battery snapshots and notification state.
+- appliance/equipment/item name
+- category and location in the home
+- optional brand/model
+- optional next service date
+- optional warranty date and notes in the model
 
-Local-first records must not be silently overwritten when shared Firestore sync is added. First-sync merge/conflict behavior must be documented before enabling it.
+`HomeEvent` stores maintenance or repair history with date, optional linked Thing, notes and who completed/logged the work.
 
-### User-owned media
+`UtilityReading` stores electricity/water readings, unit, timestamp and who recorded the reading.
 
-Receipts, manuals, incident photos, meter evidence and backup files should be stored in the user's own Google Drive where feasible. Homi stores references/metadata rather than becoming the permanent owner of those files.
+Overview can surface Things whose service date is due or approaching.
+
+### Persistence
+
+Quick Add, Routines, Supplies, Home Things, Home Events and Utility Readings are stored locally as JSON strings in SharedPreferences. Invalid/corrupt legacy entries are skipped rather than blocking startup. Local-only use remains fully valid without Firebase Authentication.
 
 ## Authentication and profile identity
 
-Firebase Authentication remains optional for basic local use.
+Firebase Authentication remains optional for core local use. Email/password and Google are supported.
 
-For signed-in users:
+Signed-in UI shows:
 
-- provider identity is read from Firebase `providerData` rather than inferred from the email address;
-- Google-authenticated accounts surface a Google provider mark so the user can recognise their sign-in method;
-- Firebase `emailVerified` is shown as account status, but it is not treated as a trusted-device signal;
-- Firebase display name can be updated from Profile settings;
-- email/password accounts can resend verification and request a password reset;
-- Google-only accounts are not shown password-management controls that do not apply to them;
-- Firebase profile photo is used in the persistent profile control when available, with a local icon fallback.
+- display name/email
+- Firebase email verification state
+- Google provider identity where applicable
+- Google profile photo when available
+- profile settings, verification resend/refresh and password reset only where applicable
 
-Profile/account management is secondary navigation opened from the persistent account control and does not become a sixth primary tab.
+Sign-out stops active live-location updates before ending the Firebase session.
 
-## Location architecture
+## Trusted people and location
 
-The location system is consent-first:
+Trusted-person connection and location consent are intentionally separate capabilities.
 
-- the tracked device/account must explicitly enable sharing;
-- adding or inviting someone never starts location sharing automatically;
-- sharing authorization is evaluated in Firestore rules/server-side logic rather than trusted to the viewer client;
-- v0.x stores the latest location/battery snapshot by default, not indefinite movement history;
-- Android background location is requested only for continuous sharing and requires a visible foreground-service state where the platform requires it;
-- location, battery and trusted-circle data are excluded from analytics/crash payloads;
-- the People UI keeps privacy information accessible without making a large privacy lecture the dominant page content.
+### Connection flow
 
-## Security rules
+Signed-in users receive a random 6-character Homi code. `/homiCodes/{code}` is an authenticated exact-lookup contact card and collection listing is denied by Firestore rules.
 
-- Every cloud collection/tree is authenticated by default.
-- Authorization is membership/share based, never client-trusted.
-- Location reads require an explicit active share from the subject to the viewer.
-- Sensitive location data is excluded from analytics/crash payloads.
-- App Check enforcement is enabled only after valid debug/release traffic has been confirmed.
-- No service-account credential is bundled with the app.
-- Google-hosted server workloads use attached service accounts/Application Default Credentials rather than downloaded long-lived private keys.
+A code creates a pending `/connections/{pairId}` relationship. The recipient must explicitly accept. Either member can later remove the connection.
 
-## Entitlements
+**Accepting a connection does not grant location access.**
 
-Paid functionality is not yet defined, but the architecture distinguishes capabilities from UI from the beginning. Future entitlement checks must be additive and must never make account deletion, location-sharing controls, privacy controls or emergency opt-out behavior dependent on payment.
+### Per-person location consent
 
-## Brand asset rule
+The location owner separately controls:
 
-The approved Homi option-4 visual direction is the source of truth: coral/peach/sage/cream/slate, friendly rounded typography and the distinctive lowercase `h` house/person mark. One exact master logo asset is used to derive launcher, adaptive foreground/background, monochrome/themed icon, splash, persistent header and in-app mark variants. Framework-drawn approximations are not acceptable.
+`/locationShares/{ownerUid}/viewers/{viewerUid}`
+
+A viewer may read `/locations/{ownerUid}` only when that share document is active. The client cannot bypass this rule by merely being connected.
+
+### Current location model
+
+Homi stores only the latest location/battery snapshot by default:
+
+- latitude/longitude
+- accuracy
+- battery percentage
+- charging state
+- server-updated timestamp
+- source mode
+
+No default breadcrumb/route history collection exists.
+
+People displays a persistent Google Map. Map markers use the person's profile photo where available, or an initials fallback. Selecting a marker exposes last update, battery, accuracy, reverse-geocoded address and coordinates. Address/coordinates can be copied and the location can be opened externally in Google Maps.
+
+### Foreground vs live background sharing
+
+Foreground location permission is enough for an explicit/current-location refresh. Once permission already exists, People refreshes automatically rather than requiring the user to press `Check my location` every visit.
+
+Live sharing is a second explicit opt-in. On Android it uses Geolocator's location foreground-service configuration with:
+
+- medium location accuracy
+- 100 metre distance filter
+- approximately two-minute requested interval
+- no wake lock
+- visible Homi foreground-service notification
+
+The user must grant Android `Allow all the time` location access for background updates. If live sharing was previously enabled, Homi attempts to resume it on the next app session without re-prompting; an explicit stop clears that preference.
+
+This is deliberately battery-conscious, but actual battery behaviour and Android delivery cadence must be validated on real devices. Force-stop/reboot resilience is a separate release-hardening concern and is not assumed merely because a foreground service works while the app is backgrounded.
+
+## Android host requirements
+
+The local Android host is generated/untracked, so `scripts/enable-location-map-android.ps1` idempotently enforces the native requirements after pulling this pass:
+
+- `INTERNET`
+- coarse/fine location
+- `ACCESS_BACKGROUND_LOCATION`
+- `FOREGROUND_SERVICE`
+- `FOREGROUND_SERVICE_LOCATION`
+- `POST_NOTIFICATIONS`
+- Google Maps API-key metadata referencing the existing local `@string/google_maps_key`
+- min SDK 24
+
+The script never prints or rewrites the actual Maps API key value.
+
+## Firestore security
+
+- account profile documents remain self-only
+- Homi codes are exact authenticated lookups, not listable
+- connection documents are readable only by their two members
+- only the invited recipient may move a connection from pending to accepted
+- location-share documents are controlled by the location owner
+- location reads require an explicit active share
+- all unspecified paths fail closed
+- no service-account credential is bundled in the app
+
+The new Firestore rules must be deployed before testing Homi-code connections.
+
+## Shared household sync boundary
+
+Routines/Home/Supplies are not silently uploaded just because a user signs in. Multi-user household data needs a defined household membership model plus first-sync merge/conflict rules. Completion attribution is implemented in the local model now, but another household member will not see those Routine updates on a different phone until that shared household synchronization layer is built.
+
+## Brand and UI rule
+
+The approved Homi logo assets under `assets/brand/` remain the only brand source of truth. Fixed choices prefer Homi inline selection controls. Destructive actions and important confirmations use Homi-styled sheets rather than generic popup menus/dialogs wherever practical. Framework-drawn approximations of the Homi mark are not acceptable.

@@ -256,7 +256,7 @@ class _HomiShellState extends State<HomiShell> {
           actorName: actorName,
           actorUid: actorUid,
         ),
-        onOpenRoutines: () => _openWork(WorkView.tasks),
+        onOpenRoutines: () => _openWork(WorkView.routines),
         onOpenHome: () => _selectPage(2),
         onOpenSupplies: () => _selectPage(3),
         onQuickAddTask: () => _openWork(WorkView.tasks),

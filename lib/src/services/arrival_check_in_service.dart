@@ -235,9 +235,11 @@ class ArrivalCheckInService extends ChangeNotifier {
           break;
         case ArrivalZoneTransition.left:
           _inside[place.kind] = false;
+          break;
         case ArrivalZoneTransition.arrived:
           _inside[place.kind] = true;
           await _sendArrival(place.kind);
+          break;
       }
     }
   }

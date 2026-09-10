@@ -30,11 +30,9 @@ Primary destinations are:
 
 The exact Homi mark is the centre Home icon. The persistent Homi logo/profile row remains outside the PageView so it does not move when swiping between destinations.
 
-The bottom navigation uses a rounded white base plus a true circular white halo behind the active destination. The halo is generated as a geometric union rather than hand-drawn mound control points so edge destinations do not develop pointed corners.
+The profile/avatar entry now opens a full **Homi & account** centre rather than only a compact account sheet. Local-only users can access Help, Why Homi exists, privacy, location/safety, terms, about and local-data controls without being forced to sign in.
 
 ## Tasks vs routines
-
-The Tasks destination contains two deliberately different concepts.
 
 ### Tasks
 
@@ -66,7 +64,7 @@ Routine durations include the launch-facing **60+ min** option; internally it re
 
 Overview aggregates real attention from open Tasks, due Routines, Supplies and Home service dates.
 
-The Overview **Quick add** action is now a destination launcher rather than another unclassified reminder field. It routes the user to Task, Routine, Supply or Home so new information enters the correct product model. Existing legacy Quick Add reminder strings remain readable/removable for migration compatibility but new vague reminders are no longer created by the Overview UI.
+Overview **Quick add** is a destination launcher for Task, Routine, Supply and Home. Its sheet is scroll/height constrained so it remains usable on the S25 Ultra and smaller supported heights instead of overflowing the Android navigation area.
 
 `When you have time` / Quick Reset prioritises due saved Routines, fills remaining time with rotating common household suggestions and never intentionally exceeds the chosen time budget.
 
@@ -78,7 +76,7 @@ The following continue to work without an account:
 - legacy Quick Add reminders
 - private/local one-off Tasks
 - recurring Routines
-- Supplies and expiry state
+- Supplies, quantities, status and expiry state
 - Home Things
 - maintenance/repair history
 - utility readings
@@ -86,13 +84,29 @@ The following continue to work without an account:
 
 Local records are encoded as version-tolerant JSON strings in SharedPreferences. Model changes preserve older records with safe defaults rather than requiring storage resets.
 
+### Supply amount model
+
+Supply quantity is deliberately optional so Homi does not turn unpacking groceries into admin.
+
+A Supply may store:
+
+- optional `quantity`;
+- optional stable `SupplyUnit` (`item`, `loaf`, `bottle`, `carton`, `pack`, `bag`, `roll`, `egg`, `kg`, `g`, `L`, `mL`);
+- stock status;
+- expiry date;
+- icon/category.
+
+Legacy Supplies with no amount remain valid in status-only mode. Quantity can be updated by tapping the amount or using compact +/- controls. Common Quick Adds start with useful defaults such as Bread = 1 loaf and Eggs = 12 eggs. A tracked quantity of zero derives `Need to buy` without deleting the item.
+
 ## Shared cloud state
 
-Cloud sharing remains additive and narrow.
+Cloud sharing remains additive and narrow. **Most Home/Routine/Supply data is not yet full cloud sync.** The low Firestore usage seen during development is therefore expected and must not be interpreted as a production cost benchmark.
 
 ### Trusted connections and private labels
 
 `connections/{connectionId}` establishes that two authenticated users accepted a trusted-person connection. The connection alone grants no location or household access.
+
+Each connection stores deterministic `aUid` and `bUid` participant fields. The client now issues two equality queries (`aUid == me` and `bUid == me`) and merges them locally. This replaced the previous `memberUids array-contains` listener after the S25 Ultra exposed a Firestore rules/query proof failure (`PERMISSION_DENIED`) despite the user being a member.
 
 Each user may privately classify another connected person at:
 
@@ -121,20 +135,13 @@ The tracked device controls sharing.
 - Another user may read it only when an accepted connection exists and the owner created an active `locationShares/{ownerUid}/viewers/{viewerUid}` share.
 - Long-term movement history is not stored by default.
 
-People uses keep-alive state plus the app-level `LocationStatusService` so swiping away and back should not briefly reset live-sharing UI to its initial state before the cache/stream catches up.
-
 ## People maps and focus
 
-People now has two map surfaces:
+People has an embedded map and a full-screen map. The full-screen map was hardened in 0.7 with an explicitly full-route platform-view size after the S25 Ultra showed the map rendering only in a shallow strip with the remainder of the route blank.
 
-1. the embedded People map, which remains pannable/zoomable and includes an **Open map** action;
-2. a full-screen People map with branded back/focus controls.
-
-Available people are represented by their profile picture as the map marker, with initials as fallback. Person chips let the user focus the map on a particular person. Selecting a marker can open location details with last update, address, coordinates, accuracy, battery and charging state.
+Available people are represented by profile picture markers, with initials as fallback. Person chips let the user focus the map on a particular person. Selecting a marker can open location details with last update, address, coordinates, accuracy, battery and charging state.
 
 Address and coordinates have individual copy actions; **Copy all** copies both and Google Maps opens the coordinates externally.
-
-A sync failure does not erase the last known location state. People exposes a retry action and distinguishes secure-sync/unavailable errors from an actual lack of connections instead of presenting raw Firestore error codes.
 
 ## Home
 
@@ -152,13 +159,22 @@ Utility units are controlled choices rather than free-form text:
 
 A trusted or location-only connection is not automatically a Home member.
 
-## Supplies
+## Account, privacy and data controls
 
-Supply records persist a stable `iconKey` resolved through `SupplyIconCatalog`. Existing records without an icon key fall back to `inventory`. The catalog covers common food, cleaning, medical, pet, garden, hardware, utility and other household cases.
+The Account centre separates four actions that must never be conflated:
+
+- Sign in: enable identity/cloud features;
+- Sign out: end the session without silently deleting local household data;
+- Erase data from this phone: delete local household records and Homi cached location while keeping the cloud account;
+- Delete Homi account: reauthenticate, delete Homi-managed cloud account data, delete Firebase Auth identity and explicitly erase the current device's Homi household/location cache.
+
+`AccountDataService` is the central deletion inventory for the active Firestore schema. Add new account-linked cloud collections to this service in the same pass that introduces them.
+
+For another person's shared Task, account deletion detaches/anonymises the deleting user's references rather than deleting a record owned by somebody else.
 
 ## Input / interaction standards
 
-Stable fixed choices use Homi inline selection controls instead of awkward native dropdown menus. Dates and times use Homi-branded calendar/time controls rather than text fields. Numeric text entry is reserved for genuinely free-form numbers such as meter readings.
+Stable fixed choices use Homi inline selection controls instead of awkward native dropdown menus. Dates and times use Homi-branded calendar/time controls rather than text fields. Numeric text entry is reserved for genuinely free-form numbers such as meter readings or optional Supply quantity.
 
 Destructive confirmations and action menus should use Homi sheets rather than unstyled platform popups wherever practical.
 
@@ -185,6 +201,10 @@ Anything not explicitly allowed by Firestore rules fails closed.
 - App Check enforcement remains off until valid debug/release traffic is proven.
 - No privacy or stop-sharing control may ever depend on payment.
 
+## Commercial direction
+
+Launch planning currently recommends **Free + Homi+** rather than multiple paid tiers. Billing is not implemented yet. See `documentation/business/PRICING_AND_UNIT_ECONOMICS.md`.
+
 ## Verification state
 
-Source is at the `0.6.0+6` feature-pass stage. GitHub is the tracked-source source of truth, but Bruce's local `flutter analyze`, `flutter test` and real Samsung S25 Ultra device run remain the authority for compile/runtime success. Do not call 0.6.0 device-verified until those checks succeed.
+Source is at the `0.7.0+7` feature-pass stage. The previous 0.6 analyzer/tests passed, but the new 0.7 source changes have not yet been run through Bruce's local `flutter analyze`, `flutter test` or S25 Ultra device build. Firestore rules also require a fresh deployment after the 0.7 query/account-deletion changes.

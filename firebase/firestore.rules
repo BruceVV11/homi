@@ -141,6 +141,21 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // A saved Home/Work coordinate is more sensitive than a normal connection.
+    // Another person may read one exact document only when the owner explicitly
+    // included them in viewerUids AND still actively shares live/latest location
+    // with them. Clients cannot create or mutate this collection directly.
+    match /sharedPlaces/{ownerUid}/places/{kind} {
+      allow get: if isSelf(ownerUid)
+        || (signedIn()
+          && resource.data.ownerUid == ownerUid
+          && resource.data.kind == kind
+          && resource.data.viewerUids is list
+          && resource.data.viewerUids.hasAny([request.auth.uid])
+          && hasActiveLocationShare(ownerUid, request.auth.uid));
+      allow list, create, update, delete: if false;
+    }
+
     // Latest location is the only high-frequency collaboration state written
     // directly from the device. Owner/schema checks plus a minimum update
     // interval provide a cost-abuse backstop even before service-level App

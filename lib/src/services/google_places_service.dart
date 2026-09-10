@@ -51,7 +51,7 @@ class HomiGooglePlacesService {
   FlutterGooglePlacesSdk get _places {
     if (!configured) {
       throw StateError(
-        'Google address search is not configured for this build yet.',
+        'Google address search is unavailable right now.',
       );
     }
     return _client ??= FlutterGooglePlacesSdk(

@@ -35,7 +35,37 @@ async function detachMemberFromCreatorTasks(creatorUid, memberUid) {
   }
 }
 
+async function revokeSharedPlaceViewer(ownerUid, viewerUid) {
+  const places = db.collection("sharedPlaces").doc(ownerUid)
+      .collection("places");
+  for (const kind of ["home", "work"]) {
+    const ref = places.doc(kind);
+    const snapshot = await ref.get();
+    if (!snapshot.exists) continue;
+    const data = snapshot.data();
+    const viewers = Array.isArray(data.viewerUids) ? data.viewerUids : [];
+    if (!viewers.includes(viewerUid)) continue;
+    const remaining = viewers.filter((uid) => uid !== viewerUid);
+    if (remaining.length === 0) {
+      await ref.delete();
+    } else {
+      await ref.update({
+        viewerUids: remaining,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+  }
+}
+
 async function cleanupConnectionMetadata(firstUid, secondUid) {
+  // Remove precise saved-place visibility before deleting the location-share
+  // metadata. Firestore also requires an active share at read time, but this
+  // cleanup prevents a future reconnect/re-share from reviving a stale grant.
+  await Promise.all([
+    revokeSharedPlaceViewer(firstUid, secondUid),
+    revokeSharedPlaceViewer(secondUid, firstUid),
+  ]);
+
   const refs = [
     db.collection("locationShares").doc(firstUid)
         .collection("viewers").doc(secondUid),

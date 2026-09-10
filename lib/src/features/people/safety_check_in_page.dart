@@ -175,12 +175,14 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 14),
-              ...choices.map((radius) => RadioListTile<double>(
-                    value: radius,
-                    groupValue: place.radiusMeters,
-                    title: Text('${radius.round()} m'),
-                    onChanged: (value) => Navigator.pop(context, value),
-                  )),
+              HomiChoiceGroup<double>(
+                values: choices,
+                selected: choices.contains(place.radiusMeters)
+                    ? place.radiusMeters
+                    : 250,
+                labelFor: (radius) => '${radius.round()} m',
+                onSelected: (value) => Navigator.pop(context, value),
+              ),
             ],
           ),
         ),

@@ -9,17 +9,20 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/arrival_check_in_service.dart';
 import '../../services/location_status_service.dart';
 import '../../services/trusted_people_service.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/homi_controls.dart';
 import '../../widgets/homi_page.dart';
 import 'people_map_page.dart';
+import 'safety_check_in_page.dart';
 
 class PeoplePage extends StatefulWidget {
   const PeoplePage({
     required this.locationService,
     required this.trustedPeopleService,
+    required this.checkInService,
     required this.firebaseReady,
     required this.onSignIn,
     super.key,
@@ -27,6 +30,7 @@ class PeoplePage extends StatefulWidget {
 
   final LocationStatusService locationService;
   final TrustedPeopleService trustedPeopleService;
+  final ArrivalCheckInService checkInService;
   final bool firebaseReady;
   final VoidCallback onSignIn;
 
@@ -91,7 +95,12 @@ class _PeoplePageState extends State<PeoplePage>
         unawaited(_moveMapTo(snapshot.latitude, snapshot.longitude));
       }
     });
+    widget.checkInService.addListener(_refreshCheckInStatus);
     unawaited(_initialise());
+  }
+
+  void _refreshCheckInStatus() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _initialise() async {
@@ -135,6 +144,7 @@ class _PeoplePageState extends State<PeoplePage>
 
   @override
   void dispose() {
+    widget.checkInService.removeListener(_refreshCheckInStatus);
     _selfSubscription?.cancel();
     _cancelTrustedCore();
     for (final subscription in _shareSubscriptions.values) {
@@ -373,6 +383,20 @@ class _PeoplePageState extends State<PeoplePage>
     } catch (error) {
       if (mounted) setState(() => _error = _friendly(error));
     }
+  }
+
+  Future<void> _openSafety() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => SafetyCheckInPage(
+          checkInService: widget.checkInService,
+          locationService: widget.locationService,
+          trustedPeopleService: widget.trustedPeopleService,
+          firebaseReady: widget.firebaseReady,
+          onSignIn: widget.onSignIn,
+        ),
+      ),
+    );
   }
 
   void _showLocationFaq() {
@@ -691,6 +715,68 @@ class _PeoplePageState extends State<PeoplePage>
     );
   }
 
+  Widget _trustedCard(
+    TrustedConnection connection,
+    String currentUid,
+  ) {
+    final otherUid = connection.otherUid(currentUid);
+    final preference =
+        _preferences[otherUid] ?? TrustedPersonPreference.fallback;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: _TrustedPersonCard(
+        connection: connection,
+        currentUid: currentUid,
+        preference: preference,
+        location: _locations[otherUid],
+        theyShareToMe: _theyShareToMe[otherUid] == true,
+        shareStream: widget.trustedPeopleService.watchMyShareTo(otherUid),
+        onSetMyShare: (active) =>
+            widget.trustedPeopleService.setMyLocationShare(otherUid, active),
+        onEditRelationship: () => _editPreference(connection),
+        onShowLocation: _locations[otherUid] == null
+            ? null
+            : () {
+                final location = _locations[otherUid]!;
+                return _showLocationDetails(
+                  name: connection.otherName(currentUid),
+                  photoUrl: connection.otherPhotoUrl(currentUid),
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                  batteryPercent: location.batteryPercent,
+                  isCharging: location.isCharging,
+                  updatedAt: location.updatedAt,
+                  accuracyMeters: location.accuracyMeters,
+                );
+              },
+        onFocusLocation: _locations[otherUid] == null
+            ? null
+            : () {
+                final target = _mapPeople()
+                    .where((person) => person.id == otherUid)
+                    .firstOrNull;
+                if (target != null) _focusPerson(target);
+              },
+        onRemove: () async {
+          final confirmed = await showHomiConfirmSheet(
+            context,
+            title: 'Remove ${connection.otherName(currentUid)}?',
+            message:
+                'The trusted connection will end. Your location share to this person will also be switched off.',
+            confirmLabel: 'Remove connection',
+            cancelLabel: 'Keep connected',
+            icon: Icons.person_remove_alt_1_outlined,
+            destructive: true,
+          );
+          if (confirmed) {
+            await widget.trustedPeopleService
+                .declineOrRemoveConnection(connection);
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -707,6 +793,24 @@ class _PeoplePageState extends State<PeoplePage>
             .where((item) => item.pending && item.initiatorUid == currentUid)
             .toList(growable: false);
     final accepted = _connections.where((item) => item.accepted).toList();
+    final household = <TrustedConnection>[];
+    final trusted = <TrustedConnection>[];
+    if (currentUid != null) {
+      for (final connection in accepted) {
+        final otherUid = connection.otherUid(currentUid);
+        final preference =
+            _preferences[otherUid] ?? TrustedPersonPreference.fallback;
+        if (preference.household) {
+          household.add(connection);
+        } else {
+          trusted.add(connection);
+        }
+      }
+      household.sort((a, b) =>
+          a.otherName(currentUid).compareTo(b.otherName(currentUid)));
+      trusted.sort((a, b) =>
+          a.otherName(currentUid).compareTo(b.otherName(currentUid)));
+    }
     final initialTarget = _selfSnapshot == null
         ? const LatLng(0, 0)
         : LatLng(_selfSnapshot!.latitude, _selfSnapshot!.longitude);
@@ -889,7 +993,7 @@ class _PeoplePageState extends State<PeoplePage>
           children: [
             Expanded(
               child: Text(
-                'Trusted people',
+                'Connections',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
@@ -965,72 +1069,37 @@ class _PeoplePageState extends State<PeoplePage>
               onTap: _connectWithCode,
             ),
           ] else ...[
-            const SizedBox(height: 12),
-            ...accepted.map(
-              (connection) {
-                final otherUid = connection.otherUid(currentUid!);
-                final preference = _preferences[otherUid] ??
-                    TrustedPersonPreference.fallback;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _TrustedPersonCard(
-                    connection: connection,
-                    currentUid: currentUid,
-                    preference: preference,
-                    location: _locations[otherUid],
-                    theyShareToMe: _theyShareToMe[otherUid] == true,
-                    shareStream:
-                        widget.trustedPeopleService.watchMyShareTo(otherUid),
-                    onSetMyShare: (active) => widget.trustedPeopleService
-                        .setMyLocationShare(otherUid, active),
-                    onEditRelationship: () => _editPreference(connection),
-                    onShowLocation: _locations[otherUid] == null
-                        ? null
-                        : () {
-                            final location = _locations[otherUid]!;
-                            return _showLocationDetails(
-                              name: connection.otherName(currentUid),
-                              photoUrl:
-                                  connection.otherPhotoUrl(currentUid),
-                              latitude: location.latitude,
-                              longitude: location.longitude,
-                              batteryPercent: location.batteryPercent,
-                              isCharging: location.isCharging,
-                              updatedAt: location.updatedAt,
-                              accuracyMeters: location.accuracyMeters,
-                            );
-                          },
-                    onFocusLocation: _locations[otherUid] == null
-                        ? null
-                        : () {
-                            final target = _mapPeople()
-                                .where((person) => person.id == otherUid)
-                                .firstOrNull;
-                            if (target != null) _focusPerson(target);
-                          },
-                    onRemove: () async {
-                      final confirmed = await showHomiConfirmSheet(
-                        context,
-                        title:
-                            'Remove ${connection.otherName(currentUid)}?',
-                        message:
-                            'The trusted connection will end. Your location share to this person will also be switched off.',
-                        confirmLabel: 'Remove connection',
-                        cancelLabel: 'Keep connected',
-                        icon: Icons.person_remove_alt_1_outlined,
-                        destructive: true,
-                      );
-                      if (confirmed) {
-                        await widget.trustedPeopleService
-                            .declineOrRemoveConnection(connection);
-                      }
-                    },
-                  ),
-                );
-              },
-            ),
+            if (household.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              _PeopleGroupHeader(
+                title: 'Household',
+                count: household.length,
+                subtitle:
+                    'People included in your household context and task assignment.',
+              ),
+              const SizedBox(height: 8),
+              ...household.map((connection) =>
+                  _trustedCard(connection, currentUid!)),
+            ],
+            if (trusted.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              _PeopleGroupHeader(
+                title: 'Friends & trusted people',
+                count: trusted.length,
+                subtitle:
+                    'Connected people kept separate from household tasks and home data.',
+              ),
+              const SizedBox(height: 8),
+              ...trusted.map((connection) =>
+                  _trustedCard(connection, currentUid!)),
+            ],
           ],
         ],
+        const SizedBox(height: 22),
+        _SafetyEntryCard(
+          checkInsEnabled: widget.checkInService.config.enabled,
+          onTap: _openSafety,
+        ),
       ],
     );
   }
@@ -1751,28 +1820,12 @@ class _TrustedPersonCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      GestureDetector(
-                        onTap: onEditRelationship,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                '${preference.relationship} · ${preference.household ? 'Household' : 'Location only'}',
-                                style: const TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w900,
-                                  color: HomiColors.coral,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(
-                              Icons.edit_outlined,
-                              size: 14,
-                              color: HomiColors.coral,
-                            ),
-                          ],
+                      Text(
+                        '${preference.relationship} · ${preference.household ? 'Household' : 'Location only'}',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w900,
+                          color: HomiColors.coral,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -1787,8 +1840,13 @@ class _TrustedPersonCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                TextButton.icon(
+                  onPressed: onEditRelationship,
+                  icon: const Icon(Icons.tune_rounded, size: 17),
+                  label: const Text('Edit'),
+                ),
                 IconButton(
-                  tooltip: 'Connection options',
+                  tooltip: 'Remove connection',
                   onPressed: onRemove,
                   icon: const Icon(Icons.more_vert_rounded),
                 ),
@@ -1825,6 +1883,102 @@ class _TrustedPersonCard extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PeopleGroupHeader extends StatelessWidget {
+  const _PeopleGroupHeader({
+    required this.title,
+    required this.count,
+    required this.subtitle,
+  });
+
+  final String title;
+  final int count;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: HomiColors.sage.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: Text('$count',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+      ],
+    );
+  }
+}
+
+class _SafetyEntryCard extends StatelessWidget {
+  const _SafetyEntryCard({
+    required this.checkInsEnabled,
+    required this.onTap,
+  });
+
+  final bool checkInsEnabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: HomiColors.peach.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.health_and_safety_outlined,
+                  color: HomiColors.coral,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Safety & check-ins',
+                        style: TextStyle(fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 3),
+                    Text(
+                      checkInsEnabled
+                          ? 'Emergency call shortcuts · arrival check-ins on'
+                          : 'Emergency call shortcuts · Home & Work check-ins',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
         ),
       ),
     );

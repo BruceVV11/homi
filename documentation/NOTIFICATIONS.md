@@ -1,7 +1,7 @@
 # Homi Notifications
 
 Date: 2026-09-10
-Source version: `0.8.0+8`
+Source version: `0.8.1+9`
 
 ## Product principle
 
@@ -32,6 +32,8 @@ The device-level Homi settings are:
 
 The master switch applies only to this installation. Category choices are stored locally and, for a signed-in device, mirrored with its FCM device registration so the backend can avoid direct messages the installation has disabled.
 
+**Homi updates defaults off.** A person must explicitly enable that optional product-announcement category. Unknown remote categories fail closed rather than silently notifying.
+
 Developer broadcast categories use FCM topic subscriptions so a local-only installation can receive Homi product/service notices without creating an account. Topic subscriptions are updated when the user changes the relevant category.
 
 ## Local household notifications
@@ -54,18 +56,29 @@ Scheduled local reminders use inexact Android scheduling rather than exact alarm
 
 Homi stores notification IDs for the schedules it owns, cancels/rebuilds only those IDs, and does not cancel unrelated Android notifications.
 
-## Noise control
+## Noise and abuse control
 
-Current anti-nag rules:
+Current controls:
 
 - notifications are user enabled rather than automatically opted in;
 - category-level switches are available;
+- Homi updates is separately opt-in;
 - expiry/maintenance housekeeping reminders use 09:00 rather than overnight delivery;
 - critical Supply changes are de-duplicated while the item remains in that state;
 - only the nearest 60 local schedules are retained after sorting chronologically;
 - broad developer notices use only product, service or security categories and cannot masquerade as a personal People/Task notification;
 - a People heart has a server-side one-minute sender→recipient cooldown;
+- a sender is capped at 40 hearts per fixed 24-hour window;
+- connection-request notification generation is capped at 20/hour per initiator;
+- shared Task creation notification generation is capped at 60/hour per creator;
+- shared Task completion notification generation is capped at 120/hour per completing user;
+- developer self-tests are capped at 30/hour;
+- developer broad campaigns are capped at 6/hour and 20 per fixed 24-hour window;
+- direct notification fan-out reads no more than 12 enabled device registrations for one account;
+- Functions have bounded instance counts in source;
 - no long-term location history or coordinates are placed in notification text.
+
+The server counters live under `serverRateLimits` and are inaccessible to mobile clients. These limits reduce simple spam/runaway-cost paths; they complement, rather than replace, Firebase App Check, IAM, monitoring and Cloud Billing controls.
 
 ## FCM device registration
 
@@ -87,6 +100,8 @@ The document includes:
 
 The device ID is a random app-installation identifier stored in Homi local preferences. It is not a hardware serial or advertising identifier.
 
+Firestore rules restrict device documents to this compact schema, bound token/platform lengths and boolean preference values.
+
 Signing out removes the push token from that signed-in user/device record before ending the Firebase Auth session. Account deletion also removes current device registration and the existing account-deletion pipeline deletes the user's device subcollection.
 
 Invalid/unregistered FCM tokens discovered during direct server delivery are removed and disabled automatically.
@@ -97,7 +112,7 @@ Cloud Functions produce direct, preference-aware notifications for authenticated
 
 ### Connection request
 
-Recipient receives a Homi People notification when another user sends a connection request.
+Recipient receives a Homi People notification when another user sends a connection request. Excessive notification generation from one initiator is server-limited.
 
 ### Connection accepted
 
@@ -108,9 +123,11 @@ The original sender receives a People notification when the invited user accepts
 The full People map exposes a small heart action for a selected trusted person. It is deliberately simple:
 
 - only an authenticated user may send;
+- the callable Function requires valid Firebase App Check attestation;
 - the recipient must be an accepted trusted connection;
 - sending does not change location sharing, household scope or any relationship permission;
 - the server applies a one-minute cooldown for each sender→recipient pair;
+- a sender is also limited to 40 hearts per fixed 24-hour window;
 - the recipient sees **“{name} is thinking about you!”**;
 - tapping the notification opens People.
 
@@ -142,11 +159,13 @@ A broad send always asks for a second Homi confirmation.
 
 Client Firestore rules allow only an active developer-admin account to create a tightly validated queued campaign. The client cannot mark a campaign sent, edit delivery counts or grant developer access.
 
-Cloud Functions re-check the developer-admin record before delivery.
+Cloud Functions re-check the developer-admin record before delivery and apply independent server-side campaign rate limits.
 
 ### Test sends
 
 **Just this account** reads the signed-in developer's enabled device records, applies that device's category preference and sends directly to the token(s). Direct send/failure counts are recorded.
+
+Bruce has confirmed developer self-test delivery on the Samsung S25 Ultra.
 
 ### Broadcast sends
 
@@ -157,6 +176,8 @@ Cloud Functions re-check the developer-admin record before delivery.
 - `homi_security`
 
 Only installations with the matching Homi category enabled subscribe to that topic. A broadcast campaign records that FCM accepted the broadcast and its FCM message ID; it does not pretend topic acceptance is a per-device read/delivery receipt.
+
+This branch is implemented. It was deliberately not used during the first self-test proof. One controlled broad send should be tested before public users exist.
 
 ## Foreground, background and tap routing
 
@@ -186,21 +207,43 @@ The helper idempotently adds/verifies:
 
 It does not modify Firebase keys, Maps keys, signing values or other secrets.
 
-## Cloud deployment
+## Cloud deployment and runtime identity
 
 The notification backend lives under `functions/` and uses Firebase Cloud Functions 2nd gen in `africa-south1`.
 
-Deploy it together with Firestore rules using:
+Homi Functions are configured in source to use the dedicated runtime identity:
+
+`homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`
+
+rather than the broad default Compute runtime service account.
+
+Prepare the required runtime/trigger IAM once with:
+
+```bash
+bash scripts/prepare-function-runtime-iam.sh
+```
+
+Deploy Firestore rules and Functions using:
 
 ```bash
 bash scripts/deploy-notification-backend.sh
 ```
 
-The script verifies the permanent Homi project number before deployment, installs Functions dependencies, syntax-checks `functions/index.js`, and deploys Firestore + Functions to `homi-ee80a`.
+The deploy helper verifies the permanent Homi project number, installs Functions dependencies, syntax-checks `functions/index.js`, runs the Firestore Emulator security test gate, and only then deploys Firestore + Functions to `homi-ee80a`.
+
+## Firestore security test gate
+
+Run independently with:
+
+```bash
+bash scripts/test-firestore-security.sh
+```
+
+The tests exercise important positive and negative authorisation paths for location, connections, shared Tasks, developer campaigns, server-only rate-limit records and notification device registrations. A failing security test blocks the normal backend deployment helper.
 
 ## Developer-admin provisioning
 
-Obtain the intended developer Firebase Auth UID directly from **Firebase Console → Authentication → Users**. Do not send or commit it.
+Obtain the intended developer Firebase Auth UID directly from **Firebase Console → Authentication → Users** and do not commit it.
 
 In Cloud Shell:
 
@@ -212,11 +255,13 @@ Use `disable` to revoke access. The script guards both project ID and project nu
 
 ## App Check
 
-The development debug token has been registered. App Check enforcement remains off until valid debug and release traffic is confirmed. Enabling App Check enforcement is a separate release-hardening decision and must not be confused with notification permission.
+The development debug token has been registered privately.
+
+`sendHeart` now enforces App Check at the callable Function. Cloud Firestore enforcement remains a separate release-hardening gate: verify valid App Check metrics first, configure Play Integrity for the Play-signed release build, then enforce Firestore before public release.
 
 ## Privacy / safety boundary
 
-Notification payloads should minimise sensitive content.
+Notification payloads minimise sensitive content.
 
 - no coordinates or precise addresses in developer broadcasts;
 - no household Task title in server-generated lock-screen Task notifications;
@@ -227,4 +272,4 @@ Notification payloads should minimise sensitive content.
 
 ## Verification state
 
-This document describes the `0.8.0+8` source implementation. The notification source, Android host patch and Cloud Functions still require Bruce's local Flutter/Android and live Firebase deployment verification before the pass is marked device/backend verified.
+The 0.8 notification product path has been proven on the Samsung S25 Ultra for local delivery and developer self-test delivery. The `0.8.1+9` security changes are a new source/backend hardening pass and require fresh Flutter analysis/tests, Firestore Emulator rules tests, Functions deployment with the dedicated runtime identity and device regression testing before release candidate status.

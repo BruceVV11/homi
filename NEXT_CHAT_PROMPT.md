@@ -7,7 +7,7 @@ Continue development of **Homi** from the current GitHub `main` branch. Treat Gi
 - `documentation/LOCATION_SAFETY.md`
 - the latest affected source files
 
-Use the **mobile-app-development** workflow first. Preserve approved behaviour/design, exact brand assets and existing user data. Do not claim a pass compiled or worked on-device until Bruce's local Flutter/Android toolchain proves it.
+Use the **mobile-app-development** workflow first. Preserve approved behaviour/design, exact brand assets and existing user data. Do not claim a pass worked on-device until Bruce's local Android device proves it.
 
 ## Permanent project context
 
@@ -26,11 +26,11 @@ Use the **mobile-app-development** workflow first. Preserve approved behaviour/d
 - Preserve existing local Firebase/Maps files and never ask Bruce to paste the Maps key into chat.
 - Deleted project `homi-508000` must never be used.
 
-Bruce currently has a safety stash named:
+Bruce has a safety stash named:
 
 `stash@{0}: On main: Homi pre-0.5.0 local tracked changes`
 
-Do **not** automatically pop or delete that stash. It preserves old local source fixes; current GitHub already supersedes them.
+Do **not** automatically pop or delete it.
 
 ## Approved brand
 
@@ -40,11 +40,11 @@ Do **not** automatically pop or delete that stash. It preserves old local source
 - Cream `#FFF8F2`
 - Slate `#2E2E2E`
 - Nunito typography
-- Exact Homi logo/mark artwork already exists in `assets/brand/`; never redraw/approximate it with framework shapes.
+- Exact Homi logo/mark artwork already exists in `assets/brand/`; never redraw/approximate it.
 
-## Current product / navigation
+## Current product state
 
-Homi is a local-first household operating system with a broader trusted-person/location layer.
+Current source version: **`0.6.0+6`**.
 
 Primary navigation:
 
@@ -52,80 +52,50 @@ Primary navigation:
 
 Home remains centred and uses the exact Homi mark. The persistent Homi logo/profile header remains fixed while swiping primary pages.
 
-Current source version: **`0.6.0+6`**.
-
-## Tasks and Routines
-
-Tasks and Routines are intentionally separate.
-
 ### Tasks
 
-Tasks happen once.
-
-- Optional due date/time or **No due time**.
+- One-off jobs, optional date/time or **No due time**.
 - Completed Tasks show who completed them and when.
-- Completed Tasks stay visible for 48 hours, then are hidden/purged by local/cloud cleanup.
+- Completed Tasks remain under **Recently completed** for 48 hours, then are hidden/purged by local/cloud cleanup.
 - **Me** tasks remain private/local.
-- A task assigned to another Household person, or **Anyone at home**, can be visible to the creator's chosen Household people through `sharedTasks/{taskId}`.
-- Every household viewer sees the assignee/due/completion attribution.
+- Another Household assignee or **Anyone at home** can create a household-visible shared Task through `sharedTasks/{taskId}`.
 - Location-only friends must not see household Tasks.
-- Task explanatory copy now lives behind **How it works** instead of occupying page space.
+- Task explanatory copy is behind **How it works**.
 
 ### Routines
 
-Routines repeat:
+Supported recurrence:
 
 - Daily
 - Weekdays
 - Weekly / selected weekdays
-- **Bi-weekly** / every second selected weekday
+- Bi-weekly
 - Monthly
 
-`RoutineCompletion.occurrenceDueAt` keeps complete → undo → complete-again reversible for the same occurrence.
+`RoutineCompletion.occurrenceDueAt` keeps complete → undo → complete-again reversible for the same occurrence. Duration choices include **60+ min**.
 
-Duration choices include **60+ min**.
+### Overview
 
-## Overview
+Overview **Quick add** launches Task, Routine, Supply or Home instead of creating a vague reminder. Existing legacy Quick Add reminder strings remain readable/removable only for migration safety.
 
-Overview **Quick add** is now a launcher rather than another vague reminder field.
+`When you have time` still prioritises due Routines and rotates common household suggestions.
 
-It offers:
+### Home
 
-- Task
-- Routine
-- Supply
-- Home
+Supports Things/appliances/equipment, service dates, warranty dates, maintenance/repair history and utility readings.
 
-Task/Routine selections route into the correct Tasks subview. Supply/Home route to their primary page. Existing old Quick Add reminder strings remain readable/removable for migration but the Overview UI no longer creates new ambiguous reminder records.
-
-`When you have time` continues to prioritise due Routines and rotate common household suggestions.
-
-## Home
-
-Home supports:
-
-- Things/appliances/equipment
-- service dates
-- warranty dates
-- maintenance/repair history
-- utility readings
-
-Utility unit input is now controlled, not free text:
+Utility units are controlled choices:
 
 - electricity: `kWh`, `Wh`, `MWh`, `units`
 - water: `kL`, `L`, `m³`, `units`
 
-Dates/times remain Homi-branded controls rather than typed fields/native dropdowns.
+### Supplies
 
-## Supplies
+Supplies include quick adds, expiry logic, branded date controls and persisted `SupplyIconCatalog`. Missing legacy icon keys fall back to `inventory`.
 
-Supplies include quick adds, expiry logic and a broad persisted `SupplyIconCatalog`. Missing legacy icon keys fall back to `inventory`.
+### People / trusted location
 
-## People / trusted location
-
-People intentionally supports partners, family, roommates **and friends**.
-
-Each connected person can be privately classified with a relationship label plus scope:
+People supports partners, family, roommates and friends. Each connected person has a private relationship label and private scope:
 
 - **Household**
 - **Friend · location only**
@@ -134,56 +104,36 @@ Connection acceptance, household/friend scope and location consent are separate 
 
 Current People source includes:
 
-- cached current location + live state reused immediately on return to the tab;
-- `AutomaticKeepAliveClientMixin` to prevent tab-swipe state flicker;
-- profile-photo map markers;
-- embedded interactive map;
+- cached current location/live state reused immediately on return;
+- state retention across PageView swipes;
+- profile-photo/initial markers;
+- embedded Google Map;
 - **Open map** full-screen Google Map;
-- pan/zoom on full map;
-- person focus chips that centre a selected person;
-- person card focus action;
+- pan/zoom and person focus controls;
 - battery/charging/freshness;
-- address + coordinate details;
-- copy-address icon;
-- copy-coordinates icon;
-- **Copy all**;
-- external Google Maps;
+- address/coordinates with individual copy actions, **Copy all**, and external Google Maps;
 - Homi codes / connection requests;
 - per-person Share mine / Stop my share;
 - explicit Live updates with Android foreground-service notification;
-- trusted-person sync retry that keeps last successful location data instead of collapsing to an empty state.
+- trusted-person sync retry preserving last successful state.
 
-Raw Firestore permission errors should never be shown directly. A permission/sync problem must not be mislabeled as an internet problem.
+Raw Firestore permission errors must not be shown directly. A sync problem must not be mislabeled as an internet problem.
 
-The prior Connect-sheet red-screen regression (`'_dependents.isEmpty': is not true`) was addressed by giving the modal ownership of its controller. Continue real-device regression testing before declaring it permanently fixed.
+The prior Connect-sheet framework regression (`'_dependents.isEmpty': is not true`) was addressed by making the modal own/dispose its controller. Re-test repeatedly on the real S25 Ultra before calling it permanently fixed.
 
-## Location battery/safety boundary
+## Location safety boundary
 
-Live sharing remains explicit and visible. Current Android strategy uses medium accuracy, a 100 m movement filter and roughly two-minute requested updates. Do not claim full Life360 force-stop/reboot persistence until proven/implemented. Long-term movement history is not enabled by default.
+Live sharing remains explicit, visible and reversible. Current Android strategy uses medium accuracy, a 100 m movement filter and roughly two-minute requested updates. Do not claim Life360-equivalent force-stop/reboot persistence until implemented and proven. Long-term movement history is not enabled by default.
 
 ## Navbar direction
 
-0.6 replaces the hand-drawn mound with a geometric union of:
-
-- the rounded white navbar base; and
-- a **true circular white halo** behind the active control.
-
-This is specifically intended to remove the pointed/irregular shape Bruce saw when **Overview** or **People** was selected. Home remains the exact Homi mark. The physical S25 Ultra screenshot remains the authority; do not call this visually locked until Bruce approves it.
+0.6 replaces the hand-drawn mound with a geometric union of the rounded white navbar base and a **true circular white halo** behind the active control. This is specifically intended to remove the pointed/irregular edge shape Bruce saw on Overview/People. Physical S25 Ultra screenshots remain the visual authority.
 
 ## Firestore rules
 
-The current rules now include:
+Current rules include private user/device data, exact-lookup Homi codes, accepted trusted connections, private relationship preferences, household-visible `sharedTasks`, non-self assignee validation against accepted Household connection, owner-controlled per-person location shares and latest-location access only to authorised viewers.
 
-- private user/device data;
-- exact-lookup Homi codes;
-- accepted trusted connections;
-- private per-user relationship preferences;
-- household-visible `sharedTasks` member lists;
-- specific non-self assignee validation against accepted Household connection;
-- owner-controlled per-person location shares;
-- latest location/battery access only to authorized viewers.
-
-**The current 0.6 rules must be deployed after local analyzer/tests are clean and before testing household-shared Tasks or the People sync error.**
+The 0.6 rules still need deployment before testing household-shared Tasks or the People sync changes.
 
 Cloud Shell:
 
@@ -193,44 +143,23 @@ git pull
 bash scripts/deploy-firestore-rules.sh
 ```
 
-## Immediate verification checkpoint
+## Current verification checkpoint
 
-The 0.6 source was implemented in GitHub but has **not yet been compiled/device-verified**.
-
-Bruce should first run:
+Bruce confirmed on **2026-09-10** that both local checks passed:
 
 ```powershell
-cd C:\ConceptLab\Projects\homi
-git pull
 flutter analyze
 flutter test
 ```
 
-If clean, deploy Firestore rules from Cloud Shell, then Android Studio → Samsung S25 Ultra → Run.
+Therefore the `0.6.0+6` source/analyzer/unit-test checkpoint is clean.
 
-Device-review priorities:
+**Next checkpoint:** deploy Firestore rules from Cloud Shell, then run `0.6.0+6` from Android Studio on the Samsung S25 Ultra.
 
-- Task How it works vs page breathing room;
-- No due time wording;
-- specific-person household Task visible to all Household members;
-- Me Task remains private;
-- Recently completed 48-hour section + reopen;
-- Bi-weekly Routine and 60+ min duration;
-- Overview Quick add routing;
-- utility unit choices;
-- People state no longer flashes back to initial state after swipe-away/back;
-- trusted people Retry / no raw permission error after rules deployment;
-- embedded map pan/zoom;
-- Open map full-screen flow;
-- person focus chips/markers/details;
-- navbar circular halo on Overview, Home and People, especially edge geometry.
+Device verification should focus on runtime rather than redoing setup: Task sharing/privacy/48-hour completion behaviour, bi-weekly Routine, Overview Quick add routing, utility units, People swipe-state retention, trusted-person Retry, embedded/full-screen map focus, Connect modal regression, location sharing controls and navbar edge geometry.
 
-If analyzer/build reports an error, fix the exact source/tooling layer. Do not reset Firebase, JDK, Gradle, signing, Maps, or the Android host unless the error actually points there.
+If a device/build error appears, fix the exact failing layer. Do not reset Firebase, JDK, Gradle, signing, Maps or Android host setup unless the error actually points there.
 
 ## Documentation rule
 
-At the end of every pass:
-
-- update relevant documentation;
-- add/update a release note under `documentation/releases/`;
-- refresh this top-level `NEXT_CHAT_PROMPT.md`.
+At the end of every pass update relevant documentation, update the release note under `documentation/releases/`, and refresh this file.

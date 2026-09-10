@@ -1,5 +1,23 @@
 # Homi Release Notes
 
+## 0.7.0 - Account/data centre, supply amounts and sync hardening
+
+- Added optional lightweight Supply quantities and stable units for items, loaves, bottles, cartons, packs, bags, rolls, eggs, kg/g and L/mL. Common Quick Adds start with useful amounts and existing Supply records remain compatible.
+- Added compact Supply +/- controls and a branded amount editor with quick +1/+2/+6/+12 actions; a tracked amount of zero derives **Need to buy**.
+- Fixed the Overview Quick Add 37px device overflow by making the sheet height-constrained and scrollable.
+- Hardened the fullscreen People map with an explicit full-route Google Maps platform-view size after the S25 Ultra rendered only a shallow map strip.
+- Replaced the failing trusted-connection `memberUids array_contains` listener with deterministic `aUid` / `bUid` equality queries merged client-side, and tightened matching Firestore rules instead of broadening collection access.
+- Added the full **Homi & account** centre with Why Homi exists, Help & support, Privacy & your data, Location & safety, Terms of use, About Homi, local-data erasure, account deletion and sign-out.
+- Added recent-auth account deletion for Google and email/password accounts plus `AccountDataService` cleanup for the active Homi cloud schema.
+- Added separate local household/location-cache erasure so Sign out, local data deletion and account deletion remain distinct actions.
+- Added internal privacy/POPIA/Google Play deletion documentation and a pricing/unit-economics recommendation.
+- Current planning recommendation: Free + Homi+, with Homi+ at **R49.99/month or R499.99/year** once real household cloud sync and premium value are implemented. Billing is not enabled yet.
+- Bumped app version to `0.7.0+7`.
+
+Full handoff: `documentation/releases/0.7.0.md`.
+
+**Verification boundary:** the previous 0.6 analyzer/tests passed, but 0.7 remains a source pass until Bruce runs `flutter analyze`, `flutter test`, deploys the new Firestore rules and re-tests on the Samsung S25 Ultra.
+
 ## 0.4.0 - Recurring home life, Home records and trusted live location
 
 ### Device feedback incorporated - 2026-09-09

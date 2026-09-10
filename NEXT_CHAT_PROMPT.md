@@ -6,6 +6,8 @@ Before changing anything, inspect:
 
 - `documentation/releases/0.8.1.md`
 - `documentation/releases/0.8.1-cloud-shell-storage-fix.md`
+- `documentation/releases/0.8.2.md`
+- `documentation/SECURITY.md`
 - `documentation/RELEASE_READINESS.md`
 - `documentation/NOTIFICATIONS.md`
 - `documentation/ARCHITECTURE.md`
@@ -15,7 +17,9 @@ Before changing anything, inspect:
 - `documentation/business/PRICING_AND_UNIT_ECONOMICS.md`
 - the latest affected source files
 
-Use the **mobile-app-development** workflow first. Preserve approved behaviour/design, exact brand assets and existing user data. Never claim a new pass compiled/worked on-device until Bruce's real Flutter/Android toolchain proves it.
+Use the **mobile-app-development** workflow first. For Cloud Shell/Firebase release work, also follow the repository-first release-integrity workflow: diagnose the complete failing stage before asking Bruce for another run, preserve the working project/runtime identities and keep deployment commands simple and resumable.
+
+Preserve approved behaviour/design, exact brand assets and existing user data. Never claim a new pass compiled/worked on-device until Bruce's real Flutter/Android toolchain proves it.
 
 ## Permanent project context
 
@@ -57,7 +61,7 @@ Do not misrepresent unavailable capability. Describe current boundaries naturall
 
 ## Current source version
 
-**`0.8.1+9`**
+**`0.8.2+10`**
 
 Primary navigation remains:
 
@@ -67,13 +71,13 @@ Home remains centred with the exact Homi mark.
 
 ## Confirmed product/device baseline
 
-Bruce has reported the 0.8 product experience is where he wants it overall. On the S25 Ultra:
+Bruce has reported the 0.8 product experience is where he wants it overall. On the S25 Ultra before the 0.8.2 security-closure source pass:
 
-- normal Homi notifications are delivering;
-- developer self-test notifications are delivering;
-- the notification status icon uses the Homi mark;
-- Developer notifications access is enabled for the intended account;
-- Android Studio runtime is otherwise behaving correctly.
+- normal Homi notifications were delivering;
+- developer self-test notifications were delivering;
+- the notification status icon used the Homi mark;
+- Developer notifications access was enabled for the intended account;
+- Android Studio runtime was otherwise behaving correctly.
 
 The **All enabled Homi devices** developer audience is implemented through FCM topics. It was intentionally withheld during the first proof to avoid an accidental broad send before self-test worked. It is not disabled. Perform one controlled broad test before public users exist.
 
@@ -89,7 +93,7 @@ Categories:
 - Homi updates
 - Service & security
 
-Fresh/default **Homi updates are now OFF** until explicitly enabled. Unknown remote categories fail closed.
+Fresh/default **Homi updates are OFF** until explicitly enabled. Unknown remote categories fail closed.
 
 Local notifications cover due Tasks/Routines, Supply expiry warning/date, Home service warning/date and grouped new household attention.
 
@@ -101,91 +105,121 @@ Developer access remains server-provisioned through `developerAdmins/{uid}`. Nor
 
 `sendHeart` is a callable Function in `africa-south1`.
 
-0.8.1 hardening adds:
+Hardening includes:
 
 - Firebase Authentication required;
 - valid accepted trusted connection required;
-- **App Check enforcement** at the callable Function;
+- App Check enforcement at the callable Function;
 - 1-minute sender→recipient cooldown;
 - 40 hearts per sender per fixed 24-hour window;
 - max 3 `sendHeart` instances.
 
 The feature remains intentionally tiny: `{name} is thinking about you!`; do not turn it into chat unless Bruce asks.
 
-## 0.8.1 security/cost hardening
+## 0.8.2 security closure
 
-Cloud Functions global `maxInstances` is **5**. Direct notification fan-out reads at most **12 enabled device records per user**.
+0.8.2 moves sensitive collaboration mutations behind App-Check-protected callable Functions rather than permitting cross-user client writes.
 
-All Homi Functions are now configured in source to run as:
+Server-controlled operations now include:
+
+- Homi identity/code issuance;
+- exact Homi-code lookup and connection creation;
+- connection acceptance/removal;
+- trusted-person relationship/scope changes;
+- per-person location-sharing authorization;
+- shared Task creation/toggle/removal;
+- developer notification campaign queueing;
+- cloud account-data deletion;
+- push notification device registration/removal.
+
+Password-provider sharing operations require verified email. Connection/code/share/task/deletion/developer operations have server-side abuse limits. Shared Task membership is derived server-side from accepted Household relationships rather than trusted from the client.
+
+Cloud Functions remain configured to run as:
 
 `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`
 
-rather than the broad default Compute runtime service account. The dedicated account already has Homi's Firestore and Firebase Cloud Messaging application permissions. The next backend deployment must prove this identity works for all Functions before considering removal of the old Compute account's Editor role.
+Global Functions defaults remain bounded (`maxInstances: 5`, `minInstances: 0`, `256MiB`), with smaller caps on selected high-risk Functions. Direct notification fan-out reads at most 12 push-enabled device records per user.
 
-Server-only `serverRateLimits` suppresses excessive notification generation:
+Latest location remains the one high-frequency collaboration record written directly by the device. It is owner-only, schema-bounded and limited by Firestore rules to no more than one update of an existing document per 30 seconds. Normal live updates remain approximately two minutes / 100 m.
 
-- connection request pushes: 20/hour per initiator;
-- shared Task creation pushes: 60/hour per creator;
-- shared Task completion pushes: 120/hour per completing user;
-- developer self tests: 30/hour;
-- developer broad sends: 6/hour and 20/24h.
+## Automated Firestore security gate
 
-`serverRateLimits` is client-inaccessible and account-deletion cleanup removes rate-limit records belonging to the deleted UID.
-
-Firestore rules were tightened for:
-
-- bounded user profile schema and immutable client-side Homi code after profile creation;
-- notification device schema/lengths;
-- developer campaign fields/lengths/enum values/server timestamp;
-- Homi code length/schema;
-- deterministic connection document ID/schema and restricted pending→accepted transition;
-- People preferences only for accepted connections;
-- Shared Task field/text bounds, completion attribution and deletion rules;
-- location-share schema;
-- latest-location field allow-list, coordinate/accuracy/battery bounds, server timestamp and capture-source allow-list;
-- server-only rate-limit records.
-
-### Automated Firestore rules gate
-
-`security-tests/` contains emulator tests for critical allow/deny assumptions. Run:
+`security-tests/server.boundary.test.js` covers critical server/client boundaries. Run through:
 
 ```bash
 bash scripts/test-firestore-security.sh
 ```
 
-The normal backend deployment helper now runs this security suite automatically before it deploys. A failed security test blocks deployment rather than publishing rules that failed the test gate.
+The normal backend helper runs this suite automatically and blocks deployment on failure.
 
-### Cloud Shell storage incident / fix
+### Confirmed 10 September 2026 result
 
-The first 0.8.1 security-gate run on 2026-09-10 stopped with `ENOSPC: no space left on device` while npm was extracting the Firebase security-test dependencies into the Cloud Shell persistent `$HOME` disk. Runtime IAM preparation had already succeeded, but the deployment itself did **not** proceed past the security gate.
+The latest Cloud Shell run passed:
 
-`test-firestore-security.sh` now removes any stale generated `security-tests/node_modules` tree and runs the disposable npm cache plus test dependencies from `${TMPDIR:-/tmp}` instead of the persistent Homi repository/home disk. The temp workspace is deleted automatically after the run.
+- **12 tests**
+- **12 passed**
+- **0 failed**
 
-On the affected Cloud Shell session, one-time recovery is:
+The expected `PERMISSION_DENIED` messages inside negative tests are normal; the final test summary is authoritative.
+
+The 0.8.2 Firestore rules then compiled successfully and were released to the default Firestore database in `homi-ee80a`.
+
+## Current Cloud Functions deployment state — important
+
+The same 10 September 2026 deployment became a **partial backend deployment**:
+
+- Firestore security gate: **PASS 12/12**;
+- Firestore rules compilation: **PASS**;
+- Firestore indexes: **deployed**;
+- Firestore rules: **released/live**;
+- Functions source upload: **succeeded**;
+- Functions Cloud Build: **failed before deployment completed**.
+
+Every targeted Function create/update was reported failed. Firebase skipped deletes, so existing previously deployed Functions were not intentionally removed by this failed run.
+
+### Root cause
+
+Cloud Build uses `npm ci` when a Functions `package-lock.json` is present. GitHub does **not** currently track `functions/package-lock.json`, but Bruce's Cloud Shell checkout contained an older untracked lock generated by earlier deployments.
+
+The original smooth Homi deploy helper used normal `npm install --prefix functions`, which kept that local lock synchronized before Firebase packaged the directory. The Cloud Shell storage fix later added `--package-lock=false`; that protected persistent storage but accidentally stopped refreshing the stale lock while Firebase still uploaded it.
+
+Cloud Build therefore saw:
+
+- manifest: `firebase-admin` `14.1.0`, `firebase-functions` `7.3.2`;
+- stale lock: `firebase-admin` `14.3.0` plus an incomplete transitive graph;
+- result: `npm ci` `EUSAGE` and all Function builds failed.
+
+### Source repair now on main
+
+`scripts/deploy-notification-backend.sh` now restores the useful old deployment behaviour while keeping the storage protections:
+
+1. remove an untracked stale Functions lock before preparation;
+2. generate a fresh lock from the current `functions/package.json` with `npm install --package-lock-only` using a temporary npm cache;
+3. run local `npm ci` from that lock before any security/deployment stage;
+4. run Functions syntax checks;
+5. run the mandatory Firestore security suite;
+6. deploy Firestore + Functions only after all preflight stages pass;
+7. remove generated `node_modules`, the untracked generated lock and temporary npm cache when the helper exits.
+
+This specifically preflights the same install mode Cloud Build uses, so another manifest/lock mismatch should fail locally before Firebase upload instead of consuming a Cloud Build deployment attempt.
+
+## Cloud Shell storage rules
+
+The npm cache and security-test workspace use `${TMPDIR:-/tmp}` rather than accumulating large caches in persistent `$HOME` storage. Generated `node_modules` trees are removed after the run.
+
+If persistent storage is unexpectedly low, inspect first. Do not delete the Homi repository.
+
+One-time cleanup helper remains:
 
 ```bash
-cd ~/homi
-rm -rf security-tests/node_modules
-rm -rf ~/.npm/_cacache
-rm -rf ~/.npm/_logs
-df -h "$HOME"
-git pull
-bash scripts/deploy-notification-backend.sh
+bash scripts/cleanup-cloud-shell.sh
 ```
-
-If space is still unexpectedly low, inspect before deleting anything else:
-
-```bash
-du -hs "$HOME"/.[!.]* "$HOME"/* 2>/dev/null | sort -h | tail -30
-```
-
-Do not delete the Homi repository to resolve this condition.
 
 ## App Check
 
-Bruce registered the debug App Check token privately. Do not request it.
+Bruce registered the development debug App Check token privately. Do not request it.
 
-`sendHeart` now enforces App Check in source. **Firestore service enforcement remains a pre-release gate.** First verify legitimate debug traffic is valid, then configure/verify Play Integrity for the Play-signed release build, then enable Firestore enforcement before public release.
+Protected callables enforce App Check in source. Firestore service enforcement remains a release gate: first verify legitimate debug traffic, then configure/verify Play Integrity for the Play-signed build, then deliberately enable Firestore enforcement before public release.
 
 ## Current cloud-sync truth
 
@@ -196,11 +230,9 @@ Trusted People/location and explicitly shared one-off Tasks use Firebase. Most h
 - Home Things/history/readings
 - private Tasks
 
-This is the largest product-contract decision before release. If Homi launches as a genuinely shared Household app, build a real Household identity/membership model plus safe local↔cloud merge/sync before store deployment. Do not upload SharedPreferences and overwrite another device.
+This remains the largest product-contract decision before release. If Homi launches as a genuinely shared Household app, build a real Household identity/membership model plus conflict-safe local↔cloud merge/sync before store deployment. Do not upload SharedPreferences wholesale or let one device blindly overwrite another.
 
 If the first launch stays local-first for those areas, store/in-app copy must state that boundary clearly.
-
-The current direct Homi-code issuance/exact-lookup path is authenticated and tightly schema-restricted, but it is not server-rate-limited. Before broad public scale, strongly consider moving code issuance/lookup behind App-Check-protected callable Functions so code enumeration/write abuse can be rate-limited server-side.
 
 ## Release readiness
 
@@ -208,7 +240,9 @@ Read `documentation/RELEASE_READINESS.md` before deciding the app is ready for P
 
 Major remaining gates include:
 
-- 0.8.1 analyzer/tests/security-emulator/rules/functions verification;
+- complete the 0.8.2 Functions deployment using the dedicated runtime identity;
+- run/verify `configure-auth-security.sh`;
+- Flutter analyzer/tests and new 0.8.2 physical-device regression;
 - one controlled broad developer broadcast test;
 - full Shared Household sync OR a deliberate local-first launch contract;
 - background-location multi-hour/reboot/battery-optimiser testing;
@@ -217,7 +251,7 @@ Major remaining gates include:
 - production Google Sign-In from Play-installed build;
 - production Maps key fingerprint restriction;
 - Play Integrity App Check and Firestore App Check enforcement;
-- prove dedicated least-privilege Cloud Functions runtime and then safely review old default Compute Editor access;
+- safely review old default Compute Editor access only after every Function is proven on the dedicated runtime identity;
 - Cloud billing alerts/spend controls and monitoring;
 - public Privacy Policy, Terms and external account-deletion URL;
 - Google Play Data Safety/content-rating/target-audience/app-access/store assets;
@@ -233,18 +267,11 @@ Current pricing direction remains planning only:
 
 Do not add a paywall before premium shared-cloud value exists.
 
-## Immediate verification checkpoint for 0.8.1
+## Immediate continuation checkpoint
 
-Windows:
+The current deployment failure is fixed **in source but not yet proven by Cloud Shell**.
 
-```powershell
-cd C:\ConceptLab\Projects\homi
-git pull
-flutter analyze
-flutter test
-```
-
-If clean, Cloud Shell:
+From the existing Cloud Shell checkout:
 
 ```bash
 cd ~/homi
@@ -252,23 +279,37 @@ git pull
 bash scripts/deploy-notification-backend.sh
 ```
 
-The deploy helper performs Function syntax validation and the Firestore Emulator security suite before publishing the stricter rules/Functions.
+Do not run manual `npm install`, `npm ci`, `--force` or `--legacy-peer-deps` around the helper. The helper now owns dependency-lock preparation and validation.
 
-Then re-test on the S25 Ultra:
+Expected sequence:
 
-- notifications still register and deliver;
-- People heart works with the registered debug App Check token;
-- repeated heart is rate-limited cleanly;
-- shared Task creation/completion works under stricter rules;
-- connection request/acceptance works;
-- live location writes and reads under stricter rules;
-- developer self test still works;
-- one controlled **All enabled Homi devices** test works for the enabled category;
-- no raw permission errors appear.
+1. Functions dependency lock prepared;
+2. local `npm ci` succeeds;
+3. Functions syntax check succeeds;
+4. Firestore security gate again reports 12/12;
+5. Firebase deployment reaches Function Cloud Build using the synchronized generated lock;
+6. all Functions create/update successfully;
+7. helper prints `Homi backend deployment completed.`
 
-If deployment reports `iam.serviceAccounts.actAs` for the dedicated runtime identity, grant only the required Service Account User/actAs permission to the actual deployer on `homi-backend-runtime` and retry. Do not restore broad Editor access to solve it.
+If the Functions deploy reports `iam.serviceAccounts.actAs` for the dedicated runtime identity, grant only the required Service Account User/actAs permission to the actual deployer on `homi-backend-runtime` and retry. Do not restore broad Editor access to solve it.
 
-If any rule returns `PERMISSION_DENIED`, capture the exact operation/log and fix the rule/data contract rather than weakening the whole collection.
+If another failure occurs, capture the exact failing stage. Do not weaken the Firestore rules or security tests merely to make a deployment pass.
+
+After Functions deploy succeeds, continue the same 0.8.2 pass by verifying/applying the Authentication security helper and then retesting on the S25 Ultra:
+
+- notification registration/delivery;
+- People heart with registered App Check debug token;
+- repeated heart rate limiting;
+- Homi code identity/load/connect/accept/remove;
+- Household ↔ Friend scope changes;
+- shared Task create/complete/reopen/remove;
+- live location share on/off and viewer reads;
+- developer self test;
+- one controlled **All enabled Homi devices** test;
+- account deletion on disposable accounts;
+- no raw permission errors.
+
+Old 0.8.1 debug APKs must not be used to judge protected collaboration after the stricter 0.8.2 Firestore rules; the 0.8.2 client uses the new server-authorized paths.
 
 ## Documentation rule
 

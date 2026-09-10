@@ -1,5 +1,3 @@
-export 'dart:collection' show IterableExtensions;
-
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -74,7 +72,7 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
   }
 
   Future<void> _focus(HomiMapPerson person) async {
-    setState(() => _selectedId = person.id);
+    if (mounted) setState(() => _selectedId = person.id);
     await _controller?.animateCamera(
       CameraUpdate.newLatLngZoom(person.position, 16),
     );
@@ -88,171 +86,207 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
         : (selected ?? widget.people.first).position;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: fallback,
-                zoom: widget.people.isEmpty ? 1.5 : 15,
-              ),
-              markers: widget.people
-                  .map(
-                    (person) => Marker(
-                      markerId: MarkerId(person.id),
-                      position: person.position,
-                      icon: person.markerIcon,
-                      onTap: () => _focus(person),
+      resizeToAvoidBottomInset: false,
+      backgroundColor: HomiColors.cream,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return SizedBox(
+            width: constraints.maxWidth,
+            height: constraints.maxHeight,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Give the Android platform view an explicit full-route size.
+                // This avoids the partial-height surface seen on the S25 Ultra
+                // when the fullscreen map was first opened.
+                SizedBox(
+                  width: constraints.maxWidth,
+                  height: constraints.maxHeight,
+                  child: GoogleMap(
+                    initialCameraPosition: CameraPosition(
+                      target: fallback,
+                      zoom: widget.people.isEmpty ? 1.5 : 15,
                     ),
-                  )
-                  .toSet(),
-              myLocationEnabled: false,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              mapToolbarEnabled: false,
-              compassEnabled: true,
-              onMapCreated: (controller) {
-                _controller = controller;
-                final person = _selected;
-                if (person != null) {
-                  controller.moveCamera(
-                    CameraUpdate.newLatLngZoom(person.position, 15),
-                  );
-                }
-              },
-            ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  _MapCircleButton(
-                    icon: Icons.arrow_back_rounded,
-                    tooltip: 'Back',
-                    onTap: () => Navigator.pop(context),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      boxShadow: const [
-                        BoxShadow(
-                          blurRadius: 14,
-                          offset: Offset(0, 5),
-                          color: Color(0x18000000),
-                        ),
-                      ],
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.people_outline_rounded,
-                            size: 18, color: HomiColors.coral),
-                        SizedBox(width: 6),
-                        Text(
-                          'People map',
-                          style: TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (widget.people.isNotEmpty)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        height: 54,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          itemCount: widget.people.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(width: 8),
-                          itemBuilder: (context, index) {
-                            final person = widget.people[index];
-                            final active = person.id == _selectedId;
-                            return _MapPersonChip(
-                              person: person,
-                              active: active,
-                              onTap: () => _focus(person),
-                            );
-                          },
-                        ),
-                      ),
-                      if (selected != null) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(22),
-                            boxShadow: const [
-                              BoxShadow(
-                                blurRadius: 18,
-                                offset: Offset(0, 6),
-                                color: Color(0x20000000),
-                              ),
-                            ],
+                    markers: widget.people
+                        .map(
+                          (person) => Marker(
+                            markerId: MarkerId(person.id),
+                            position: person.position,
+                            icon: person.markerIcon,
+                            onTap: () => _focus(person),
                           ),
-                          child: Row(
-                            children: [
-                              _Avatar(
-                                name: selected.name,
-                                photoUrl: selected.photoUrl,
-                                size: 46,
+                        )
+                        .toSet(),
+                    myLocationEnabled: false,
+                    myLocationButtonEnabled: false,
+                    zoomControlsEnabled: false,
+                    mapToolbarEnabled: false,
+                    compassEnabled: true,
+                    rotateGesturesEnabled: true,
+                    scrollGesturesEnabled: true,
+                    zoomGesturesEnabled: true,
+                    tiltGesturesEnabled: true,
+                    onMapCreated: (controller) {
+                      _controller = controller;
+                      final person = _selected;
+                      if (person != null) {
+                        controller.moveCamera(
+                          CameraUpdate.newLatLngZoom(person.position, 15),
+                        );
+                      }
+                    },
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          _MapCircleButton(
+                            icon: Icons.arrow_back_rounded,
+                            tooltip: 'Back',
+                            onTap: () => Navigator.pop(context),
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 9,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(18),
+                              boxShadow: const [
+                                BoxShadow(
+                                  blurRadius: 14,
+                                  offset: Offset(0, 5),
+                                  color: Color(0x18000000),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.people_outline_rounded,
+                                  size: 18,
+                                  color: HomiColors.coral,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'People map',
+                                  style: TextStyle(fontWeight: FontWeight.w900),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (widget.people.isNotEmpty)
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              height: 54,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 2),
+                                itemCount: widget.people.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(width: 8),
+                                itemBuilder: (context, index) {
+                                  final person = widget.people[index];
+                                  final active = person.id == _selectedId;
+                                  return _MapPersonChip(
+                                    person: person,
+                                    active: active,
+                                    onTap: () => _focus(person),
+                                  );
+                                },
                               ),
-                              const SizedBox(width: 11),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                            ),
+                            if (selected != null) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(22),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      blurRadius: 18,
+                                      offset: Offset(0, 6),
+                                      color: Color(0x20000000),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
                                   children: [
-                                    Text(
-                                      selected.name,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w900,
+                                    _Avatar(
+                                      name: selected.name,
+                                      photoUrl: selected.photoUrl,
+                                      size: 46,
+                                    ),
+                                    const SizedBox(width: 11),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            selected.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            '${selected.isSelf ? 'You' : 'Shared location'} · ${selected.batteryPercent}% battery',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium,
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      '${selected.isSelf ? 'You' : 'Shared location'} · ${selected.batteryPercent}% battery',
-                                      style:
-                                          Theme.of(context).textTheme.bodyMedium,
+                                    const SizedBox(width: 8),
+                                    FilledButton(
+                                      onPressed: () =>
+                                          widget.onShowDetails(selected),
+                                      child: const Text('Details'),
                                     ),
                                   ],
                                 ),
                               ),
-                              FilledButton(
-                                onPressed: () => widget.onShowDetails(selected),
-                                child: const Text('Details'),
-                              ),
                             ],
-                          ),
+                          ],
                         ),
-                      ],
-                    ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
+              ],
             ),
-        ],
+          );
+        },
       ),
     );
   }

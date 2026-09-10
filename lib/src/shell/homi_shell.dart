@@ -2,15 +2,17 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/household_task.dart';
 import '../features/home/home_page.dart';
-import '../features/people/people_page.dart';
+import '../features/people/people_hub_page.dart';
 import '../features/profile/account_hub_page.dart';
 import '../features/routines/routines_page.dart';
 import '../features/supplies/supplies_page.dart';
 import '../features/today/today_page.dart';
 import '../services/account_data_service.dart';
+import '../services/arrival_check_in_service.dart';
 import '../services/auth_service.dart';
 import '../services/developer_notification_service.dart';
 import '../services/household_people_service.dart';
@@ -42,11 +44,15 @@ class HomiShell extends StatefulWidget {
 }
 
 class _HomiShellState extends State<HomiShell> {
+  static const _initialNotificationPromptKey =
+      'homi.notifications.initialPermissionPromptShown';
+
   int _index = 0;
   WorkView _requestedWorkView = WorkView.tasks;
   int _workViewRequest = 0;
   late final PageController _pageController;
   late final LocationStatusService _locationService;
+  late final ArrivalCheckInService _arrivalCheckInService;
   late final TrustedPeopleService _trustedPeopleService;
   late final HouseholdPeopleService _householdPeopleService;
   late final SharedTaskService _sharedTaskService;
@@ -62,6 +68,10 @@ class _HomiShellState extends State<HomiShell> {
     _pageController = PageController();
     _locationService = LocationStatusService(
       firebaseReady: widget.firebaseReady,
+    );
+    _arrivalCheckInService = ArrivalCheckInService(
+      firebaseReady: widget.firebaseReady,
+      locationService: _locationService,
     );
     _trustedPeopleService = TrustedPeopleService(
       firebaseReady: widget.firebaseReady,
@@ -83,8 +93,19 @@ class _HomiShellState extends State<HomiShell> {
     );
     widget.controller.addListener(_queueNotificationReconcile);
     unawaited(widget.controller.pruneExpiredTasks());
-    unawaited(_resumeLocationSharing());
+    unawaited(_initializeLocationFeatures());
     unawaited(_initializeNotifications());
+  }
+
+  Future<void> _initializeLocationFeatures() async {
+    try {
+      await _locationService.loadCachedStatus();
+      await _arrivalCheckInService.initialize();
+      await _locationService.resumeContinuousSharingIfEnabled();
+    } catch (_) {
+      // Resuming never prompts. The People safety/location screens explain
+      // permission or service issues when the user opens them.
+    }
   }
 
   Future<void> _initializeNotifications() async {
@@ -92,6 +113,7 @@ class _HomiShellState extends State<HomiShell> {
         _notificationService.routes.listen(_handleNotificationRoute);
     try {
       await _notificationService.initialize();
+      await _requestInitialNotificationPermissionIfNeeded();
       await _reconcileNotifications();
       final pending = _notificationService.takePendingRoute();
       if (pending != null) {
@@ -103,6 +125,21 @@ class _HomiShellState extends State<HomiShell> {
       // Notification setup is additive. A notification problem must not stop
       // the household app from opening.
     }
+  }
+
+  Future<void> _requestInitialNotificationPermissionIfNeeded() async {
+    if (!_notificationService.preferences.enabled ||
+        _notificationService.osPermissionGranted) {
+      return;
+    }
+    final preferences = await SharedPreferences.getInstance();
+    if (preferences.getBool(_initialNotificationPromptKey) == true) return;
+
+    // Mark before opening Android's permission UI so a denied/dismissed prompt
+    // is not repeatedly shown every time Homi opens. The user can always retry
+    // from Homi & account -> Notifications.
+    await preferences.setBool(_initialNotificationPromptKey, true);
+    await _notificationService.requestPermissionAndEnable();
   }
 
   void _queueNotificationReconcile() {
@@ -142,21 +179,13 @@ class _HomiShellState extends State<HomiShell> {
     }
   }
 
-  Future<void> _resumeLocationSharing() async {
-    try {
-      await _locationService.loadCachedStatus();
-      await _locationService.resumeContinuousSharingIfEnabled();
-    } catch (_) {
-      // Resuming never prompts. The People page explains any permission issue.
-    }
-  }
-
   @override
   void dispose() {
     widget.controller.removeListener(_queueNotificationReconcile);
     _notificationScheduleDebounce?.cancel();
     unawaited(_notificationRouteSubscription?.cancel());
     _pageController.dispose();
+    _arrivalCheckInService.dispose();
     unawaited(_notificationService.disposeService());
     unawaited(_locationService.dispose());
     super.dispose();
@@ -173,6 +202,9 @@ class _HomiShellState extends State<HomiShell> {
   String _actorName(User? user) => user == null ? 'You' : _displayName(user);
 
   Future<void> _openAccount() async {
+    final uidBefore = widget.firebaseReady
+        ? FirebaseAuth.instance.currentUser?.uid
+        : null;
     final deleted = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => AccountHubPage(
@@ -187,6 +219,9 @@ class _HomiShellState extends State<HomiShell> {
       ),
     );
     if (!mounted) return;
+    if (deleted == true && uidBefore != null) {
+      await _arrivalCheckInService.clearStoredForUid(uidBefore);
+    }
     await _notificationService.refreshDeviceRegistration();
     await _reconcileNotifications();
     if (!mounted) return;
@@ -245,6 +280,7 @@ class _HomiShellState extends State<HomiShell> {
         tasks: widget.controller.tasks,
         actorName: actorName,
         actorUid: actorUid,
+        actorPhotoUrl: user?.photoURL,
         trustedPeopleService: _householdPeopleService,
         sharedTaskService: _sharedTaskService,
         requestedView: _requestedWorkView,
@@ -341,9 +377,10 @@ class _HomiShellState extends State<HomiShell> {
         onUpdateQuantity: widget.controller.updateSupplyQuantity,
         onRemove: widget.controller.removeSupply,
       ),
-      PeoplePage(
+      PeopleHubPage(
         locationService: _locationService,
         trustedPeopleService: _trustedPeopleService,
+        checkInService: _arrivalCheckInService,
         firebaseReady: widget.firebaseReady,
         onSignIn: widget.onOpenAuth,
       ),

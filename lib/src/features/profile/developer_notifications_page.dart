@@ -86,7 +86,7 @@ class _DeveloperNotificationsPageState
         context,
         title: 'Send to all enabled Homi devices?',
         message:
-            'This is a real push notification campaign. Homi will only deliver it to devices that allow the selected category.',
+            'This is a real push notification campaign. Homi only sends it to devices that allow the selected Homi Updates or Service & Security category.',
         confirmLabel: 'Send notification',
         cancelLabel: 'Review message',
         icon: Icons.campaign_outlined,
@@ -110,7 +110,7 @@ class _DeveloperNotificationsPageState
       if (!mounted) return;
       _titleController.clear();
       _bodyController.clear();
-      await _showSent();
+      await _showQueued();
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -126,7 +126,7 @@ class _DeveloperNotificationsPageState
     }
   }
 
-  Future<void> _showSent() {
+  Future<void> _showQueued() {
     return showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -154,8 +154,8 @@ class _DeveloperNotificationsPageState
               const SizedBox(height: 10),
               Text(
                 _audience == 'all'
-                    ? 'The Homi notification backend will deliver it to eligible devices and record the send result below.'
-                    : 'The Homi notification backend will deliver this test only to your enabled devices.',
+                    ? 'Homi will hand the broadcast to Firebase Cloud Messaging for devices subscribed to this notification category. The history below records whether the broadcast was accepted for delivery.'
+                    : 'Homi will send this test directly to your enabled signed-in devices and record the direct send result below.',
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -193,7 +193,7 @@ class _DeveloperNotificationsPageState
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                'This is the live Homi push composer. Test with “Just this account” first. Broad campaigns respect each device’s Homi Updates or Service & Security preference.',
+                'This is the live Homi push composer. Send a test to your own account first. Broad campaigns respect each device’s Homi Updates or Service & Security preference.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
@@ -301,7 +301,7 @@ class _DeveloperNotificationsPageState
                 final campaigns = snapshot.data!;
                 if (campaigns.isEmpty) {
                   return const _EmptyHistory(
-                    text: 'Your developer notification sends will appear here.',
+                    text: 'Your developer notification sends appear here.',
                   );
                 }
                 return Column(
@@ -356,6 +356,11 @@ class _CampaignCard extends StatelessWidget {
     final when = campaign.createdAt == null
         ? 'Just now'
         : DateFormat('d MMM · HH:mm').format(campaign.createdAt!.toLocal());
+    final delivery = campaign.isBroadcast
+        ? (campaign.status == 'sent'
+            ? 'Broadcast accepted by FCM'
+            : 'All enabled devices')
+        : '${campaign.sentCount} direct device${campaign.sentCount == 1 ? '' : 's'} sent${campaign.failureCount > 0 ? ' · ${campaign.failureCount} failed' : ''}';
     return Padding(
       padding: const EdgeInsets.only(bottom: 9),
       child: Card(
@@ -385,10 +390,11 @@ class _CampaignCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 5),
-              Text(campaign.body, style: Theme.of(context).textTheme.bodyMedium),
+              Text(campaign.body,
+                  style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 8),
               Text(
-                '$when · ${campaign.audience == 'all' ? 'All enabled devices' : 'Test'} · ${campaign.sentCount} sent${campaign.failureCount > 0 ? ' · ${campaign.failureCount} failed' : ''}',
+                '$when · $delivery',
                 style: const TextStyle(fontSize: 11.5, color: HomiColors.muted),
               ),
             ],

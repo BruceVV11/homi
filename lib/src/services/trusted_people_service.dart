@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -269,17 +270,32 @@ class TrustedPeopleService {
     }
   }
 
+  /// Watches both deterministic participant fields rather than relying on an
+  /// array-contains query. The matching Firestore rule can therefore prove
+  /// that every document returned to a query belongs to the signed-in user.
   Stream<List<TrustedConnection>> watchConnections() {
     final user = currentUser;
     if (user == null) return Stream.value(const <TrustedConnection>[]);
-    return _firestore
-        .collection('connections')
-        .where('memberUids', arrayContains: user.uid)
-        .snapshots()
-        .map((snapshot) {
-      final connections = snapshot.docs
-          .map(TrustedConnection.fromDocument)
-          .toList(growable: false);
+
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? aSubscription;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? bSubscription;
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> aDocs = const [];
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> bDocs = const [];
+    var aReady = false;
+    var bReady = false;
+
+    late final StreamController<List<TrustedConnection>> controller;
+
+    void emit() {
+      if (!aReady || !bReady || controller.isClosed) return;
+      final byId = <String, TrustedConnection>{};
+      for (final document in <QueryDocumentSnapshot<Map<String, dynamic>>>[
+        ...aDocs,
+        ...bDocs,
+      ]) {
+        byId[document.id] = TrustedConnection.fromDocument(document);
+      }
+      final connections = byId.values.toList(growable: false);
       connections.sort((a, b) {
         if (a.status == b.status) {
           return a.otherName(user.uid).compareTo(b.otherName(user.uid));
@@ -288,8 +304,63 @@ class TrustedPeopleService {
         if (b.pending) return 1;
         return 0;
       });
-      return connections;
-    });
+      controller.add(connections);
+    }
+
+    controller = StreamController<List<TrustedConnection>>(
+      onListen: () {
+        aSubscription = _firestore
+            .collection('connections')
+            .where('aUid', isEqualTo: user.uid)
+            .snapshots()
+            .listen(
+          (snapshot) {
+            aDocs = snapshot.docs;
+            aReady = true;
+            emit();
+          },
+          onError: controller.addError,
+        );
+        bSubscription = _firestore
+            .collection('connections')
+            .where('bUid', isEqualTo: user.uid)
+            .snapshots()
+            .listen(
+          (snapshot) {
+            bDocs = snapshot.docs;
+            bReady = true;
+            emit();
+          },
+          onError: controller.addError,
+        );
+      },
+      onCancel: () async {
+        await aSubscription?.cancel();
+        await bSubscription?.cancel();
+      },
+    );
+    return controller.stream;
+  }
+
+  Future<List<TrustedConnection>> getConnections() async {
+    final user = _requireUser();
+    final snapshots = await Future.wait([
+      _firestore
+          .collection('connections')
+          .where('aUid', isEqualTo: user.uid)
+          .get(),
+      _firestore
+          .collection('connections')
+          .where('bUid', isEqualTo: user.uid)
+          .get(),
+    ]);
+    final byId = <String, TrustedConnection>{};
+    for (final snapshot in snapshots) {
+      for (final document in snapshot.docs) {
+        byId[document.id] = TrustedConnection.fromDocument(document);
+      }
+    }
+    return byId.values.toList(growable: false);
   }
 
   Stream<Map<String, TrustedPersonPreference>> watchPreferences() {

@@ -77,6 +77,9 @@ class AuthService {
     if (user == null) return null;
     final trimmed = displayName.trim();
     if (trimmed.isEmpty) return user;
+    if (trimmed.length > 80) {
+      throw StateError('Keep your display name under 80 characters.');
+    }
     await user.updateDisplayName(trimmed);
     await user.reload();
     final refreshed = _auth.currentUser;

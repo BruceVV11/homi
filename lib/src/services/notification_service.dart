@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -18,6 +17,7 @@ import '../domain/household_task.dart';
 import '../domain/notification_preferences.dart';
 import '../domain/routine_item.dart';
 import '../domain/supply_item.dart';
+import 'homi_cloud_actions.dart';
 
 @pragma('vm:entry-point')
 Future<void> homiFirebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -25,7 +25,8 @@ Future<void> homiFirebaseMessagingBackgroundHandler(RemoteMessage message) async
 }
 
 class HomiNotificationService extends ChangeNotifier {
-  HomiNotificationService({required this.firebaseReady});
+  HomiNotificationService({required this.firebaseReady})
+      : _cloudActions = HomiCloudActions(firebaseReady: firebaseReady);
 
   static const _preferencesKey = 'homi.notifications.preferences';
   static const _deviceIdKey = 'homi.notifications.deviceId';
@@ -67,6 +68,7 @@ class HomiNotificationService extends ChangeNotifier {
   );
 
   final bool firebaseReady;
+  final HomiCloudActions _cloudActions;
   final FlutterLocalNotificationsPlugin _local =
       FlutterLocalNotificationsPlugin();
   final Uuid _uuid = const Uuid();
@@ -257,22 +259,24 @@ class HomiNotificationService extends ChangeNotifier {
     final token = await FirebaseMessaging.instance.getToken();
     if (token == null || token.isEmpty) return;
 
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('devices')
-        .doc(deviceId)
-        .set({
-      'pushToken': token,
-      'platform': defaultTargetPlatform.name,
-      'notificationsEnabled': true,
-      'householdAttention': _preferences.householdAttention,
-      'tasksAndRoutines': _preferences.tasksAndRoutines,
-      'peopleNotifications': _preferences.people,
-      'homiUpdates': _preferences.homiUpdates,
-      'serviceNotices': _preferences.serviceNotices,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    try {
+      await _cloudActions.call('registerNotificationDevice', <String, dynamic>{
+        'deviceId': deviceId,
+        'pushToken': token,
+        'platform': defaultTargetPlatform.name,
+        'householdAttention': _preferences.householdAttention,
+        'tasksAndRoutines': _preferences.tasksAndRoutines,
+        'peopleNotifications': _preferences.people,
+        'homiUpdates': _preferences.homiUpdates,
+        'serviceNotices': _preferences.serviceNotices,
+      });
+    } on HomiCloudActionException catch (error) {
+      // Local reminders remain useful even when a temporary cloud/App Check
+      // problem prevents direct push registration. Do not log the FCM token.
+      if (kDebugMode) {
+        debugPrint('Homi push registration deferred: ${error.code}');
+      }
+    }
   }
 
   Future<void> removeDevicePushRegistration() async {
@@ -280,16 +284,9 @@ class HomiNotificationService extends ChangeNotifier {
     final user = FirebaseAuth.instance.currentUser;
     final deviceId = _deviceId;
     if (user == null || deviceId == null) return;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('devices')
-        .doc(deviceId)
-        .set({
-      'pushToken': FieldValue.delete(),
-      'notificationsEnabled': false,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    await _cloudActions.call('removeNotificationDevice', <String, dynamic>{
+      'deviceId': deviceId,
+    });
   }
 
   Future<void> reconcileLocalSchedules({

@@ -1,7 +1,7 @@
 # Homi security architecture
 
 Date: 2026-09-10
-Current source: `0.9.0+11`
+Current source: `0.9.1+12`
 
 This document records Homi's active security boundaries and remaining production gates. It is an engineering document, not user-facing product copy.
 
@@ -15,7 +15,7 @@ Primary goals:
 - a client must not be able to forge another user's identity, completion attribution, household membership or developer role;
 - stopping a relationship or changing it to location-only must revoke household-derived access rather than leave stale Task membership;
 - arrival check-ins must not become an arbitrary-notification or arbitrary-recipient primitive;
-- Home/Work saved coordinates must not be sent to the arrival-notification backend simply to generate a check-in;
+- Home/Work saved coordinates and readable addresses must not be sent to the arrival-notification backend simply to generate a check-in;
 - check-in-only background sampling must not silently refresh cloud latest-location state when Live updates is off;
 - public client credentials must not be sufficient to invoke cost-generating server actions without Authentication/App Check/rate limits;
 - backend identities must have least privilege and bounded scale;
@@ -66,6 +66,8 @@ The backend requires an accepted connection before saving a relationship prefere
 
 `onTrustedConnectionDeleted` provides a server cleanup backstop for an administrative/manual connection deletion. The stale historical HTTPS `onConnectionDeleted` resource was replaced/deleted during the completed 0.8.2 deployment migration and must not be restored.
 
+The 0.9.1 People UI restores the approved map-first experience and groups accepted people underneath it. This changes discoverability only; the existing server authorization model is unchanged.
+
 ## Shared Tasks
 
 The client does not supply authoritative `memberUids`. When a shared Task is created, the backend derives members from the creator's accepted connections that the creator marked Household. Location-only friends are excluded.
@@ -98,7 +100,7 @@ A different user can read a location only when there is both an accepted trusted
 
 The service stores separate local requirement flags. Turning one feature off does not stop the stream while the other still needs it. When neither feature requires it, the stream stops.
 
-Cloud latest-location writes occur only when Live updates is explicitly active for the shared foreground stream. Arrival-only background sampling updates local state for zone detection but does not refresh `locations/{uid}`. Saving Home/Work uses `captureCurrentStatus(syncCloud: false)` so that action itself does not write the saved place coordinate to the cloud latest-location record.
+Cloud latest-location writes occur only when Live updates is explicitly active for the shared foreground stream. Arrival-only background sampling updates local state for zone detection but does not refresh `locations/{uid}`. Saving Home/Work from the device uses `captureCurrentStatus(syncCloud: false)`, so that action itself does not write the saved place coordinate to the cloud latest-location record.
 
 If Live updates is independently on, its existing latest-location cloud behaviour remains active while the shared stream also serves check-ins.
 
@@ -108,7 +110,12 @@ The normal Android background stream requests approximately two-minute updates w
 
 ## Arrival check-ins
 
-Home/Work arrival places are stored locally in user-scoped device preferences. The current architecture does not create a Firestore collection for saved Home/Work coordinates.
+Home/Work arrival places are stored locally in user-scoped device preferences. The current architecture does not create a Firestore collection for saved Home/Work coordinates or readable addresses.
+
+A place can be configured by:
+
+- typed address resolution using the device geocoding layer; or
+- Set from here using a local-only current-location capture plus reverse geocoding.
 
 The local detector:
 
@@ -130,10 +137,12 @@ The local detector:
 - applies sender limits of 20/hour and 60/day;
 - reads no more than 12 enabled device records per valid recipient;
 - respects each recipient device's People-notification preference;
-- receives no Home/Work latitude, longitude or address from the client;
+- receives no Home/Work latitude, longitude or readable address from the client;
 - sends no coordinate/address in the push payload.
 
 Arrival notifications are convenience communication, not emergency delivery or proof that the recipient saw the message.
+
+The 0.9.1 address/People/check-in UX refinement does not change the callable request contract or Firestore rules and therefore does not require another backend deployment.
 
 ## Emergency call shortcuts
 
@@ -199,15 +208,15 @@ The suite checks critical allow/deny boundaries including:
 
 Generated npm dependencies/caches use temporary storage. The deployment helper validates Node 22, prepares a synchronized disposable package lock, runs local `npm ci`, syntax-checks all Function modules, runs the Firestore gate, deploys Firestore separately and deploys discovered Function exports in batches of five.
 
-Bruce confirmed the corrected 0.8.2 backend deployment completed successfully on 10 September 2026. The new 0.9 `sendArrivalCheckIn` callable remains pending deployment until the 0.9 Flutter source passes Bruce's actual analyzer/test gate.
+Bruce confirmed the corrected 0.8.2 backend deployment completed successfully on 10 September 2026. Bruce then confirmed the governed 0.9.0 backend deployment completed without an observed failure, including `sendArrivalCheckIn`.
 
 ## Data deletion
 
 `deleteHomiAccountData` is App-Check protected, rate limited and requires recent authentication. Server cleanup covers Homi profile/code state, trusted connections, relationship/share metadata, device registrations, latest location, Homi-created campaigns/rate-limit records and shared Tasks as appropriate.
 
-The Firebase Authentication identity is deleted by the client only after server cleanup succeeds. The shell also clears that UID's locally stored Home/Work check-in configuration after successful deletion.
+The Firebase Authentication identity is deleted by the client only after server cleanup succeeds. The shell also clears that UID's locally stored Home/Work check-in configuration after successful deletion, including local readable addresses.
 
-The local **Erase data from this phone** inventory must include the newly introduced Home/Work check-in preferences before public release; do not claim that gate complete until verified in the actual app flow.
+**Erase data from this phone** also clears the signed-in user's local Home/Work check-in configuration and stops local background requirements through the location reset flow. Android permission itself remains controlled by Android.
 
 An external account-deletion web resource remains a Google Play release requirement and must be published before production submission.
 
@@ -215,17 +224,17 @@ An external account-deletion web resource remains a Google Play release requirem
 
 Security is layered rather than absolute. Before production rollout:
 
-1. Run `flutter analyze` and `flutter test` for 0.9.0+11 on Bruce's real Flutter toolchain.
-2. Deploy `sendArrivalCheckIn` through the already-proven batched backend helper only after the Flutter gate passes.
+1. Run `flutter analyze` and `flutter test` for the 0.9.1+12 client refinement on Bruce's real Flutter toolchain.
+2. Re-run physical-device acceptance on the S25 Ultra. Do not redeploy Firebase unless new backend source changes.
 3. Verify Authentication security configuration and Google/email/password flows.
 4. Register every active debug tester's App Check token while debug builds are used; never share/commit those tokens.
-5. Prove valid 0.9 App Check traffic and arrival callable authorization/opt-out behaviour.
+5. Prove valid App Check traffic and arrival callable authorization/opt-out behaviour.
 6. Move store builds to Play Integrity App Check and verify valid traffic from a Play-installed build.
 7. Enforce App Check for Cloud Firestore only after legitimate traffic is verified.
 8. Configure Cloud Billing alerts/monitoring and review abnormal Function/Firestore activity.
 9. Complete multi-device Household sync before claiming household-wide sync for Routines, Supplies and Home.
 10. Complete background-location/check-in screen-off, multi-hour, reboot, process-removal and battery testing on multiple Android devices.
 11. Publish Privacy Policy, Terms and external account-deletion resource and complete Google Play Data Safety/background-location declarations.
-12. Verify local data erasure removes Home/Work check-in coordinates and stops arrival monitoring without weakening explicit Live updates controls.
+12. Verify local data erasure removes Home/Work check-in coordinates/readable addresses and stops arrival monitoring without weakening explicit Live updates controls.
 
 Never weaken collection-wide rules merely to resolve one failing operation. Capture the exact operation, fix the data contract or server authorization path, rerun the security gate, and only then deploy.

@@ -18,6 +18,10 @@ if [ ! -f security-tests/package.json ] || [ ! -f security-tests/firestore.rules
   exit 1
 fi
 
+# A previous interrupted Cloud Shell install may have left a large generated
+# node_modules tree inside the persistent repository. It is never source data.
+rm -rf "${REPO_ROOT}/security-tests/node_modules"
+
 # Cloud Shell has a small persistent $HOME disk. Security-test dependencies are
 # disposable, so keep both npm's package cache and node_modules in the VM's
 # temporary filesystem instead of consuming the persistent home volume.

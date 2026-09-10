@@ -65,6 +65,13 @@ class _AuthPageState extends State<AuthPage> {
       setState(() => _error = 'Enter your email and password.');
       return;
     }
+    if (_create) {
+      final passwordProblem = _passwordProblem(password);
+      if (passwordProblem != null) {
+        setState(() => _error = passwordProblem);
+        return;
+      }
+    }
     await _run(() async {
       if (_create) {
         await widget.authService.createWithEmail(email, password);
@@ -112,7 +119,11 @@ class _AuthPageState extends State<AuthPage> {
       await widget.authService.sendPasswordReset(email);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password reset email sent.')),
+        const SnackBar(
+          content: Text(
+            'If that email belongs to a Homi account, password reset instructions have been sent.',
+          ),
+        ),
       );
     } on FirebaseAuthException catch (error) {
       if (mounted) setState(() => _error = _friendlyFirebaseError(error));
@@ -164,18 +175,25 @@ class _AuthPageState extends State<AuthPage> {
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
+                    autocorrect: false,
+                    enableSuggestions: false,
                     decoration: const InputDecoration(labelText: 'Email'),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _passwordController,
                     obscureText: true,
+                    enableSuggestions: false,
+                    autocorrect: false,
                     autofillHints: _create
                         ? const [AutofillHints.newPassword]
                         : const [AutofillHints.password],
                     onSubmitted: (_) => _emailAction(),
                     decoration: InputDecoration(
                       labelText: 'Password',
+                      helperText: _create
+                          ? '10+ characters with uppercase, lowercase and a number.'
+                          : null,
                       errorText: _error,
                     ),
                   ),
@@ -245,6 +263,19 @@ class _AuthPageState extends State<AuthPage> {
     );
   }
 
+  String? _passwordProblem(String password) {
+    if (password.length < 10 ||
+        !RegExp(r'[A-Z]').hasMatch(password) ||
+        !RegExp(r'[a-z]').hasMatch(password) ||
+        !RegExp(r'[0-9]').hasMatch(password)) {
+      return 'Use at least 10 characters with an uppercase letter, lowercase letter and number.';
+    }
+    if (password.length > 128) {
+      return 'Keep your password under 128 characters.';
+    }
+    return null;
+  }
+
   String _friendlyFirebaseError(FirebaseAuthException error) {
     switch (error.code) {
       case 'invalid-credential':
@@ -252,9 +283,9 @@ class _AuthPageState extends State<AuthPage> {
       case 'user-not-found':
         return 'That email or password is not correct.';
       case 'email-already-in-use':
-        return 'An account already exists for that email.';
+        return 'Homi could not create an account with those details. Try signing in or resetting the password instead.';
       case 'weak-password':
-        return 'Use a stronger password with at least 6 characters.';
+        return 'Use at least 10 characters with an uppercase letter, lowercase letter and number.';
       case 'invalid-email':
         return 'Enter a valid email address.';
       case 'network-request-failed':

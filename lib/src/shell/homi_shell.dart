@@ -12,8 +12,10 @@ import '../features/supplies/supplies_page.dart';
 import '../features/today/today_page.dart';
 import '../services/account_data_service.dart';
 import '../services/auth_service.dart';
+import '../services/developer_notification_service.dart';
 import '../services/household_people_service.dart';
 import '../services/location_status_service.dart';
+import '../services/notification_service.dart';
 import '../services/shared_task_service.dart';
 import '../services/trusted_people_service.dart';
 import '../state/homi_app_controller.dart';
@@ -49,6 +51,10 @@ class _HomiShellState extends State<HomiShell> {
   late final HouseholdPeopleService _householdPeopleService;
   late final SharedTaskService _sharedTaskService;
   late final AccountDataService _accountDataService;
+  late final HomiNotificationService _notificationService;
+  late final DeveloperNotificationService _developerNotificationService;
+  StreamSubscription<String>? _notificationRouteSubscription;
+  Timer? _notificationScheduleDebounce;
 
   @override
   void initState() {
@@ -69,8 +75,71 @@ class _HomiShellState extends State<HomiShell> {
     _accountDataService = AccountDataService(
       firebaseReady: widget.firebaseReady,
     );
+    _notificationService = HomiNotificationService(
+      firebaseReady: widget.firebaseReady,
+    );
+    _developerNotificationService = DeveloperNotificationService(
+      firebaseReady: widget.firebaseReady,
+    );
+    widget.controller.addListener(_queueNotificationReconcile);
     unawaited(widget.controller.pruneExpiredTasks());
     unawaited(_resumeLocationSharing());
+    unawaited(_initializeNotifications());
+  }
+
+  Future<void> _initializeNotifications() async {
+    _notificationRouteSubscription =
+        _notificationService.routes.listen(_handleNotificationRoute);
+    try {
+      await _notificationService.initialize();
+      await _reconcileNotifications();
+      final pending = _notificationService.takePendingRoute();
+      if (pending != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _handleNotificationRoute(pending);
+        });
+      }
+    } catch (_) {
+      // Notification setup is additive. A notification problem must not stop
+      // the household app from opening.
+    }
+  }
+
+  void _queueNotificationReconcile() {
+    _notificationScheduleDebounce?.cancel();
+    _notificationScheduleDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () => unawaited(_reconcileNotifications()),
+    );
+  }
+
+  Future<void> _reconcileNotifications() {
+    return _notificationService.reconcileLocalSchedules(
+      tasks: widget.controller.tasks,
+      routines: widget.controller.routines,
+      supplies: widget.controller.supplies,
+      homeThings: widget.controller.homeThings,
+    );
+  }
+
+  void _handleNotificationRoute(String route) {
+    if (!mounted) return;
+    switch (route) {
+      case 'tasks':
+        _openWork(WorkView.tasks);
+      case 'routines':
+        _openWork(WorkView.routines);
+      case 'home':
+        _selectPage(2);
+      case 'supplies':
+        _selectPage(3);
+      case 'people':
+        _selectPage(4);
+      case 'account':
+        unawaited(_openAccount());
+      default:
+        _selectPage(0);
+    }
   }
 
   Future<void> _resumeLocationSharing() async {
@@ -84,7 +153,11 @@ class _HomiShellState extends State<HomiShell> {
 
   @override
   void dispose() {
+    widget.controller.removeListener(_queueNotificationReconcile);
+    _notificationScheduleDebounce?.cancel();
+    unawaited(_notificationRouteSubscription?.cancel());
     _pageController.dispose();
+    unawaited(_notificationService.disposeService());
     unawaited(_locationService.dispose());
     super.dispose();
   }
@@ -107,10 +180,15 @@ class _HomiShellState extends State<HomiShell> {
           accountDataService: _accountDataService,
           controller: widget.controller,
           locationService: _locationService,
+          notificationService: _notificationService,
+          developerNotificationService: _developerNotificationService,
           onSignIn: widget.onOpenAuth,
         ),
       ),
     );
+    if (!mounted) return;
+    await _notificationService.refreshDeviceRegistration();
+    await _reconcileNotifications();
     if (!mounted) return;
     if (deleted == true && _index != 0) {
       _selectPage(0);

@@ -70,7 +70,7 @@ Bruce has reported the 0.8 product experience is where he wants it overall. On t
 
 - normal Homi notifications are delivering;
 - developer self-test notifications are delivering;
-- the notification status icon is using the Homi mark;
+- the notification status icon uses the Homi mark;
 - Developer notifications access is enabled for the intended account;
 - Android Studio runtime is otherwise behaving correctly.
 
@@ -113,11 +113,15 @@ The feature remains intentionally tiny: `{name} is thinking about you!`; do not 
 
 ## 0.8.1 security/cost hardening
 
-Cloud Functions global `maxInstances` was reduced from 10 to **5**.
+Cloud Functions global `maxInstances` is **5**. Direct notification fan-out reads at most **12 enabled device records per user**.
 
-Direct notification fan-out reads at most **12 enabled device records per user** to bound pathological Firestore/FCM fan-out.
+All Homi Functions are now configured in source to run as:
 
-Server-only `serverRateLimits` now suppresses excessive notification generation:
+`homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`
+
+rather than the broad default Compute runtime service account. The dedicated account already has Homi's Firestore and Firebase Cloud Messaging application permissions. The next backend deployment must prove this identity works for all Functions before considering removal of the old Compute account's Editor role.
+
+Server-only `serverRateLimits` suppresses excessive notification generation:
 
 - connection request pushes: 20/hour per initiator;
 - shared Task creation pushes: 60/hour per creator;
@@ -129,6 +133,7 @@ Server-only `serverRateLimits` now suppresses excessive notification generation:
 
 Firestore rules were tightened for:
 
+- bounded user profile schema and immutable client-side Homi code after profile creation;
 - notification device schema/lengths;
 - developer campaign fields/lengths/enum values/server timestamp;
 - Homi code length/schema;
@@ -139,13 +144,21 @@ Firestore rules were tightened for:
 - latest-location field allow-list, coordinate/accuracy/battery bounds, server timestamp and capture-source allow-list;
 - server-only rate-limit records.
 
-The stricter rules require a fresh backend deployment after local tests.
+### Automated Firestore rules gate
+
+`security-tests/` contains emulator tests for critical allow/deny assumptions. Run:
+
+```bash
+bash scripts/test-firestore-security.sh
+```
+
+The normal backend deployment helper now runs this security suite automatically before it deploys. A failed security test blocks deployment rather than publishing rules that failed the test gate.
 
 ## App Check
 
 Bruce registered the debug App Check token privately. Do not request it.
 
-`sendHeart` now enforces App Check in source. **Firestore service enforcement is still a pre-release gate**, not something to switch on blindly. First verify legitimate debug traffic is valid, then configure/verify Play Integrity for the Play-signed release build, then enable Firestore enforcement before public release.
+`sendHeart` now enforces App Check in source. **Firestore service enforcement remains a pre-release gate.** First verify legitimate debug traffic is valid, then configure/verify Play Integrity for the Play-signed release build, then enable Firestore enforcement before public release.
 
 ## Current cloud-sync truth
 
@@ -160,13 +173,15 @@ This is the largest product-contract decision before release. If Homi launches a
 
 If the first launch stays local-first for those areas, store/in-app copy must state that boundary clearly.
 
+The current direct Homi-code issuance/exact-lookup path is authenticated and tightly schema-restricted, but it is not server-rate-limited. Before broad public scale, strongly consider moving code issuance/lookup behind App-Check-protected callable Functions so code enumeration/write abuse can be rate-limited server-side.
+
 ## Release readiness
 
 Read `documentation/RELEASE_READINESS.md` before deciding the app is ready for Play.
 
 Major remaining gates include:
 
-- 0.8.1 analyzer/tests/rules/functions verification;
+- 0.8.1 analyzer/tests/security-emulator/rules/functions verification;
 - one controlled broad developer broadcast test;
 - full Shared Household sync OR a deliberate local-first launch contract;
 - background-location multi-hour/reboot/battery-optimiser testing;
@@ -175,7 +190,7 @@ Major remaining gates include:
 - production Google Sign-In from Play-installed build;
 - production Maps key fingerprint restriction;
 - Play Integrity App Check and Firestore App Check enforcement;
-- least-privilege Cloud Functions runtime identity rather than broad default Compute Editor identity;
+- prove dedicated least-privilege Cloud Functions runtime and then safely review old default Compute Editor access;
 - Cloud billing alerts/spend controls and monitoring;
 - public Privacy Policy, Terms and external account-deletion URL;
 - Google Play Data Safety/content-rating/target-audience/app-access/store assets;
@@ -207,21 +222,24 @@ If clean, Cloud Shell:
 ```bash
 cd ~/homi
 git pull
-npm run lint --prefix functions
 bash scripts/deploy-notification-backend.sh
 ```
 
-The deployment must compile/release the stricter Firestore rules and update the Functions. Then re-test on the S25 Ultra:
+The deploy helper now performs Function syntax validation and the Firestore Emulator security suite before publishing the stricter rules/Functions.
+
+Then re-test on the S25 Ultra:
 
 - notifications still register and deliver;
-- a People heart still works with the registered debug App Check token;
+- People heart works with the registered debug App Check token;
 - repeated heart is rate-limited cleanly;
-- shared Task creation/completion still works under stricter rules;
-- connection request/acceptance still works;
-- live location still writes and reads under stricter rules;
+- shared Task creation/completion works under stricter rules;
+- connection request/acceptance works;
+- live location writes and reads under stricter rules;
 - developer self test still works;
 - one controlled **All enabled Homi devices** test works for the enabled category;
 - no raw permission errors appear.
+
+If deployment reports `iam.serviceAccounts.actAs` for the dedicated runtime identity, grant only the required Service Account User/actAs permission to the actual deployer on `homi-backend-runtime` and retry. Do not restore broad Editor access to solve it.
 
 If any rule returns `PERMISSION_DENIED`, capture the exact operation/log and fix the rule/data contract rather than weakening the whole collection.
 

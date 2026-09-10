@@ -410,7 +410,7 @@ class HomiNotificationService extends ChangeNotifier {
         }
       }
 
-      await _showNewCriticalSupplyAlert(supplies, now);
+      await _showNewHouseholdAttention(supplies, homeThings, now);
     }
 
     plans.sort((a, b) => a.when.compareTo(b.when));
@@ -445,33 +445,76 @@ class HomiNotificationService extends ChangeNotifier {
     );
   }
 
-  Future<void> _showNewCriticalSupplyAlert(
+  Future<void> _showNewHouseholdAttention(
     List<SupplyItem> supplies,
+    List<HomeThing> homeThings,
     DateTime now,
   ) async {
-    final existing = (_prefs?.getStringList(_alertedKeysKey) ?? const <String>[])
-        .toSet();
-    final currentKeys = <String>{};
-    final newlyCritical = <SupplyItem>[];
+    final alreadyAlerted =
+        (_prefs?.getStringList(_alertedKeysKey) ?? const <String>[]).toSet();
+    final activeKeys = <String>{};
+    final newItems = <_ImmediateAttention>[];
 
     for (final supply in supplies) {
-      if (supply.effectiveStatus(now) != SupplyStatus.needToBuy) continue;
-      final key = 'supply-out:${supply.id}';
-      currentKeys.add(key);
-      if (!existing.contains(key)) newlyCritical.add(supply);
+      final effective = supply.effectiveStatus(now);
+      String? key;
+      String? label;
+      String route = 'supplies';
+
+      if (effective == SupplyStatus.needToBuy) {
+        key = 'supply-buy:${supply.id}';
+        label = '${supply.name} needs to be bought';
+      } else if (supply.isExpired(now)) {
+        key =
+            'supply-expired:${supply.id}:${supply.expiryDate?.toIso8601String() ?? ''}';
+        label = '${supply.name} is past its expiry date';
+      } else if (effective == SupplyStatus.eatSoon) {
+        key =
+            'supply-use-soon:${supply.id}:${supply.expiryDate?.toIso8601String() ?? ''}';
+        label = '${supply.name} expires soon';
+      }
+
+      if (key != null && label != null) {
+        activeKeys.add(key);
+        if (!alreadyAlerted.contains(key)) {
+          newItems.add(_ImmediateAttention(key: key, label: label, route: route));
+        }
+      }
     }
 
-    if (newlyCritical.isNotEmpty) {
-      final names = newlyCritical.take(3).map((item) => item.name).join(', ');
-      final remaining = newlyCritical.length - 3;
+    for (final thing in homeThings) {
+      final serviceDate = thing.nextServiceDate;
+      if (serviceDate == null) continue;
+      String? key;
+      String? label;
+      if (thing.serviceDue(now)) {
+        key = 'home-service-due:${thing.id}:${serviceDate.toIso8601String()}';
+        label = '${thing.name} service is due';
+      } else if (thing.serviceSoon(now)) {
+        key = 'home-service-soon:${thing.id}:${serviceDate.toIso8601String()}';
+        label = '${thing.name} service is coming up';
+      }
+      if (key != null && label != null) {
+        activeKeys.add(key);
+        if (!alreadyAlerted.contains(key)) {
+          newItems.add(_ImmediateAttention(key: key, label: label, route: 'home'));
+        }
+      }
+    }
+
+    if (newItems.isNotEmpty) {
+      final visible = newItems.take(3).map((item) => item.label).join(' · ');
+      final remaining = newItems.length - 3;
+      final onlyRoute = newItems.map((item) => item.route).toSet();
+      final route = onlyRoute.length == 1 ? onlyRoute.first : 'overview';
       await _local.show(
         id: _notificationId(
-          'critical-supply:${DateTime.now().millisecondsSinceEpoch}',
+          'household-attention:${DateTime.now().millisecondsSinceEpoch}',
         ),
-        title: newlyCritical.length == 1
-            ? '${newlyCritical.first.name} needs attention'
-            : '${newlyCritical.length} supplies need attention',
-        body: remaining > 0 ? '$names and $remaining more.' : names,
+        title: newItems.length == 1
+            ? 'Something needs your attention'
+            : '${newItems.length} things need your attention',
+        body: remaining > 0 ? '$visible · +$remaining more' : visible,
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             'homi_attention',
@@ -483,11 +526,11 @@ class HomiNotificationService extends ChangeNotifier {
             priority: Priority.high,
           ),
         ),
-        payload: 'supplies',
+        payload: route,
       );
     }
 
-    await _prefs?.setStringList(_alertedKeysKey, currentKeys.toList());
+    await _prefs?.setStringList(_alertedKeysKey, activeKeys.toList());
   }
 
   Future<void> _cancelScheduledNotifications() async {
@@ -598,5 +641,17 @@ class _LocalNotificationPlan {
   final String title;
   final String body;
   final AndroidNotificationChannel channel;
+  final String route;
+}
+
+class _ImmediateAttention {
+  const _ImmediateAttention({
+    required this.key,
+    required this.label,
+    required this.route,
+  });
+
+  final String key;
+  final String label;
   final String route;
 }

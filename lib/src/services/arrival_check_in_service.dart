@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
@@ -159,6 +160,7 @@ class ArrivalCheckInService extends ChangeNotifier {
     }
     _inside.remove(kind);
     await _save();
+    if (!_config.enabled) await _stopLocationIfCheckInsAreOnlyConsumer();
     notifyListeners();
   }
 
@@ -187,7 +189,31 @@ class ArrivalCheckInService extends ChangeNotifier {
     _inside.clear();
     if (latest != null) _primeZoneState(latest);
     await _save();
+    if (!enabled) await _stopLocationIfCheckInsAreOnlyConsumer();
     notifyListeners();
+  }
+
+  Future<void> _stopLocationIfCheckInsAreOnlyConsumer() async {
+    final user = firebaseReady ? FirebaseAuth.instance.currentUser : null;
+    if (user == null) {
+      await locationService.stopContinuousSharing();
+      return;
+    }
+    try {
+      final activeShares = await FirebaseFirestore.instance
+          .collection('locationShares')
+          .doc(user.uid)
+          .collection('viewers')
+          .where('active', isEqualTo: true)
+          .limit(1)
+          .get();
+      if (activeShares.docs.isEmpty) {
+        await locationService.stopContinuousSharing();
+      }
+    } catch (_) {
+      // Fail closed for existing live-location sharing: if Homi cannot confirm
+      // there are no active viewers, leave the foreground location stream on.
+    }
   }
 
   void _primeZoneState(LocationStatusSnapshot snapshot) {

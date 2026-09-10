@@ -1,7 +1,12 @@
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../domain/arrival_check_in.dart';
+import '../../services/homi_cloud_actions.dart';
+import '../../services/shared_place_service.dart';
 import '../../theme/homi_theme.dart';
 
 class HomiMapPerson {
@@ -51,6 +56,8 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
   String? _selectedId;
   String? _sendingHeartTo;
 
+  bool get _firebaseReady => Firebase.apps.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
@@ -80,13 +87,80 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
     );
   }
 
+  Future<void> _call(String number) async {
+    final launched = await launchUrl(
+      Uri(scheme: 'tel', path: number),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This device could not open the phone app.')),
+      );
+    }
+  }
+
+  Future<void> _showEmergencyNumbers() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Emergency calls',
+                  style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 5),
+              Text(
+                'Homi opens your phone app with the number ready. It does not place the call or send your location automatically.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 14),
+              _EmergencyNumberRow(
+                icon: Icons.emergency_outlined,
+                title: 'Emergency',
+                number: '112',
+                detail: 'From a mobile phone',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _call('112');
+                },
+              ),
+              _EmergencyNumberRow(
+                icon: Icons.local_police_outlined,
+                title: 'Police emergency',
+                number: '10111',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _call('10111');
+                },
+              ),
+              _EmergencyNumberRow(
+                icon: Icons.medical_services_outlined,
+                title: 'Ambulance emergency',
+                number: '10177',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _call('10177');
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _sendHeart(HomiMapPerson person) async {
-    if (person.isSelf || _sendingHeartTo != null) return;
+    if (person.isSelf || _sendingHeartTo != null || !_firebaseReady) return;
     setState(() => _sendingHeartTo = person.id);
     try {
-      final callable = FirebaseFunctions.instanceFor(region: 'africa-south1')
-          .httpsCallable('sendHeart');
-      await callable.call(<String, dynamic>{'recipientUid': person.id});
+      await HomiCloudActions(firebaseReady: true).call(
+        'sendHeart',
+        <String, dynamic>{'recipientUid': person.id},
+      );
       if (!mounted) return;
       await showModalBottomSheet<void>(
         context: context,
@@ -139,17 +213,12 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
           ),
         ),
       );
-    } on FirebaseFunctionsException catch (error) {
-      if (!mounted) return;
-      final message = switch (error.code) {
-        'resource-exhausted' =>
-          'Give it a moment before sending another heart.',
-        'permission-denied' =>
-          'Hearts can only be sent to an accepted trusted person.',
-        'unauthenticated' => 'Sign in to send a heart.',
-        _ => 'Homi could not send that heart right now. Try again shortly.',
-      };
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } on HomiCloudActionException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -161,6 +230,63 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
     } finally {
       if (mounted) setState(() => _sendingHeartTo = null);
     }
+  }
+
+  Future<void> _showPersonDetails(HomiMapPerson person) async {
+    String? ownerUid;
+    if (person.isSelf) {
+      if (_firebaseReady) {
+        ownerUid = FirebaseAuth.instance.currentUser?.uid;
+      }
+    } else {
+      ownerUid = person.id;
+    }
+
+    Map<ArrivalPlaceKind, HomiSharedPlace> places =
+        const <ArrivalPlaceKind, HomiSharedPlace>{};
+    if (ownerUid != null && ownerUid.isNotEmpty) {
+      try {
+        places = await HomiSharedPlaceService(firebaseReady: _firebaseReady)
+            .placesFor(ownerUid);
+      } catch (_) {
+        // Keep the person's latest-location details usable even if saved-place
+        // lookup is temporarily unavailable.
+      }
+    }
+    if (!mounted) return;
+
+    final action = await showModalBottomSheet<_PersonDetailAction>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => _PersonDetailsSheet(
+        person: person,
+        places: places,
+      ),
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case _PersonDetailAction.latest:
+        await widget.onShowDetails(person);
+      case _PersonDetailAction.home:
+        final home = places[ArrivalPlaceKind.home];
+        if (home != null) await _openSavedPlace(home);
+      case _PersonDetailAction.work:
+        final work = places[ArrivalPlaceKind.work];
+        if (work != null) await _openSavedPlace(work);
+    }
+  }
+
+  Future<void> _openSavedPlace(HomiSharedPlace place) async {
+    final uri = Uri.https(
+      'www.google.com',
+      '/maps/search/',
+      <String, String>{
+        'api': '1',
+        'query': '${place.latitude},${place.longitude}',
+      },
+    );
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -258,10 +384,9 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
                                   color: HomiColors.coral,
                                 ),
                                 SizedBox(width: 6),
-                                Text(
-                                  'People map',
-                                  style: TextStyle(fontWeight: FontWeight.w900),
-                                ),
+                                Text('People map',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w900)),
                               ],
                             ),
                           ),
@@ -270,16 +395,21 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
                     ),
                   ),
                 ),
-                if (widget.people.isNotEmpty)
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: SafeArea(
-                      top: false,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _EmergencyMapBar(
+                            onSos: () => _call('112'),
+                            onMore: _showEmergencyNumbers,
+                          ),
+                          if (widget.people.isNotEmpty) ...[
+                            const SizedBox(height: 8),
                             SizedBox(
                               height: 54,
                               child: ListView.separated(
@@ -300,81 +430,344 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
                                 },
                               ),
                             ),
-                            if (selected != null) ...[
-                              const SizedBox(height: 8),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(22),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      blurRadius: 18,
-                                      offset: Offset(0, 6),
-                                      color: Color(0x20000000),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  children: [
-                                    _Avatar(
-                                      name: selected.name,
-                                      photoUrl: selected.photoUrl,
-                                      size: 46,
-                                    ),
-                                    const SizedBox(width: 11),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            selected.name,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w900,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            '${selected.isSelf ? 'You' : 'Shared location'} · ${selected.batteryPercent}% battery',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodyMedium,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    if (!selected.isSelf)
-                                      _HeartButton(
-                                        busy: _sendingHeartTo == selected.id,
-                                        onTap: () => _sendHeart(selected),
-                                      ),
-                                    const SizedBox(width: 6),
-                                    FilledButton(
-                                      onPressed: () =>
-                                          widget.onShowDetails(selected),
-                                      child: const Text('Details'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
                           ],
-                        ),
+                          if (selected != null) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(22),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    blurRadius: 18,
+                                    offset: Offset(0, 6),
+                                    color: Color(0x20000000),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  _Avatar(
+                                    name: selected.name,
+                                    photoUrl: selected.photoUrl,
+                                    size: 46,
+                                  ),
+                                  const SizedBox(width: 11),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          selected.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          '${selected.isSelf ? 'You' : 'Shared location'} · ${selected.batteryPercent}% battery',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  if (!selected.isSelf)
+                                    _HeartButton(
+                                      busy: _sendingHeartTo == selected.id,
+                                      onTap: () => _sendHeart(selected),
+                                    ),
+                                  const SizedBox(width: 6),
+                                  FilledButton(
+                                    onPressed: () => _showPersonDetails(selected),
+                                    child: const Text('Details'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ),
+                ),
               ],
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+enum _PersonDetailAction { latest, home, work }
+
+class _PersonDetailsSheet extends StatelessWidget {
+  const _PersonDetailsSheet({required this.person, required this.places});
+
+  final HomiMapPerson person;
+  final Map<ArrivalPlaceKind, HomiSharedPlace> places;
+
+  @override
+  Widget build(BuildContext context) {
+    final home = places[ArrivalPlaceKind.home];
+    final work = places[ArrivalPlaceKind.work];
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _Avatar(name: person.name, photoUrl: person.photoUrl, size: 54),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(person.name,
+                          style: Theme.of(context).textTheme.headlineSmall),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${person.isSelf ? 'Your location' : 'Shared location'} · ${person.batteryPercent}% battery',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _DetailActionCard(
+              icon: Icons.my_location_rounded,
+              title: 'Latest location',
+              detail: person.updatedAt == null
+                  ? 'Open location details'
+                  : 'Updated ${_timeLabel(person.updatedAt!)}',
+              onTap: () =>
+                  Navigator.pop(context, _PersonDetailAction.latest),
+            ),
+            const SizedBox(height: 16),
+            Text('Saved places', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 5),
+            Text(
+              person.isSelf
+                  ? 'Your saved Home and Work from arrival check-ins.'
+                  : 'A precise place appears only when this person chose to show it to you and is also sharing their location with you.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 10),
+            _SavedPlaceCard(
+              kind: ArrivalPlaceKind.home,
+              place: home,
+              self: person.isSelf,
+              onTap: home == null
+                  ? null
+                  : () => Navigator.pop(context, _PersonDetailAction.home),
+            ),
+            _SavedPlaceCard(
+              kind: ArrivalPlaceKind.work,
+              place: work,
+              self: person.isSelf,
+              onTap: work == null
+                  ? null
+                  : () => Navigator.pop(context, _PersonDetailAction.work),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _timeLabel(DateTime value) {
+    final local = value.toLocal();
+    return '${local.day}/${local.month} · ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _SavedPlaceCard extends StatelessWidget {
+  const _SavedPlaceCard({
+    required this.kind,
+    required this.place,
+    required this.self,
+    required this.onTap,
+  });
+
+  final ArrivalPlaceKind kind;
+  final HomiSharedPlace? place;
+  final bool self;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Card(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: HomiColors.peach.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    kind == ArrivalPlaceKind.home
+                        ? Icons.home_rounded
+                        : Icons.work_outline_rounded,
+                    color: HomiColors.coral,
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(kind.label,
+                          style: const TextStyle(fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 3),
+                      Text(
+                        place?.address ??
+                            (self ? 'Not set yet' : 'Not shared with you'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+                if (place != null)
+                  const Icon(Icons.open_in_new_rounded,
+                      size: 19, color: HomiColors.coral),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailActionCard extends StatelessWidget {
+  const _DetailActionCard({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Icon(icon, color: HomiColors.coral),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 2),
+                    Text(detail, style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmergencyMapBar extends StatelessWidget {
+  const _EmergencyMapBar({required this.onSos, required this.onMore});
+
+  final VoidCallback onSos;
+  final VoidCallback onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: onSos,
+            icon: const Icon(Icons.emergency_rounded),
+            label: const Text('SOS · 112'),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(backgroundColor: Colors.white),
+            onPressed: onMore,
+            icon: const Icon(Icons.call_outlined),
+            label: const Text('Emergency numbers'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EmergencyNumberRow extends StatelessWidget {
+  const _EmergencyNumberRow({
+    required this.icon,
+    required this.title,
+    required this.number,
+    required this.onTap,
+    this.detail,
+  });
+
+  final IconData icon;
+  final String title;
+  final String number;
+  final String? detail;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Card(
+        child: ListTile(
+          onTap: onTap,
+          leading: Icon(icon, color: HomiColors.coral),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+          subtitle: Text(detail == null ? number : '$number · $detail'),
+          trailing: const Icon(Icons.call_rounded, color: HomiColors.coral),
+        ),
       ),
     );
   }

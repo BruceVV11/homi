@@ -63,6 +63,31 @@ async function seedAcceptedConnection(aUid = "alice", bUid = "bob") {
   });
 }
 
+test("user profile is compact, owner-only and keeps its Homi code", async () => {
+  const alice = env.authenticatedContext("alice").firestore();
+  const bob = env.authenticatedContext("bob").firestore();
+  const ref = doc(alice, "users/alice");
+
+  await assertSucceeds(setDoc(ref, {
+    homiCode: "ABC123",
+    displayName: "Alice",
+    photoUrl: null,
+    updatedAt: serverTimestamp(),
+  }));
+  await assertFails(getDoc(doc(bob, "users/alice")));
+  await assertFails(updateDoc(ref, {
+    homiCode: "ZZZ999",
+    updatedAt: serverTimestamp(),
+  }));
+  await assertFails(setDoc(ref, {
+    homiCode: "ABC123",
+    displayName: "Alice",
+    photoUrl: null,
+    arbitraryBillingPayload: "not allowed",
+    updatedAt: serverTimestamp(),
+  }));
+});
+
 test("location is private unless an active accepted share exists", async () => {
   const alice = env.authenticatedContext("alice").firestore();
   const bob = env.authenticatedContext("bob").firestore();

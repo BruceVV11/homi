@@ -113,17 +113,10 @@ service cloud.firestore {
         ];
     }
 
-    // Profile identity is provisioned by App-Check-protected Cloud Functions.
-    // The mobile client can read only its own profile. Keeping writes server-only
-    // prevents code/profile spoofing and makes Homi code ownership atomic.
     match /users/{uid} {
       allow read: if isSelf(uid);
       allow create, update, delete: if false;
 
-      // Device push registration remains a direct owner write because FCM token
-      // refresh is device-local. Schema validation limits what it can contain.
-      // Firestore App Check enforcement is the production abuse boundary for
-      // this direct path.
       match /devices/{deviceId} {
         allow read, delete: if isSelf(uid);
         allow create, update: if isSelf(uid)
@@ -138,13 +131,11 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
     }
 
-    // Campaign creation is server-only through queueDeveloperNotification.
     match /notificationCampaigns/{campaignId} {
       allow read: if isDeveloperAdmin();
       allow create, update, delete: if false;
     }
 
-    // Server-only control-plane collections.
     match /heartCooldowns/{documentId} {
       allow read, write: if false;
     }
@@ -152,14 +143,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Codes are deliberately not readable from Firestore. Exact lookup and
-    // issuance happen through rate-limited, App-Check-protected callables.
     match /homiCodes/{code} {
       allow read, write: if false;
     }
 
-    // Clients can observe only connections they participate in. Every mutation
-    // is server-authorised so status transitions and cleanup are atomic.
     match /connections/{connectionId} {
       allow get, list: if isConnectionMember(resource.data);
       allow create, update, delete: if false;
@@ -170,28 +157,26 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    // Task membership is derived server-side from accepted Household
-    // relationships; clients cannot forge member lists, completion actors or
-    // purge timing.
     match /sharedTasks/{taskId} {
       allow get, list: if isSharedTaskMember(resource.data);
       allow create, update, delete: if false;
     }
 
-    // Share state is readable only by the owner/viewer pair and mutated through
-    // setLocationShare. Disconnect cleanup therefore cannot leave a client-
-    // writable stale authorization behind.
     match /locationShares/{ownerUid}/viewers/{viewerUid} {
       allow read: if isSelf(ownerUid) || isSelf(viewerUid);
       allow create, update, delete: if false;
     }
 
-    // Latest location is the only high-frequency direct collaboration write.
-    // It remains owner-only and schema constrained. Production Firestore App
-    // Check enforcement is required before public release.
+    // Latest location is the only high-frequency collaboration state written
+    // directly from the device. Owner/schema checks plus a minimum update
+    // interval provide a cost-abuse backstop even before service-level App
+    // Check enforcement is switched on for production.
     match /locations/{ownerUid} {
-      allow create, update: if isSelf(ownerUid)
+      allow create: if isSelf(ownerUid)
         && validLocationSnapshot(request.resource.data);
+      allow update: if isSelf(ownerUid)
+        && validLocationSnapshot(request.resource.data)
+        && request.time >= resource.data.updatedAt + duration.value(30, 's');
       allow delete: if false;
       allow read: if isSelf(ownerUid)
         || (signedIn() && hasActiveLocationShare(ownerUid, request.auth.uid));

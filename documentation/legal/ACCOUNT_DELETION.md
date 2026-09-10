@@ -2,7 +2,7 @@
 
 Date: 2026-09-10
 Status: implementation/release specification
-Current source: `0.9.0+11`
+Current source: `0.9.1+12`
 
 ## In-app deletion
 
@@ -19,7 +19,7 @@ The flow:
 5. deletes Homi-managed cloud data associated with the account through the protected backend;
 6. deletes the Firebase Authentication account;
 7. erases Homi household data and cached Homi location from the current phone;
-8. clears that account's user-scoped Home/Work arrival-check-in settings from the current phone, including coordinates, radii, selected recipients and local last-send timestamps.
+8. clears that account's user-scoped Home/Work arrival-check-in settings from the current phone, including coordinates, readable addresses, radii, selected recipients and local last-send timestamps.
 
 For email/password accounts, the current password is used only for Firebase reauthentication and is never stored.
 
@@ -45,7 +45,7 @@ The protected Homi account-deletion backend covers active cloud/account-linked s
 
 The `onHomiUserDocumentDeleted` server backstop removes server-only metadata deliberately inaccessible to mobile clients.
 
-Home/Work arrival-place coordinates are **not** stored in Firestore in the current architecture. They are local user-scoped preferences and are cleared on successful in-app account deletion.
+Home/Work arrival-place coordinates and readable addresses are **not** stored in Firestore in the current architecture. They are local user-scoped preferences and are cleared on successful in-app account deletion.
 
 Whenever a new cloud collection containing account-linked data is added, the deletion pipeline and this document must be updated in the same development pass.
 
@@ -55,7 +55,7 @@ A separate action exists:
 
 **Profile avatar → Homi & account → Your data → Erase data from this phone**
 
-This clears local household records and Homi cached location from that phone without deleting the cloud account. In `0.9.0+11`, the location-data reset also signals `ArrivalCheckInService` to remove the signed-in user's local Home/Work arrival configuration, including coordinates, radii, selected recipients and last-send timestamps, and the shared foreground location stream is stopped as part of the location reset. Android's permission itself is not silently changed.
+This clears local household records and Homi cached location from that phone without deleting the cloud account. In `0.9.1+12`, the location-data reset also signals `ArrivalCheckInService` to remove the signed-in user's local Home/Work arrival configuration, including coordinates, readable addresses, radii, selected recipients and last-send timestamps, and the shared foreground location stream is stopped as part of the location reset. Android's permission itself is not silently changed.
 
 Signing out does not silently delete local household records. It removes the signed-in user's push token from that device record. Arrival check-in settings are user-scoped locally; background arrival monitoring does not continue for a signed-out account.
 
@@ -107,7 +107,7 @@ Test at minimum:
 - user who is only assignee/viewer of another person's shared Task;
 - current live location active during deletion;
 - arrival check-ins enabled during deletion;
-- locally saved Home and Work check-in data removed after successful account deletion;
+- locally saved Home and Work check-in coordinates/readable addresses removed after successful account deletion;
 - **Erase data from this phone** removes locally saved Home/Work check-in data without deleting the cloud account;
 - background arrival monitoring stops after local erase/account deletion;
 - notifications enabled with an active FCM device record;

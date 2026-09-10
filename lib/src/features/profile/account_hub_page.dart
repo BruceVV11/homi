@@ -397,7 +397,7 @@ class _AccountHero extends StatelessWidget {
                     Text(
                       user == null
                           ? 'Using Homi on this phone'
-                          : (user.email ?? 'Signed in'),
+                          : (user?.email ?? 'Signed in'),
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 4),

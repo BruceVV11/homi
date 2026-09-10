@@ -5,16 +5,17 @@ import 'package:homi/src/domain/supply_item.dart';
 
 void main() {
   group('Homi notification preferences', () {
-    test('defaults keep useful categories ready but master delivery off', () {
+    test('fresh installs default useful operational notifications on', () {
       const preferences = HomiNotificationPreferences();
 
-      expect(preferences.enabled, isFalse);
+      expect(preferences.enabled, isTrue);
       expect(preferences.householdAttention, isTrue);
       expect(preferences.tasksAndRoutines, isTrue);
       expect(preferences.people, isTrue);
       expect(preferences.homiUpdates, isFalse);
       expect(preferences.serviceNotices, isTrue);
-      expect(preferences.allowsCategory('supply'), isFalse);
+      expect(preferences.allowsCategory('supply'), isTrue);
+      expect(preferences.allowsCategory('update'), isFalse);
     });
 
     test('category switches gate notification types after opt-in', () {

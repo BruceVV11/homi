@@ -5,6 +5,7 @@ const core = require("./index");
 const checkIn = require("./check_in");
 const connectionCleanup = require("./connection_cleanup");
 const deviceRegistration = require("./device_registration");
+const savedPlaces = require("./saved_places");
 
 // A stale deployed HTTPS function already owned the historical
 // `onConnectionDeleted` name. Do not export that obsolete endpoint from the
@@ -21,4 +22,5 @@ module.exports = {
   ...checkIn,
   ...connectionCleanup,
   ...deviceRegistration,
+  ...savedPlaces,
 };

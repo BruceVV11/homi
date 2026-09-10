@@ -1,7 +1,7 @@
 # Homi privacy, legal and launch compliance draft
 
 Date: 2026-09-10
-Status: internal working product/legal draft. Obtain professional South African legal review before public production release.
+Status: internal working product/legal draft for source `0.9.1+12`. Obtain professional South African legal review before public production release.
 
 ## Product position
 
@@ -42,14 +42,16 @@ Current local-first records can include:
 - legacy local reminders;
 - latest cached current-device location/battery state;
 - live-location preference state;
-- Home and Work arrival-check-in coordinates, radius, selected trusted-recipient UIDs and most recent local check-in send time;
+- Home and Work arrival-check-in coordinates, optional readable addresses, radius, selected trusted-recipient UIDs and most recent local check-in send time;
 - Homi notification category preferences;
 - a random Homi installation/device identifier used to associate a signed-in FCM token with that app installation;
 - local scheduled-notification IDs and de-duplication keys.
 
 Most household records above are stored in SharedPreferences and are not a full cloud backup unless the relevant product surface explicitly identifies them as shared.
 
-Home/Work arrival coordinates are intentionally local to the device in the current architecture. They are not sent to `sendArrivalCheckIn` and are not added to the push payload.
+Home/Work arrival coordinates/readable addresses are intentionally local to the device in the current architecture. They are not sent to `sendArrivalCheckIn` and are not added to the push payload.
+
+Typed Home/Work addresses are resolved through the device geocoding layer. **Set from here** captures the current device location locally and attempts to reverse-resolve a readable address. The current implementation does not introduce a separate Google Places autocomplete cloud collection or store the search text on Homi's backend.
 
 ### Cloud/account data
 
@@ -66,7 +68,7 @@ When a user signs in and uses relevant features, Firestore/Cloud Functions can p
 - developer notification campaign metadata only for authorised developer accounts;
 - server rate-limit records for protected operations including arrival check-ins.
 
-For an arrival check-in, the protected callable receives the place label (`home` or `work`) and the selected accepted trusted-recipient UIDs. It does not receive the user's saved Home/Work coordinates.
+For an arrival check-in, the protected callable receives the place label (`home` or `work`) and the selected accepted trusted-recipient UIDs. It does not receive the user's saved Home/Work coordinates or readable addresses.
 
 Firebase Authentication processes the authentication identity required for email/password or Google sign-in.
 
@@ -78,6 +80,7 @@ Current technical providers include:
 
 - Google Firebase / Google Cloud for authentication, Firestore, Cloud Functions and Firebase Cloud Messaging;
 - Google Maps Platform for maps;
+- Android/device geocoding services for resolving typed/readable local addresses;
 - the user's telephone/network provider for emergency calls opened from Homi;
 - Google Play for Android distribution and paid Android digital products when Homi+ is offered.
 
@@ -116,10 +119,12 @@ A connection alone must never start location sharing or arrival check-ins. House
 
 The current arrival detector runs locally against the latest device location and the user's locally saved Home/Work coordinates.
 
+- Home/Work can be configured from a typed address or Set from here;
+- the resolved readable address and coordinates remain local user-scoped preferences;
 - initial inside/outside state is primed without sending a message;
 - only an outside → inside transition produces a check-in;
 - check-ins use an exit margin and local cooldown to reduce GPS-edge duplicates;
-- the callable receives no saved latitude/longitude;
+- the callable receives no saved latitude/longitude/readable address;
 - the lock-screen payload contains no precise coordinate/address;
 - no route history is created by the feature.
 
@@ -143,7 +148,7 @@ The disclosure must appear before the sensitive permission request, not only in 
 
 Current product architecture stores latest-state location by default, not long-term route history.
 
-Home/Work check-in coordinates and the last local check-in send time stay on the device in the current implementation. The backend receives only the event label and recipients for delivery/rate-limit processing.
+Home/Work check-in coordinates, optional readable addresses and the last local check-in send time stay on the device in the current implementation. The backend receives only the event label and recipients for delivery/rate-limit processing.
 
 If short location history is introduced, define the user purpose and retention before release of that capability, expose the retention/control in product copy, update the Data safety form and deletion pipeline, and revisit Firestore fan-out/cost/security rules.
 
@@ -162,7 +167,7 @@ The persistent Android notification shown during live background location/check-
 
 ### Defaults, permission and control
 
-On a fresh `0.9.0+11` installation, useful operational Homi categories default enabled in local app preferences:
+On a fresh `0.9.1+12` installation, useful operational Homi categories default enabled in local app preferences:
 
 - Household attention;
 - Tasks & routines;
@@ -190,7 +195,7 @@ Developer broadcasts use category topics (`homi_updates`, `homi_service`, `homi_
 Lock-screen notification text can be visible without unlocking the phone. Therefore:
 
 - do not put precise coordinates or addresses in push notification payloads;
-- do not include saved Home/Work coordinates in arrival check-ins;
+- do not include saved Home/Work coordinates/readable addresses in arrival check-ins;
 - do not include household Task titles in server-generated shared-Task lock-screen notifications;
 - do not include household notes or Supply/Home content in developer broadcasts;
 - a People heart may show the sender display name because that identity is the purpose of the check-in;
@@ -215,7 +220,7 @@ Neither capability silently changes location visibility or Household/Friend scop
 ## Data minimisation principles
 
 - Do not put coordinates, precise addresses, household notes or Task text into analytics/general logs.
-- Do not send saved Home/Work coordinates through the arrival callable merely to generate a notification.
+- Do not send saved Home/Work coordinates/readable addresses through the arrival callable merely to generate a notification.
 - Do not collect contact books merely to find Homi users when Homi codes can work.
 - Do not store raw passwords.
 - Do not create hidden location history.
@@ -238,7 +243,7 @@ The Account/Homi area provides in-app sections for:
 - Erase data from this phone;
 - Delete Homi account.
 
-People now also provides **Safety & check-ins** for emergency shortcuts and Home/Work check-in configuration.
+The main People page remains map-first and contains accepted connection grouping underneath the map/location experience. It also provides a lower **Safety & check-ins** entry for emergency shortcuts and Home/Work check-in configuration.
 
 User-facing wording must read as finished-product copy. Internal engineering/legal documents may still identify verification or release obligations so unfinished infrastructure is not misrepresented to the team.
 
@@ -251,7 +256,7 @@ Google Play requires an app that allows account creation to provide:
 
 Official source: https://support.google.com/googleplay/android-developer/answer/13327111
 
-The Homi shell clears user-scoped local arrival-check-in settings after successful in-app account deletion. Server-side account cleanup removes Homi-managed collaboration/notification/rate-limit data according to the account deletion pipeline.
+The Homi shell clears user-scoped local arrival-check-in settings, including readable addresses, after successful in-app account deletion. Server-side account cleanup removes Homi-managed collaboration/notification/rate-limit data according to the account deletion pipeline.
 
 The external deletion web resource remains a production-release blocker and must be published before store submission.
 
@@ -262,7 +267,7 @@ See `documentation/legal/ACCOUNT_DELETION.md`.
 Before public release, reconcile every answer against the exact release build and SDK list. At minimum review disclosures for:
 
 - precise/background location;
-- locally saved Home/Work check-in places;
+- locally saved Home/Work check-in places and readable addresses;
 - account/user IDs;
 - email/name/profile photo;
 - trusted connection relationships and arrival-recipient selections;
@@ -308,7 +313,7 @@ Before production:
 - Cloud Functions protected callables tested with valid and invalid users;
 - `sendArrivalCheckIn` tested for valid recipients, disconnected recipients, App Check rejection and rate limiting;
 - People notification opt-out verified for arrival check-ins;
-- Home/Work coordinates verified absent from callable/push payloads/logs;
+- Home/Work coordinates/readable addresses verified absent from callable/push payloads/logs;
 - developer notification admin provisioning/revocation tested;
 - notification category opt-outs verified for direct sends and broadcast topics;
 - account deletion tested for Google and email/password accounts, including local arrival settings and server-only metadata cleanup;

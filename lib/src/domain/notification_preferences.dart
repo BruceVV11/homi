@@ -2,12 +2,12 @@ import 'dart:convert';
 
 /// Per-device Homi notification preferences.
 ///
-/// Notifications are opt-in at the operating-system level. The category
-/// switches below only decide which Homi events may notify this device after
-/// permission has been granted.
+/// Homi's useful operational notification categories default on for a fresh
+/// install, while Android still controls whether the app may actually display
+/// notifications. Product/update announcements remain separately opt-in.
 class HomiNotificationPreferences {
   const HomiNotificationPreferences({
-    this.enabled = false,
+    this.enabled = true,
     this.householdAttention = true,
     this.tasksAndRoutines = true,
     this.people = true,
@@ -68,7 +68,7 @@ class HomiNotificationPreferences {
     }
 
     return HomiNotificationPreferences(
-      enabled: read('enabled', false),
+      enabled: read('enabled', true),
       householdAttention: read('householdAttention', true),
       tasksAndRoutines: read('tasksAndRoutines', true),
       people: read('people', true),

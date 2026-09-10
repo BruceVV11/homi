@@ -21,6 +21,7 @@ class RoutinesPage extends StatefulWidget {
     required this.tasks,
     required this.actorName,
     required this.actorUid,
+    required this.actorPhotoUrl,
     required this.trustedPeopleService,
     required this.sharedTaskService,
     required this.onAdd,
@@ -38,6 +39,7 @@ class RoutinesPage extends StatefulWidget {
   final List<HouseholdTask> tasks;
   final String actorName;
   final String? actorUid;
+  final String? actorPhotoUrl;
   final TrustedPeopleService trustedPeopleService;
   final SharedTaskService sharedTaskService;
   final Future<void> Function(RoutineCreateData data) onAdd;
@@ -206,12 +208,14 @@ class _RoutinesPageState extends State<RoutinesPage>
         name: null,
         uid: null,
         detail: 'Visible to your household',
+        photoUrl: null,
       ),
       _AssigneeOption(
         label: 'Me',
         name: widget.actorName,
         uid: widget.actorUid,
         detail: 'Private to you',
+        photoUrl: widget.actorPhotoUrl,
       ),
     ];
 
@@ -229,6 +233,7 @@ class _RoutinesPageState extends State<RoutinesPage>
           detail: preference.relationship == 'Trusted person'
               ? 'Household member'
               : preference.relationship,
+          photoUrl: connection.otherPhotoUrl(currentUid),
         ),
       );
     }
@@ -1018,9 +1023,10 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
                 return GestureDetector(
                   onTap: () => setState(() => _assignee = option),
                   child: Container(
-                    constraints: const BoxConstraints(minWidth: 90),
+                    constraints:
+                        const BoxConstraints(minWidth: 128, maxWidth: 190),
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
                     decoration: BoxDecoration(
                       color: active
                           ? HomiColors.coral
@@ -1030,24 +1036,44 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
                         color: active ? HomiColors.coral : HomiColors.border,
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          option.label,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            color: active ? Colors.white : HomiColors.slate,
-                          ),
+                        _AssigneeAvatar(
+                          label: option.label,
+                          photoUrl: option.photoUrl,
+                          group: option.uid == null,
+                          active: active,
                         ),
-                        const SizedBox(height: 1),
-                        Text(
-                          option.detail,
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            color: active
-                                ? Colors.white.withValues(alpha: 0.82)
-                                : HomiColors.muted,
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                option.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  color: active
+                                      ? Colors.white
+                                      : HomiColors.slate,
+                                ),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                option.detail,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: active
+                                      ? Colors.white.withValues(alpha: 0.82)
+                                      : HomiColors.muted,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -1544,18 +1570,73 @@ class _InfoPoint extends StatelessWidget {
   }
 }
 
+class _AssigneeAvatar extends StatelessWidget {
+  const _AssigneeAvatar({
+    required this.label,
+    required this.photoUrl,
+    required this.group,
+    required this.active,
+  });
+
+  final String label;
+  final String? photoUrl;
+  final bool group;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = photoUrl?.trim();
+    final foreground = active ? HomiColors.coral : HomiColors.slate;
+    return Container(
+      width: 34,
+      height: 34,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: active
+            ? Colors.white.withValues(alpha: 0.92)
+            : HomiColors.sage.withValues(alpha: 0.25),
+        shape: BoxShape.circle,
+      ),
+      child: url != null && url.isNotEmpty
+          ? Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Icon(
+                group ? Icons.groups_rounded : Icons.person_rounded,
+                size: 19,
+                color: foreground,
+              ),
+            )
+          : group
+              ? Icon(Icons.groups_rounded, size: 19, color: foreground)
+              : Center(
+                  child: Text(
+                    label.trim().isEmpty ? '?' : label.trim()[0].toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: foreground,
+                    ),
+                  ),
+                ),
+    );
+  }
+}
+
 class _AssigneeOption {
   const _AssigneeOption({
     required this.label,
     required this.name,
     required this.uid,
     required this.detail,
+    required this.photoUrl,
   });
 
   final String label;
   final String? name;
   final String? uid;
   final String detail;
+  final String? photoUrl;
 }
 
 class _RoutineTemplate {

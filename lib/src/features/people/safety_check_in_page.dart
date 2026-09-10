@@ -1107,7 +1107,7 @@ class _GooglePlacePickerSheetState extends State<_GooglePlacePickerSheet> {
                 const SizedBox(height: 12),
                 const _InlineMessage(
                   text:
-                      'Google address search needs the Homi Places key configured for this build. You can close this and use Set from here in the meantime.',
+                      'Google address search is unavailable right now. You can close this and use Set from here instead.',
                 ),
               ],
               if (_error != null) ...[

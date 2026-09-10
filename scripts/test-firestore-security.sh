@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 PROJECT_ID="homi-ee80a"
 EXPECTED_PROJECT_NUMBER="883068189841"
+TEST_FILE="server.boundary.test.js"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${REPO_ROOT}"
@@ -13,18 +14,15 @@ if [ "${ACTUAL_PROJECT_NUMBER}" != "${EXPECTED_PROJECT_NUMBER}" ]; then
   exit 1
 fi
 
-if [ ! -f security-tests/package.json ] || [ ! -f security-tests/firestore.rules.test.js ]; then
+if [ ! -f security-tests/package.json ] || [ ! -f "security-tests/${TEST_FILE}" ]; then
   echo "Homi Firestore security test harness is incomplete." >&2
   exit 1
 fi
 
-# A previous interrupted Cloud Shell install may have left a large generated
-# node_modules tree inside the persistent repository. It is never source data.
+# Generated dependencies are never source data. Remove leftovers from earlier
+# Cloud Shell runs so the small persistent home disk cannot fill silently.
 rm -rf "${REPO_ROOT}/security-tests/node_modules"
 
-# Cloud Shell has a small persistent $HOME disk. Security-test dependencies are
-# disposable, so keep both npm's package cache and node_modules in the VM's
-# temporary filesystem instead of consuming the persistent home volume.
 WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/homi-firestore-security.XXXXXX")"
 cleanup() {
   rm -rf "${WORK_ROOT}"
@@ -33,7 +31,7 @@ trap cleanup EXIT
 
 mkdir -p "${WORK_ROOT}/security-tests" "${WORK_ROOT}/firebase"
 cp security-tests/package.json "${WORK_ROOT}/security-tests/package.json"
-cp security-tests/firestore.rules.test.js "${WORK_ROOT}/security-tests/firestore.rules.test.js"
+cp "security-tests/${TEST_FILE}" "${WORK_ROOT}/security-tests/${TEST_FILE}"
 cp firebase/firestore.rules "${WORK_ROOT}/firebase/firestore.rules"
 
 NPM_CACHE_DIR="${WORK_ROOT}/npm-cache"

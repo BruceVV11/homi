@@ -51,6 +51,15 @@ if (Test-Path $LocationHostHelper) {
     }
 }
 
+$NotificationHostHelper = Join-Path $PSScriptRoot 'enable-notifications-android.ps1'
+if (Test-Path $NotificationHostHelper) {
+    Write-Host '==> Enabling Homi Android notification host integration'
+    & powershell -ExecutionPolicy Bypass -File $NotificationHostHelper
+    if ($LASTEXITCODE -ne 0) {
+        throw "Android notification host setup failed with exit code $LASTEXITCODE"
+    }
+}
+
 if (Test-Path $TempRoot) { Remove-Item $TempRoot -Recurse -Force }
 
 $GradleJdkHelper = Join-Path $PSScriptRoot 'configure-gradle-jdk.ps1'

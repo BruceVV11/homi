@@ -4,16 +4,14 @@ Continue development of **Homi** from the current GitHub `main` branch. GitHub r
 
 Before changing anything, inspect:
 
-- `documentation/releases/0.8.2.md`
-- `documentation/releases/0.8.2-functions-batching-fix.md`
-- `documentation/releases/0.8.2-backend-deployment-complete.md`
 - `documentation/releases/0.9.0.md`
 - `documentation/releases/0.9.0-backend-deployment-complete.md`
+- `documentation/releases/0.9.1.md`
 - `documentation/RELEASE_READINESS.md`
 - `documentation/SECURITY.md`
-- `documentation/NOTIFICATIONS.md`
 - `documentation/ARCHITECTURE.md`
 - `documentation/LOCATION_SAFETY.md`
+- `documentation/NOTIFICATIONS.md`
 - `documentation/legal/PRIVACY_AND_COMPLIANCE.md`
 - `documentation/legal/ACCOUNT_DELETION.md`
 - the latest affected source files.
@@ -54,242 +52,183 @@ Primary navigation remains:
 
 **Overview · Tasks · Home · Supplies · People**
 
-Home remains centred with the exact Homi mark.
+Home remains centred with the exact Homi mark. The Homi header/profile row and bottom navigation are persistent shell UI and must not be replaced by feature-page navigation.
 
-## Current version and exact validated candidate
+## Current version
 
-Current source version: **`0.9.0+11`**.
+Current client source: **`0.9.1+12`**.
 
-The application/backend source candidate that Bruce validated and deployed is:
+The previously validated and deployed 0.9.0 application/backend candidate was:
 
 `c7e7b86656bc650ce1c8f0aabbb5a3129319db3c`
 
-Later `main` commits after this SHA are documentation-only release-state updates unless new source changes are explicitly made.
+Bruce confirmed:
 
-## 0.8.2 backend foundation — COMPLETED
+- final 0.9.0 `flutter analyze` clean;
+- all 0.9.0 Flutter tests passed;
+- governed Cloud Shell backend deployment completed without an observed failure.
 
-Do not reopen old 0.8.2 deployment incidents unless new evidence points there.
+The deployed backend includes `sendArrivalCheckIn`. Do not deploy it again unless new evidence points to a backend defect or backend source changes.
 
-Proven foundation includes:
+## 0.9.1 reason for change
 
-- Node 22 guard;
-- temporary Functions dependency workspace;
-- synchronized generated lock;
-- local `npm ci`;
-- Function syntax gate;
-- Firestore Emulator security suite 12/12;
-- Firestore rules/index deployment;
-- migration from stale HTTPS `onConnectionDeleted` to Firestore trigger `onTrustedConnectionDeleted`;
-- dedicated runtime identity `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`;
-- deterministic Function deployment in batches of five.
+The first S25 Ultra UI review rejected one product decision in 0.9.0: the new lightweight People hub displaced an already-approved map-first People page and pushed the old map/location experience behind a separate **Manage connections & live location** route. That also made the normal shell header/navbar feel absent when the nested manager was opened.
 
-Normal helper remains:
+Bruce's explicit correction:
 
-```bash
-bash scripts/deploy-notification-backend.sh
-```
+- People should open exactly in the old map-first structure;
+- the map and existing live-location controls stay immediately visible;
+- Household / non-Household connection grouping belongs underneath that existing experience;
+- there is no need for a separate Manage connections & live location destination;
+- Safety & check-ins can remain accessible from People, but lower down;
+- trusted-person editing must be more obvious than a small pencil icon;
+- arrival enable/disable should use the same visual/interaction language as Notifications;
+- Home/Work should support typed address setup plus Set from here;
+- oversized green/passive help boxes should be replaced by the Overview/Tasks **How it works** pattern.
 
-## 0.9 requested feature pass
+## Current 0.9.1 implementation
 
-Bruce requested, before running the app:
+### People restored map-first
 
-1. South African emergency-service speed-dial-style shortcuts;
-2. Home/Work automatic arrival check-ins to selected loved/trusted people;
-3. profile pictures in Task assignment plus separate Household / non-Household People sections;
-4. operational notifications enabled by default for fresh installs.
+`people_hub_page.dart` is now only a compatibility wrapper that returns the original `PeoplePage`; it no longer renders a separate hub UI.
 
-All four are implemented in source.
+`PeoplePage` again owns the visible People experience inside the normal Homi shell:
 
-### Emergency calls
+1. People title/subtitle;
+2. embedded Google map immediately;
+3. person focus chips / Open map;
+4. current-device location and Live updates controls;
+5. existing location How it works/help flow;
+6. Homi code and connection requests;
+7. accepted connection groups;
+8. Safety & check-ins entry after connections.
 
-People → **Safety & check-ins** includes:
+Do not reintroduce a lightweight hub or separate manager page unless Bruce explicitly asks for it later.
 
-- `112` — emergency from a mobile phone;
-- `10111` — police emergency;
-- `10177` — ambulance emergency.
+### Connection grouping and editing
 
-Implementation uses `url_launcher` `tel:` handoff. Homi does not silently place calls, request direct-call permission, dispatch responders or automatically transmit location to emergency services.
-
-Emergency shortcuts work without a Homi account.
-
-### Arrival check-ins
-
-New implementation includes:
-
-- `lib/src/domain/arrival_check_in.dart`
-- `lib/src/services/arrival_check_in_service.dart`
-- `lib/src/features/people/safety_check_in_page.dart`
-- `functions/check_in.js`
-
-Flow:
-
-1. sign in;
-2. save Home and/or Work while physically there;
-3. choose radius (150/250/500 m UI, 75 m–1 km model bounds);
-4. choose accepted trusted recipients per place;
-5. explicitly turn Arrival check-ins on.
-
-Privacy/reliability contract:
-
-- saved Home/Work coordinates are local and user-scoped;
-- callable/push receives only `home`/`work` plus selected recipient UIDs;
-- check-in-only background sampling does not refresh `locations/{uid}` unless Live updates is independently enabled;
-- no default route history;
-- first fresh location sample primes zone state and does not notify;
-- only outside → inside transition sends;
-- radius + 100 m exit hysteresis reduces GPS edge flapping;
-- one-hour local per-place cooldown;
-- local erase/account deletion clears saved Home/Work check-in data;
-- stale/disconnected recipients are skipped server-side;
-- if no selected recipient remains valid, send fails cleanly.
-
-### Shared background location stream
-
-`LocationStatusService` coordinates one visible Android foreground stream for two independent user choices:
-
-- Live updates;
-- Arrival check-ins.
-
-Turning one off does not stop the other. When both are off, the stream stops. Startup resume occurs only if an explicit saved feature flag exists and Android background permission is already available; startup does not open a new permission prompt.
-
-Force-stopping Android can interrupt this until the app is opened again. Never represent check-ins as emergency-grade monitoring.
-
-### `sendArrivalCheckIn`
-
-The App-Check-protected callable in `africa-south1`:
-
-- requires Firebase Authentication;
-- requires verified email for password-provider accounts;
-- accepts only Home/Work event labels;
-- accepts at most 10 selected recipient UIDs;
-- revalidates accepted trusted relationships at send time;
-- skips stale/disconnected recipients;
-- rate limits 20/hour and 60/day per sender;
-- reads no more than 12 enabled device registrations per valid recipient;
-- respects recipient People-notification settings;
-- sends no coordinate/address data.
-
-## People / Tasks identity changes
-
-Primary People destination is now a lightweight hub that separates:
+Accepted people are grouped on the same page as:
 
 - **Household**;
 - **Friends & trusted people**.
 
-Both use connection profile photos with safe fallbacks. Pending requests remain visible.
+Existing connection profile images, per-person location share controls, location details and remove behavior remain.
 
-The existing detailed map/location/relationship People screen is preserved behind **Manage connections & live location**.
+Relationship editing now has an explicit labelled **Edit** action rather than relying on a small pencil icon alone.
 
-Task assignment shows:
+Task assignment remains Household-only and keeps the 0.9 profile-photo improvement.
 
-- signed-in user's profile image where available;
-- Household assignee profile images;
-- initials/person/group fallback;
-- existing Anyone at home option.
+### Safety & check-ins UX
 
-Non-Household friends remain excluded from Household task assignment.
+The detailed Safety & check-ins page remains a nested feature page opened from the lower People entry.
 
-## Notification defaults
+Emergency shortcuts remain:
 
-Fresh-install defaults:
+- `112` — mobile emergency;
+- `10111` — police emergency;
+- `10177` — ambulance emergency.
 
-- master operational notifications ON;
-- Household attention ON;
-- Tasks & routines ON;
-- People ON;
-- Service & security ON;
-- Homi Updates/product announcements OFF.
+No direct-call permission or silent calling.
 
-Android still controls runtime notification permission. Homi asks once when permission is absent. Existing saved preferences remain authoritative; an existing explicit OFF is not overwritten.
+Arrival enable/disable now mirrors Notifications:
 
-## 10 September 2026 validation / deployment state
+- status hero;
+- full-width **Enable arrival check-ins** button while off;
+- preference-style row with switch while on;
+- if Home/Work/recipients are missing, show a direct setup message;
+- if Android background location is needed, use the Homi confirmation sheet, open settings and retry enabling when the user returns.
 
-### Flutter gate — COMPLETED
+### Home/Work address setup
 
-Bruce first ran dependency resolution/analyzer/tests, after which three analyzer findings were cleaned in source. Bruce then reran the final post-cleanup gate and confirmed:
+`ArrivalCheckInPlace` now includes an optional local `address` alongside latitude/longitude.
 
-- `flutter analyze` — all green / clean;
-- `flutter test` — all tests passed.
+Two setup methods:
 
-Therefore the validated `0.9.0+11` source gate is complete.
+- **Enter address** — user types a street address/place; `geocoding` resolves it to coordinates and then a readable address;
+- **Set from here** — captures current location locally and reverse-geocodes a readable address when available.
 
-### Backend deployment — USER-CONFIRMED COMPLETE
+Important product/technical distinction: current 0.9.1 uses the existing device geocoding layer. It resolves submitted address text but is **not Google Places suggestion-as-you-type autocomplete**. Do not represent it as Places autocomplete. Adding official Google Places autocomplete would be a separate API/dependency/setup decision.
 
-Bruce then ran the governed Cloud Shell helper against the same validated application/backend candidate and reported that deployment completed without any observed failure.
+Older 0.9 saved place records without `address` remain readable.
 
-Record this as user-confirmed successful deployment. The full Cloud Shell log was not supplied, so do not claim independent line-by-line provider verification.
+Privacy remains unchanged:
 
-See `documentation/releases/0.9.0-backend-deployment-complete.md`.
+- saved Home/Work coordinates and readable addresses stay local/user-scoped;
+- `sendArrivalCheckIn` still receives only `home`/`work` plus selected recipient UIDs;
+- push payloads contain no saved coordinate/address;
+- no route history;
+- local erase/account deletion clears these local saved place fields.
 
-Do **not** ask Bruce to deploy again unless device evidence points to a backend issue.
+### How it works pattern
 
-## Immediate next checkpoint — physical-device acceptance
+Passive oversized help containers were removed from the arrival-check-in page. Arrival education is behind a **How it works** text action opening a Homi bottom sheet with focused help points and a Got it action, consistent with Overview/Tasks.
 
-Next step is to install/run the current 0.9 client on the Samsung S25 Ultra.
+Functional status/error UI can remain visible; do not confuse a state card with passive help content.
 
-Before running, local Windows checkout should simply be current:
+## Verification state
+
+Because 0.9.1 changes Flutter client source after the last green 0.9.0 gate, the current 0.9.1 source is **not yet analyzer/test proven**.
+
+Immediate next checkpoint:
 
 ```powershell
 cd C:\ConceptLab\Projects\homi
 git pull
+flutter pub get
+flutter analyze
+flutter test
 ```
 
-No `flutter pub get`, analyzer, test or backend deployment rerun is required unless source changes again.
+Success:
 
-Use Android Studio's normal Run action with the S25 Ultra selected, or the repository's established Flutter device workflow. Preserve local Android/Firebase/App Check configuration.
+- `flutter analyze` → **No issues found!**
+- `flutter test` → **All tests passed!**
 
-### First S25 Ultra acceptance pass
+No Firebase deployment follows a clean 0.9.1 gate because Functions/Firestore were not changed.
 
-Validate in this practical order:
+## Next device acceptance after green Flutter gate
 
-1. App launches with no red-screen/crash.
-2. Existing account/session state loads correctly.
-3. Overview / Tasks / Home / Supplies / People navigation remains intact.
-4. People shows **Household** separately from **Friends & trusted people**.
-5. Existing profile photos/fallbacks render correctly.
-6. Task assignee picker shows Household identities with profile pictures and excludes non-Household friends.
-7. Open People → Safety & check-ins.
-8. Tap 112 / 10111 / 10177 one at a time and verify the phone app opens with the correct number. Do not complete an emergency call merely for testing.
-9. Verify fresh-install notification behaviour separately when a true fresh install/test device is available; updating an existing install should preserve its previous notification choice.
-10. Save Home from current location, choose recipient(s), set radius and enable check-ins.
-11. Save Work independently when physically at Work or use a later real-world test; do not fake coordinates merely to satisfy the checklist.
-12. Verify enabling check-ins cleanly explains/requests Android background location if needed.
-13. Verify Live updates and Arrival check-ins switches do not incorrectly turn each other off.
-14. Confirm no raw Firebase/App Check/permission exception appears in UI.
+On Samsung S25 Ultra verify first:
 
-### Arrival event proof requires a real transition
+1. People opens map-first inside the normal Homi shell; top/profile bar and bottom navigation remain intact.
+2. Existing embedded map, map chips, Open map, location card and Live updates behave as before.
+3. Household and Friends & trusted people appear underneath the existing map/location area.
+4. Profile images/fallbacks render correctly.
+5. Edit relationship is obvious without relying on a pencil-only cue.
+6. Safety & check-ins is lower on the same People flow.
+7. Emergency shortcuts open the intended dialer numbers without placing calls automatically.
+8. Arrival enable/disable visually and behaviorally matches Notifications.
+9. Enter Home address resolves to the intended readable address/location.
+10. Set from here resolves the current Home/Work location into a readable address where available.
+11. How it works is used instead of the previous oversized help box.
+12. Task assignment still shows Household profile images and excludes non-Household friends.
+13. Existing live location, People hearts, connections and shared Tasks remain healthy.
 
-Do not expect a Home arrival immediately after saving Home while already there. That is intentionally suppressed.
+Only after the static/client UX pass is accepted should the real outside→inside arrival test be repeated with two devices.
 
-For a real proof, the device must first move outside the configured radius plus the 100 m exit hysteresis, then later enter the saved radius again. The selected trusted person's device must be signed in, registered for notifications and have People notifications enabled.
+## Existing arrival/backend contract to preserve
 
-A second Android device is required before treating background check-in delivery as accepted.
-
-## Existing protected-collaboration contract to preserve
-
-Keep intact:
-
-- server-side Homi identity/code issuance and lookup;
-- protected connection create/accept/remove;
-- protected relationship/scope changes;
-- protected location-share authorization;
-- protected shared Task create/toggle/remove;
-- protected developer notification queue;
-- protected cloud account deletion;
-- protected push registration/removal;
-- verified-email requirement for password-provider sharing actions;
-- App Check on protected callables;
-- server rate limits;
-- Shared Task membership derived from accepted Household relationships;
-- latest-location direct write as bounded high-frequency path only when Live updates requires it;
-- no stealth tracking;
-- no automatic location sharing merely because people connect.
+- `sendArrivalCheckIn` is App-Check protected and authenticated;
+- verified email required for password-provider sharing actions;
+- only `home` / `work` labels accepted;
+- at most 10 selected recipients;
+- server revalidates accepted trusted connections;
+- stale/disconnected recipients skipped;
+- 20/hour + 60/day sender rate limits;
+- max 12 enabled device registrations read per valid recipient;
+- recipient People-notification preference respected;
+- no coordinate/address sent to callable/push;
+- first fresh location sample primes without notifying;
+- only outside→inside arrival sends;
+- radius + 100 m exit hysteresis;
+- one-hour local place cooldown;
+- Live updates and Arrival check-ins independently own the shared foreground location stream.
 
 ## Remaining production gates
 
-Read `documentation/RELEASE_READINESS.md` before considering Play deployment. Major unresolved gates still include:
+Read `documentation/RELEASE_READINESS.md`. Major later gates still include:
 
-- complete physical-device 0.9 regression;
+- complete 0.9.1 physical-device regression;
 - second-device background/check-in proof;
 - `configure-auth-security.sh` proof if still unrecorded;
 - Play Integrity App Check and later Firestore enforcement after valid-client metrics;

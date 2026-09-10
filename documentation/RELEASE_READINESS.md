@@ -75,9 +75,10 @@ Force-stopping an Android app can prevent background work until the user opens i
 ### Must be proven/configured before release
 
 - **VERIFY** run `configure-auth-security.sh` successfully: improved email privacy + password policy.
-- **VERIFY** 0.8.2 Functions deploy using the dedicated runtime identity. The 10 September deployment reached Cloud Build, but all Function creates/updates failed because an untracked stale `functions/package-lock.json` was uploaded; the deploy helper now regenerates and locally validates a disposable synchronized lock before upload.
+- **VERIFY** complete the 0.8.2 Functions deployment using the dedicated runtime identity. Dependency preparation, local `npm ci`, Function syntax checks and the 12/12 Firestore security gate are proven. The one-time stale `onConnectionDeleted` HTTPS→background-trigger migration also completed successfully: `onTrustedConnectionDeleted` was created/verified active before the old function was deleted. In the following broad deployment, 13 Function updates succeeded and 7 failed at the Cloud Functions v2 API request stage without a per-function source/build error. The helper now deploys current Function exports in batches of 5, below Firebase's recommended maximum group size for larger deployments, and this batching repair remains pending Cloud Shell proof.
 - **DONE (2026-09-10)** Firestore Emulator security suite passed **12/12** against the 0.8.2 rules.
 - **DONE (2026-09-10)** 0.8.2 Firestore rules compiled and were released to `homi-ee80a` after the 12/12 security gate.
+- **DONE (2026-09-10)** stale `onConnectionDeleted` trigger-type migration completed safely; replacement `onTrustedConnectionDeleted` is active and the obsolete HTTPS resource was deleted.
 - **VERIFY** all active debug testers have individually registered App Check debug tokens before testing protected callables.
 - **OPEN** inspect App Check metrics for legitimate debug traffic.
 - **BLOCKER** release build uses Play Integrity App Check.
@@ -88,7 +89,7 @@ Force-stopping an Android app can prevent background work until the user opens i
 - **BLOCKER where available** configure a Cloud Run functions spend-cap budget for `homi-ee80a`. Budget alerts alone do not stop spend.
 - **OPEN** Cloud Monitoring/Logging alerts for abnormal Function errors/invocations and Firestore usage.
 
-Full architecture: `documentation/SECURITY.md` and `documentation/releases/0.8.2.md`.
+Full architecture: `documentation/SECURITY.md` and `documentation/releases/0.8.2.md`. Deployment incident detail: `documentation/releases/0.8.2-functions-batching-fix.md`.
 
 ## Gate 5 — Authentication/account lifecycle
 
@@ -171,6 +172,6 @@ Recommended before broad rollout:
 
 ## Current release position
 
-The approved Homi interface and core single-device flows are close to release-candidate quality. Notifications and developer self-test delivery have been proven on the Samsung S25 Ultra. On 10 September 2026, the 0.8.2 Firestore Emulator security gate passed 12/12 and the stricter Firestore rules were released successfully. The corresponding Functions deployment did not complete because Cloud Build received a stale untracked package lock; the deployment helper has been corrected in source and must now be rerun to prove all 0.8.2 Functions on the dedicated runtime identity.
+The approved Homi interface and core single-device flows are close to release-candidate quality. Notifications and developer self-test delivery were previously proven on the Samsung S25 Ultra. On 10 September 2026, the 0.8.2 Firestore Emulator security gate passed 12/12 and the stricter Firestore rules were released successfully. Functions dependency/lock validation is also now proven. The stale connection-delete trigger migration completed successfully. In the subsequent broad Functions deployment, 13 updates succeeded while 7 failed at the Cloud Functions API request layer with no per-function source/build error. The deployment helper has therefore been changed to deterministic Function batches of 5 and that final backend deployment remains the immediate verification checkpoint.
 
-The largest product blocker remains the shared-Household contract. If the public product promises a household-wide source of truth, Household cloud sync is the next major implementation milestone after 0.8.2 verification. Production signing, Play Integrity/App Check enforcement, public legal URLs and Play policy declarations then form the final deployment phase.
+The largest product blocker after backend verification remains the shared-Household contract. If the public product promises a household-wide source of truth, Household cloud sync is the next major implementation milestone. Production signing, Play Integrity/App Check enforcement, public legal URLs and Play policy declarations then form the final deployment phase.

@@ -196,7 +196,9 @@ class ArrivalCheckInService extends ChangeNotifier {
       radiusMeters: existing?.radiusMeters ?? _defaultRadiusMeters,
       recipientUids: existing?.recipientUids ?? const <String>[],
       address: address,
-      lastNotifiedAt: existing?.lastNotifiedAt,
+      // Moving Home/Work creates a new arrival boundary. Do not let the old
+      // place's cooldown suppress the first legitimate arrival at the new one.
+      lastNotifiedAt: null,
     );
     _config = _config.withPlace(place);
     return place;

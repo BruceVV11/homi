@@ -2,6 +2,7 @@
 
 Date: 2026-09-10
 Status: implementation/release specification
+Current source: `0.9.0+11`
 
 ## In-app deletion
 
@@ -15,9 +16,10 @@ The flow:
 2. requires an additional final confirmation;
 3. reauthenticates the current user because Firebase requires recent authentication for destructive identity actions;
 4. removes the current device push registration;
-5. deletes Homi-managed cloud data associated with the account;
+5. deletes Homi-managed cloud data associated with the account through the protected backend;
 6. deletes the Firebase Authentication account;
-7. erases Homi household data and cached Homi location from the current phone.
+7. erases Homi household data and cached Homi location from the current phone;
+8. clears that account's user-scoped Home/Work arrival-check-in settings from the current phone, including coordinates, radii, selected recipients and local last-send timestamps.
 
 For email/password accounts, the current password is used only for Firebase reauthentication and is never stored.
 
@@ -27,27 +29,23 @@ If cloud cleanup fails, Homi does not intentionally delete the Firebase Authenti
 
 ## Cloud records included in the deletion pipeline
 
-Current `AccountDataService` covers client-visible active cloud schema:
+The protected Homi account-deletion backend covers active cloud/account-linked schema including:
 
 - `users/{uid}`;
 - `users/{uid}/devices/*`, including FCM push registration and notification preferences;
 - the user's `homiCodes/{code}` record;
 - trusted `connections` where the user is either participant;
-- the user's private `peoplePreferences` records;
-- another participant's private preference whose subject is the deleting account (delete-only permission; no read/edit permission);
-- outgoing location-share authorizations;
-- incoming location-share authorization records where the deleting account is the viewer (delete-only permission);
+- private `peoplePreferences` records/references;
+- outgoing and incoming location-share authorization involving the account;
 - `locations/{uid}` latest location/battery state;
 - shared Tasks created by the deleting account;
-- references to the deleting account inside another person's shared Task are detached/anonymised rather than deleting the other person's task.
+- references to the deleting account inside another person's shared Task, which are detached/anonymised rather than deleting the other person's Task;
+- server-only anti-spam/rate-limit records belonging to the UID where covered by the deletion backend/trigger;
+- developer-admin/campaign metadata associated with the deleting UID where applicable.
 
-When `users/{uid}` is deleted, the server-side `onHomiUserDocumentDeleted` Cloud Function additionally removes notification metadata that is deliberately inaccessible to clients:
+The `onHomiUserDocumentDeleted` server backstop removes server-only metadata deliberately inaccessible to mobile clients.
 
-- heart anti-spam/cooldown documents where the deleted UID is sender or recipient;
-- `developerAdmins/{uid}` if the deleted account had developer access;
-- developer notification campaign records created by that UID.
-
-FCM topic membership belongs to an app installation/token rather than a Firestore account record. The Homi client synchronises update/service/security topic membership from the installation's notification preferences. Removing/reinstalling the app invalidates or replaces the FCM registration token; invalid direct-delivery tokens are also disabled when detected by the Homi notification backend.
+Home/Work arrival-place coordinates are **not** stored in Firestore in the current architecture. They are local user-scoped preferences and are cleared on successful in-app account deletion.
 
 Whenever a new cloud collection containing account-linked data is added, the deletion pipeline and this document must be updated in the same development pass.
 
@@ -57,9 +55,11 @@ A separate action exists:
 
 **Profile avatar → Homi & account → Your data → Erase data from this phone**
 
-This clears local household records and Homi's cached location from that phone without deleting the cloud account. It is intentionally separate from Sign out.
+This clears local household records and Homi cached location from that phone without deleting the cloud account. The local-data inventory must include Home/Work arrival-check-in data before public release so an erase action does not leave locally saved sensitive place coordinates behind.
 
-Signing out does not silently delete local household records. It does remove the signed-in user's push token from that device record so the signed-out installation no longer receives direct account-specific Homi pushes for that user. User-enabled general Homi product/service topic subscriptions are installation preferences and are managed separately by the Notifications settings.
+Signing out does not silently delete local household records. It removes the signed-in user's push token from that device record. Arrival check-in settings are user-scoped locally; background arrival monitoring must not continue for a signed-out account.
+
+General Homi product/service topic subscriptions are installation preferences and are managed separately by Notifications settings.
 
 ## External web deletion requirement
 
@@ -83,19 +83,14 @@ The page must:
 - explain identity verification needed to prevent malicious deletion requests;
 - explain what data is deleted;
 - explain any legitimately retained data and retention period, if applicable;
-- provide a working request mechanism (authenticated web flow, deletion form or support process);
+- provide a working request mechanism;
 - explain subscription cancellation separately once Homi+ billing exists.
 
 ## Subscription interaction
 
-Deleting a Homi account and cancelling a Google Play subscription are separate actions. Once Homi+ is monetised, the deletion UI must:
+Deleting a Homi account and cancelling a Google Play subscription are separate actions. Once Homi+ is monetised, the deletion UI must surface active subscription state, explain the real cancellation relationship and provide a clear Play subscription-management route.
 
-- surface active subscription state;
-- explain whether deleting the account cancels the subscription (do not assume it does);
-- provide a clear Play subscription-management route;
-- prevent an active paid entitlement from becoming an invisible recurring charge after account deletion.
-
-This must be completed before monetised production release.
+Privacy, stop-sharing, arrival-check-in disable and deletion controls must never be paywalled.
 
 ## Release tests
 
@@ -111,8 +106,11 @@ Test at minimum:
 - user who created shared Tasks;
 - user who is only assignee/viewer of another person's shared Task;
 - current live location active during deletion;
+- arrival check-ins enabled during deletion;
+- locally saved Home and Work check-in data removed after successful deletion;
+- background arrival monitoring stopped after deletion;
 - notifications enabled with an active FCM device record;
-- account that has sent/received People hearts;
+- account that has sent/received People hearts and arrival check-ins;
 - developer-admin test account and notification campaign cleanup;
 - app restarted after deletion;
 - external web deletion request process.

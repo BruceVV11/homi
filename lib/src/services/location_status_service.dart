@@ -71,6 +71,8 @@ class LocationStatusService {
   final Battery _battery = Battery();
   final StreamController<LocationStatusSnapshot> _updates =
       StreamController<LocationStatusSnapshot>.broadcast();
+  final StreamController<void> _localDataCleared =
+      StreamController<void>.broadcast();
 
   StreamSubscription<Position>? _positionSubscription;
   LocationStatusSnapshot? _latest;
@@ -80,6 +82,7 @@ class LocationStatusService {
   bool _arrivalMonitoringRequested = false;
 
   Stream<LocationStatusSnapshot> get updates => _updates.stream;
+  Stream<void> get localDataCleared => _localDataCleared.stream;
   LocationStatusSnapshot? get latest => _latest;
 
   /// Kept for the established People UI: this represents the user's explicit
@@ -234,9 +237,9 @@ class LocationStatusService {
     _positionSubscription = null;
   }
 
-  /// Clears location state stored by Homi on this device. Android's permission
-  /// itself remains under the user's system settings and is never changed
-  /// silently by an in-app data reset.
+  /// Clears all location/check-in state owned by Homi on this device. Android's
+  /// permission itself remains under the user's system settings and is never
+  /// changed silently by an in-app data reset.
   Future<void> clearCachedStatus() async {
     _liveSharingRequested = false;
     _arrivalMonitoringRequested = false;
@@ -247,6 +250,7 @@ class LocationStatusService {
     await prefs.remove(_cachedStatusKey);
     await prefs.remove(_continuousEnabledKey);
     await prefs.remove(_arrivalMonitoringEnabledKey);
+    if (!_localDataCleared.isClosed) _localDataCleared.add(null);
   }
 
   Future<bool> openAppSettings() => Geolocator.openAppSettings();
@@ -430,5 +434,6 @@ class LocationStatusService {
   Future<void> dispose() async {
     await _stopPositionStream();
     await _updates.close();
+    await _localDataCleared.close();
   }
 }

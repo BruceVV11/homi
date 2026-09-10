@@ -2,12 +2,15 @@
 
 Continue development of **Homi** from the current GitHub `main` branch. Treat GitHub as the source of truth for tracked source/docs. Before changing anything, inspect:
 
-- `documentation/releases/0.6.0.md`
+- `documentation/releases/0.7.0.md`
 - `documentation/ARCHITECTURE.md`
 - `documentation/LOCATION_SAFETY.md`
+- `documentation/legal/PRIVACY_AND_COMPLIANCE.md`
+- `documentation/legal/ACCOUNT_DELETION.md`
+- `documentation/business/PRICING_AND_UNIT_ECONOMICS.md`
 - the latest affected source files
 
-Use the **mobile-app-development** workflow first. Preserve approved behaviour/design, exact brand assets and existing user data. Do not claim a pass worked on-device until Bruce's local Android device proves it.
+Use the **mobile-app-development** workflow first. Preserve approved behaviour/design, exact brand assets and existing user data. Never claim a new pass compiled/worked on-device until Bruce's local Flutter/Android toolchain proves it.
 
 ## Permanent project context
 
@@ -21,12 +24,11 @@ Use the **mobile-app-development** workflow first. Preserve approved behaviour/d
 - Dart baseline: 3.11.3
 - Development device: Samsung S25 Ultra
 - JDK 21 / Gradle 8.14
-- Verified local Gradle profile: 4 GB heap, one worker, parallel execution off
-- Android host under `android/` is intentionally local/untracked at this stage.
-- Preserve existing local Firebase/Maps files and never ask Bruce to paste the Maps key into chat.
+- Android host under `android/` is intentionally local/untracked.
+- Preserve existing local Firebase/Maps files and never ask Bruce to paste Maps/App Check tokens into chat.
 - Deleted project `homi-508000` must never be used.
 
-Bruce has a safety stash named:
+Bruce has a safety stash:
 
 `stash@{0}: On main: Homi pre-0.5.0 local tracked changes`
 
@@ -39,103 +41,157 @@ Do **not** automatically pop or delete it.
 - Sage `#A7B89F`
 - Cream `#FFF8F2`
 - Slate `#2E2E2E`
-- Nunito typography
-- Exact Homi logo/mark artwork already exists in `assets/brand/`; never redraw/approximate it.
+- Nunito
+- Exact Homi logo/mark assets already exist in `assets/brand/`; never redraw them.
 
-## Current product state
+## Current source version
 
-Current source version: **`0.6.0+6`**.
+**`0.7.0+7`**
 
 Primary navigation:
 
 **Overview · Tasks · Home · Supplies · People**
 
-Home remains centred and uses the exact Homi mark. The persistent Homi logo/profile header remains fixed while swiping primary pages.
+Home remains centred with the exact Homi mark.
 
-### Tasks
+## 0.7 device issues/fixes
 
-- One-off jobs, optional date/time or **No due time**.
-- Completed Tasks show who completed them and when.
-- Completed Tasks remain under **Recently completed** for 48 hours, then are hidden/purged by local/cloud cleanup.
-- **Me** tasks remain private/local.
-- Another Household assignee or **Anyone at home** can create a household-visible shared Task through `sharedTasks/{taskId}`.
-- Location-only friends must not see household Tasks.
-- Task explanatory copy is behind **How it works**.
+### People full-screen map
 
-### Routines
+The S25 Ultra showed the full-screen map only in a shallow top strip with the rest of the route blank. `PeopleMapPage` now gives the Google Maps Android platform view the explicit full route width/height and keeps map gestures/focus overlays on top.
 
-Supported recurrence:
+This requires real-device verification. If it still reproduces, inspect whether the embedded People map remaining alive under the pushed route is causing a multiple-platform-view issue and suspend/dispose the embedded map while full screen is open rather than defending the current fix.
 
-- Daily
-- Weekdays
-- Weekly / selected weekdays
-- Bi-weekly
-- Monthly
+### Overview Quick add
 
-`RoutineCompletion.occurrenceDueAt` keeps complete → undo → complete-again reversible for the same occurrence. Duration choices include **60+ min**.
+The S25 Ultra showed a 37px bottom overflow. Quick Add is now `isScrollControlled`, constrained to 82% of device height and scrollable.
 
-### Overview
+### Trusted People permission error
 
-Overview **Quick add** launches Task, Routine, Supply or Home instead of creating a vague reminder. Existing legacy Quick Add reminder strings remain readable/removable only for migration safety.
+Exact device log before 0.7:
 
-`When you have time` still prioritises due Routines and rotates common household suggestions.
+`connections where memberUids array_contains <uid> ... PERMISSION_DENIED`
 
-### Home
+The connection listener no longer uses that query. `TrustedPeopleService` now listens separately to:
 
-Supports Things/appliances/equipment, service dates, warranty dates, maintenance/repair history and utility readings.
+- `aUid == currentUid`
+- `bUid == currentUid`
 
-Utility units are controlled choices:
+and merges/deduplicates the results. Firestore connection list rules now authorize through the deterministic `aUid`/`bUid` participant fields.
 
-- electricity: `kWh`, `Wh`, `MWh`, `units`
-- water: `kL`, `L`, `m³`, `units`
+**The 0.7 Firestore rules must be deployed before judging this fix.**
 
-### Supplies
+## Supplies amounts
 
-Supplies include quick adds, expiry logic, branded date controls and persisted `SupplyIconCatalog`. Missing legacy icon keys fall back to `inventory`.
+Supply amount tracking is optional and designed to minimise admin.
 
-### People / trusted location
+New `SupplyUnit` values:
 
-People supports partners, family, roommates and friends. Each connected person has a private relationship label and private scope:
+- item
+- loaf
+- bottle
+- carton
+- pack
+- bag
+- roll
+- egg
+- kilogram / gram
+- litre / millilitre
 
-- **Household**
-- **Friend · location only**
+Quick defaults:
 
-Connection acceptance, household/friend scope and location consent are separate permissions.
+- Milk = 1 bottle
+- Bread = 1 loaf
+- Eggs = 12 eggs
+- Dog food = 1 bag
+- Toilet paper = 1 pack
+- Dishwashing liquid = 1 bottle
 
-Current People source includes:
+Supply cards can use compact +/- controls; tapping amount opens a branded update sheet with direct amount, +1/+2/+6/+12 and unit selection. Users can choose **Status only** instead. Quantity zero derives **Need to buy**. Legacy Supply JSON without quantity/unit remains valid.
 
-- cached current location/live state reused immediately on return;
-- state retention across PageView swipes;
-- profile-photo/initial markers;
-- embedded Google Map;
-- **Open map** full-screen Google Map;
-- pan/zoom and person focus controls;
-- battery/charging/freshness;
-- address/coordinates with individual copy actions, **Copy all**, and external Google Maps;
-- Homi codes / connection requests;
-- per-person Share mine / Stop my share;
-- explicit Live updates with Android foreground-service notification;
-- trusted-person sync retry preserving last successful state.
+## Account / legal / privacy
 
-Raw Firestore permission errors must not be shown directly. A sync problem must not be mislabeled as an internet problem.
+The profile/avatar now opens a full **Homi & account** centre, including for local-only users.
 
-The prior Connect-sheet framework regression (`'_dependents.isEmpty': is not true`) was addressed by making the modal own/dispose its controller. Re-test repeatedly on the real S25 Ultra before calling it permanently fixed.
+It contains:
 
-## Location safety boundary
+- Profile settings/sign-in
+- Why Homi exists
+- Help & support
+- Privacy & your data
+- Location & safety
+- Terms of use
+- About Homi
+- Erase data from this phone
+- Delete Homi account
+- Sign out
 
-Live sharing remains explicit, visible and reversible. Current Android strategy uses medium accuracy, a 100 m movement filter and roughly two-minute requested updates. Do not claim Life360-equivalent force-stop/reboot persistence until implemented and proven. Long-term movement history is not enabled by default.
+`Why Homi exists` explicitly explains both the household operating-state problem and consensual check-ins with people you care about, including trusted friends.
 
-## Navbar direction
+The legal copy is a working product draft and needs professional South African review before production. POPIA/security and Google Play account-deletion obligations are tracked in `documentation/legal/`.
 
-0.6 replaces the hand-drawn mound with a geometric union of the rounded white navbar base and a **true circular white halo** behind the active control. This is specifically intended to remove the pointed/irregular edge shape Bruce saw on Overview/People. Physical S25 Ultra screenshots remain the visual authority.
+## Account/data lifecycle
 
-## Firestore rules
+Keep these distinct:
 
-Current rules include private user/device data, exact-lookup Homi codes, accepted trusted connections, private relationship preferences, household-visible `sharedTasks`, non-self assignee validation against accepted Household connection, owner-controlled per-person location shares and latest-location access only to authorised viewers.
+- **Sign out**: ends auth session, does not silently erase local household data.
+- **Erase data from this phone**: clears local household data + Homi cached location, leaves cloud account intact.
+- **Delete Homi account**: destructive permanent flow with reauthentication, cloud cleanup, Firebase Auth deletion and explicit current-device household/location cleanup.
 
-The 0.6 rules still need deployment before testing household-shared Tasks or the People sync changes.
+New `AccountDataService` currently covers active Firestore account-linked collections. Whenever a new cloud collection is introduced, extend deletion in the same pass.
 
-Cloud Shell:
+Password account deletion asks for the current password only for Firebase reauthentication and never stores it. Google accounts reauthenticate through Google.
+
+Google Play additionally requires an external account-deletion web resource. The intended direction `https://theconceptlab.co.za/homi/delete-account` is only a proposed path: do **not** put it in Play Console until a working page exists.
+
+## Current cloud-sync truth
+
+Most household data is **still local** in SharedPreferences:
+
+- Routines
+- Supplies
+- Home Things/history/readings
+- private/local Tasks
+
+Firestore currently carries only account identity metadata, Homi codes, trusted connections/preferences, explicitly shared one-off Tasks, location authorization and latest location/battery state.
+
+This explains the tiny Firebase screenshot (about 41 writes / 5 reads). It is expected and does not mean full multi-device household sync exists.
+
+The next major data-layer milestone after 0.7 stabilization is explicit household identity/membership + safe local↔cloud merge/sync for Routines, Supplies, Home and shared household state. Do not simply upload SharedPreferences and overwrite another device.
+
+## Location / App Check
+
+Background location remains explicit and visible. Current Android settings use medium accuracy, 100m movement threshold and roughly two-minute requested updates. Long-term route history is not enabled by default.
+
+The Google Cloud screenshot showed Firebase App Check API calls failing in debug. App Check enforcement remains OFF. Before enforcement, register the debug token privately in Firebase Console and confirm valid App Check traffic. Never ask Bruce to paste that token into chat or commit it.
+
+## Pricing direction
+
+Current launch recommendation is documented, not implemented:
+
+- **Homi Free — R0**
+- **Homi+ — R49.99/month or R499.99/year**
+- one household plan aimed at ~6 household members
+- location-only friends should not consume paid household seats
+- privacy/stop-sharing/account-deletion controls remain free
+- use Google Play Billing for Android digital subscription
+
+Do not add a paywall until real premium value such as household cloud sync exists and is proven.
+
+## Immediate verification checkpoint
+
+0.6 analyzer/tests previously passed. 0.7 has new source changes and is **not yet analyzer/test/device verified**.
+
+Windows:
+
+```powershell
+cd C:\ConceptLab\Projects\homi
+git pull
+flutter analyze
+flutter test
+```
+
+If clean, deploy the updated 0.7 Firestore rules:
 
 ```bash
 cd ~/homi
@@ -143,23 +199,23 @@ git pull
 bash scripts/deploy-firestore-rules.sh
 ```
 
-## Current verification checkpoint
+Then Android Studio → Samsung S25 Ultra → Run.
 
-Bruce confirmed on **2026-09-10** that both local checks passed:
+Verify:
 
-```powershell
-flutter analyze
-flutter test
-```
+- Quick Add no overflow;
+- Bread/eggs/multi-unit Supply amounts and persistence;
+- zero amount → Need to buy;
+- full-screen People map fills the route and pans/zooms;
+- People no longer logs the old `memberUids array_contains` connection permission denial;
+- profile/avatar opens Homi & account for signed-in and local-only users;
+- Why Homi/privacy/location/terms/help/about pages scroll and respect system insets;
+- erase-local-data only on disposable test data;
+- account deletion only on disposable test accounts;
+- new Firestore rules successfully deploy and account-cleanup rules compile.
 
-Therefore the `0.6.0+6` source/analyzer/unit-test checkpoint is clean.
-
-**Next checkpoint:** deploy Firestore rules from Cloud Shell, then run `0.6.0+6` from Android Studio on the Samsung S25 Ultra.
-
-Device verification should focus on runtime rather than redoing setup: Task sharing/privacy/48-hour completion behaviour, bi-weekly Routine, Overview Quick add routing, utility units, People swipe-state retention, trusted-person Retry, embedded/full-screen map focus, Connect modal regression, location sharing controls and navbar edge geometry.
-
-If a device/build error appears, fix the exact failing layer. Do not reset Firebase, JDK, Gradle, signing, Maps or Android host setup unless the error actually points there.
+If Flutter analysis/build or Firebase rules deployment reports an error, fix the exact failing layer. Do not reset Firebase, JDK, Gradle, signing, Maps or Android host setup unless the error points there.
 
 ## Documentation rule
 
-At the end of every pass update relevant documentation, update the release note under `documentation/releases/`, and refresh this file.
+At the end of every pass update relevant documentation, add/update the release note under `documentation/releases/`, and refresh this file.

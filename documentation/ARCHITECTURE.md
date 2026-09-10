@@ -1,7 +1,7 @@
 # Homi Architecture
 
 Date: 2026-09-10
-Current source: **`0.9.0+11`**
+Current source: **`0.9.1+12`**
 
 ## Permanent project identifiers
 
@@ -26,6 +26,7 @@ These identifiers are locked for the Android/Firebase/Play lifecycle. The delete
 - Firebase App Check: debug provider during development, Play Integrity for release
 - `flutter_local_notifications` for local due/attention reminders and foreground push presentation
 - Google Maps Flutter + Geolocator for consensual trusted-person location and local arrival detection
+- `geocoding` for device-side typed-address resolution and readable reverse-geocoded addresses
 - `url_launcher` for external Google Maps and emergency phone-app handoff
 
 ## Primary shell
@@ -53,7 +54,7 @@ These areas remain local-first unless a specific record is explicitly shared:
 - Home Things, maintenance/repair history and utility readings;
 - cached current-device location;
 - local notification preferences/schedules;
-- Home/Work arrival place coordinates and local arrival state.
+- Home/Work arrival place latitude/longitude, readable address, recipient/radius preferences and local arrival state.
 
 Local records use version-tolerant JSON in SharedPreferences. Model changes must retain safe defaults for older persisted data rather than requiring destructive resets.
 
@@ -75,14 +76,20 @@ Routines remain local repeating responsibilities. Current recurrence supports Da
 
 ## People architecture
 
-The primary People destination is now a lightweight hub that separates accepted connections into:
+The approved primary People experience is **map-first**. Selecting the People tab opens the existing `PeoplePage` directly inside the persistent Homi shell rather than a separate lightweight hub or manager page.
 
-- **Household**;
-- **Friends & trusted people**.
+The page order is intentionally:
 
-Profile images come from the existing trusted-connection identity fields. Pending connection requests remain surfaced.
+1. People title/subtitle;
+2. embedded interactive map, person focus chips and Open map action;
+3. current-device location/live-update controls and location help;
+4. Homi code, connection requests and accepted connections;
+5. accepted connections grouped into **Household** and **Friends & trusted people**;
+6. **Safety & check-ins** entry after the connection groups.
 
-The existing dense map/connection/relationship/location experience is preserved behind **Manage connections & live location**. The People hub also opens **Safety & check-ins**.
+There is no separate primary **Manage connections & live location** detour. The existing map, relationship, per-person share and location-detail functionality remains directly available where it was originally approved.
+
+Profile images come from the existing trusted-connection identity fields. Pending connection requests remain surfaced. Relationship editing uses an explicit labelled Edit action rather than relying on a small pencil icon alone.
 
 Relationship scope and location/check-in consent remain independent decisions. Marking somebody Household does not automatically enable location sharing or arrival notifications.
 
@@ -133,18 +140,20 @@ The foreground notification uses neutral wording because the stream may be servi
 
 Per signed-in user, local preferences hold:
 
-- saved Home latitude/longitude;
-- saved Work latitude/longitude;
+- saved Home latitude/longitude and optional readable address;
+- saved Work latitude/longitude and optional readable address;
 - radius per place;
 - selected accepted trusted-recipient UIDs;
 - last successful local send timestamp;
 - check-in enabled state.
 
-Coordinates stay local in the current architecture.
+A saved place can be created either by entering an address, which is resolved through the device geocoding layer, or by **Set from here**, which captures the current location and attempts to reverse-resolve a readable address. Older 0.9 saved place records without an address remain valid.
+
+Coordinates and readable addresses stay local in the current architecture.
 
 Arrival logic:
 
-- first current position primes inside/outside state without sending;
+- first fresh current position primes inside/outside state without sending;
 - only outside → inside triggers an arrival;
 - leaving requires distance greater than radius + 100 m hysteresis;
 - local one-hour place cooldown reduces repeated edge sends;
@@ -157,6 +166,8 @@ When an arrival occurs, the client calls `sendArrivalCheckIn` with only:
 
 The callable revalidates accepted connections, skips stale/disconnected selections, rate-limits the sender, respects recipient People-notification settings and sends no coordinate/address data.
 
+The enable/disable UX follows Homi's Notifications settings pattern: status hero, explicit enable button while off, and a settings-style switch while on. Educational explanation uses a **How it works** bottom sheet rather than persistent oversized help containers.
+
 ## Emergency call shortcuts
 
 People → Safety & check-ins provides South African emergency shortcuts for `112`, `10111` and `10177`.
@@ -165,7 +176,7 @@ Homi uses a `tel:` URI through the external phone application. The app deliberat
 
 ## Maps, focus and hearts
 
-The existing People map remains the detailed live-location surface. Available people use profile-photo markers with initials fallback. Location details include freshness, address/coordinates, accuracy, battery/charging, copy controls and Google Maps handoff.
+The People map remains the immediate live-location surface. Available people use profile-photo markers with initials fallback. Location details include freshness, address/coordinates, accuracy, battery/charging, copy controls and Google Maps handoff.
 
 A selected accepted trusted person can receive a lightweight People heart through the protected `sendHeart` callable. Hearts do not change any sharing/scope permission and remain rate-limited.
 
@@ -175,7 +186,7 @@ See `documentation/NOTIFICATIONS.md` for the complete matrix.
 
 ### Fresh-install defaults
 
-`HomiNotificationPreferences` now defaults useful operational notifications on:
+`HomiNotificationPreferences` defaults useful operational notifications on:
 
 - master operational notifications: ON;
 - Household attention: ON;
@@ -220,7 +231,7 @@ Global bounded defaults remain `maxInstances: 5`, `minInstances: 0`, `256MiB`, w
 
 The backend deployment helper validates Node 22, prepares a disposable synchronized npm lock, runs local `npm ci`, syntax checks all Function modules, runs the Firestore Emulator security gate, deploys Firestore separately, then deploys discovered Function exports in batches of five.
 
-Bruce confirmed the corrected `0.8.2+10` backend completed successfully through this batched path on 10 September 2026. The new `0.9.0+11` check-in callable requires a new deployment only after Flutter source validation.
+Bruce confirmed the corrected `0.8.2+10` backend completed successfully through this batched path on 10 September 2026. Bruce subsequently confirmed the governed `0.9.0+11` backend deployment completed without an observed failure, including the `sendArrivalCheckIn` candidate. The 0.9.1 refinement changes client/local UI-data behavior only and therefore does not require another backend deployment.
 
 ## Firestore collections in active use
 
@@ -239,7 +250,7 @@ heartCooldowns/{senderUid_recipientUid}   # server-only
 serverRateLimits/{scope_actorUid}         # server-only
 ```
 
-Home/Work arrival coordinates are intentionally **not** a Firestore collection in 0.9.0.
+Home/Work arrival coordinates/readable addresses are intentionally **not** a Firestore collection in 0.9.1.
 
 Anything not explicitly allowed by Firestore rules fails closed. Admin SDK operations bypass client rules and therefore must perform their own authorization/validation in server code.
 
@@ -247,7 +258,7 @@ Anything not explicitly allowed by Firestore rules fails closed. Admin SDK opera
 
 The Account centre keeps Sign in, Sign out, Erase data from this phone and Delete Homi account distinct.
 
-Successful account deletion removes Homi-managed cloud data/Auth identity and current-device Homi data. The shell additionally clears that UID's user-scoped Home/Work arrival-check-in settings. Local data erasure/location cleanup must also clear background location requirement state without changing Android permission itself.
+Successful account deletion removes Homi-managed cloud data/Auth identity and current-device Homi data. The shell additionally clears that UID's user-scoped Home/Work arrival-check-in settings, including local readable addresses. Local data erasure/location cleanup must also clear background location requirement state without changing Android permission itself.
 
 Privacy, stop-sharing, check-in disable and account deletion must never depend on payment.
 
@@ -263,4 +274,6 @@ Privacy, stop-sharing, check-in disable and account deletion must never depend o
 
 ## Verification state
 
-`0.9.0+11` is implemented in GitHub source but has not yet been proven by Bruce's Flutter/Android toolchain. Do not call the 0.9 app compiled/device-verified until `flutter analyze`, `flutter test`, backend deployment for the new callable and physical-device regression succeed.
+The validated/deployed 0.9.0 backend foundation remains active. `0.9.1+12` restores the approved map-first People UX and refines client-side check-in setup after the first S25 Ultra UI review.
+
+Because 0.9.1 changes Flutter source after the last green local gate, it is **pending a fresh `flutter analyze` + `flutter test`** and then another S25 Ultra acceptance pass. Do not redeploy Firebase for this client-only refinement unless later source changes touch a backend runtime surface.

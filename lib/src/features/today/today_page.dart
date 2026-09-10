@@ -4,6 +4,7 @@ import '../../domain/home_thing.dart';
 import '../../domain/household_task.dart';
 import '../../domain/quick_reset_plan.dart';
 import '../../domain/routine_item.dart';
+import '../../domain/supply_attention.dart';
 import '../../domain/supply_item.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/homi_page.dart';
@@ -220,9 +221,8 @@ class TodayPage extends StatelessWidget {
         : (hour < 18 ? 'Good afternoon' : 'Good evening');
     final openTasks = tasks.where((item) => !item.completed).length;
     final dueRoutines = routines.where((item) => item.isDue(now)).length;
-    final supplyAlerts = supplies
-        .where((item) => item.effectiveStatus(now) != SupplyStatus.okay)
-        .length;
+    final supplyAttention = SupplyAttention.sorted(supplies, now);
+    final supplyAlerts = supplyAttention.length;
     final homeAttention = homeThings
         .where((item) => item.serviceDue(now) || item.serviceSoon(now))
         .length;
@@ -243,7 +243,7 @@ class TodayPage extends StatelessWidget {
             icon: Icons.check_circle_outline_rounded,
             title: 'Nothing needs attention right now',
             detail:
-                'Open tasks, due routines, supplies, maintenance and saved reminders will appear here.',
+                'Open tasks, due routines, supplies, maintenance and saved reminders appear here.',
           )
         else ...[
           if (openTasks > 0) ...[
@@ -267,11 +267,9 @@ class TodayPage extends StatelessWidget {
             const SizedBox(height: 10),
           ],
           if (supplyAlerts > 0) ...[
-            _AttentionCard(
-              icon: Icons.inventory_2_outlined,
-              title:
-                  '$supplyAlerts ${supplyAlerts == 1 ? 'supply needs' : 'supplies need'} attention',
-              detail: 'Expiry, low-stock or shopping items',
+            _SupplyAttentionCard(
+              items: supplyAttention,
+              now: now,
               onTap: onOpenSupplies,
             ),
             const SizedBox(height: 10),
@@ -349,6 +347,117 @@ class TodayPage extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SupplyAttentionCard extends StatelessWidget {
+  const _SupplyAttentionCard({
+    required this.items,
+    required this.now,
+    required this.onTap,
+  });
+
+  final List<SupplyItem> items;
+  final DateTime now;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = items.take(3).toList(growable: false);
+    final remaining = items.length - preview.length;
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: HomiColors.peach.withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: const Icon(
+                      Icons.inventory_2_outlined,
+                      color: HomiColors.coral,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${items.length} ${items.length == 1 ? 'supply needs' : 'supplies need'} attention',
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Most important first',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_rounded, size: 20),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ...preview.map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                          color: HomiColors.coral,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          item.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        SupplyAttention.conciseStatus(item, now),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          color: HomiColors.coral,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (remaining > 0) ...[
+                const SizedBox(height: 2),
+                Text(
+                  '+ $remaining more ${remaining == 1 ? 'needs' : 'need'} attention',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -494,7 +603,8 @@ class _SectionHeader extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-            child: Text(label, style: Theme.of(context).textTheme.titleLarge)),
+          child: Text(label, style: Theme.of(context).textTheme.titleLarge),
+        ),
         TextButton.icon(
           onPressed: onAction,
           icon: const Icon(Icons.info_outline_rounded, size: 17),

@@ -2,10 +2,10 @@
   "name": "homi-security-tests",
   "private": true,
   "scripts": {
-    "test": "node --test firestore.rules.test.js"
+    "test": "node --test server.boundary.test.js"
   },
   "dependencies": {
-    "@firebase/rules-unit-testing": "^5.0.0",
-    "firebase": "^12.3.0"
+    "@firebase/rules-unit-testing": "5.0.2",
+    "firebase": "12.19.0"
   }
 }

@@ -6,11 +6,25 @@ EXPECTED_PROJECT_NUMBER="883068189841"
 FUNCTION_REGION="africa-south1"
 LEGACY_CONNECTION_DELETE_FUNCTION="onConnectionDeleted"
 REPLACEMENT_CONNECTION_DELETE_FUNCTION="onTrustedConnectionDeleted"
+FUNCTION_BATCH_SIZE=5
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FUNCTIONS_DIR="${REPO_ROOT}/functions"
 FUNCTIONS_LOCK="${FUNCTIONS_DIR}/package-lock.json"
 cd "${REPO_ROOT}"
+
+# Keep the local release toolchain aligned with the deployed Functions runtime.
+# Cloud Shell normally exposes Node 22 for this project, but fail closed instead
+# of silently validating with a different major version.
+NODE_VERSION="$(node --version)"
+case "${NODE_VERSION}" in
+  v22.*) ;;
+  *)
+    echo "Homi backend deployment requires Node 22; found ${NODE_VERSION}." >&2
+    exit 1
+    ;;
+esac
+
 gcloud config set project "${PROJECT_ID}" >/dev/null
 ACTUAL_PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
 if [ "${ACTUAL_PROJECT_NUMBER}" != "${EXPECTED_PROJECT_NUMBER}" ]; then
@@ -60,6 +74,48 @@ run_firebase() {
   fi
 }
 
+deploy_function_batches() {
+  local -a function_names=()
+  local -a batch=()
+  local function_name
+  local selector
+  local batch_number=0
+
+  mapfile -t function_names < <(
+    node -e 'const exported = require("./functions/entrypoint.js"); Object.keys(exported).sort().forEach((name) => console.log(name));'
+  )
+
+  if [ "${#function_names[@]}" -eq 0 ]; then
+    echo "No Homi Functions exports were found; refusing to deploy." >&2
+    exit 1
+  fi
+
+  echo "==> Deploying ${#function_names[@]} Homi Functions in batches of ${FUNCTION_BATCH_SIZE}"
+  for function_name in "${function_names[@]}"; do
+    if [[ ! "${function_name}" =~ ^[A-Za-z0-9_-]+$ ]]; then
+      echo "Unexpected Function export name '${function_name}'; refusing to deploy." >&2
+      exit 1
+    fi
+
+    batch+=("functions:${function_name}")
+    if [ "${#batch[@]}" -ge "${FUNCTION_BATCH_SIZE}" ]; then
+      batch_number=$((batch_number + 1))
+      selector="$(IFS=,; echo "${batch[*]}")"
+      echo "==> Deploying Homi Function batch ${batch_number} (${#batch[@]} functions)"
+      run_firebase deploy --only "${selector}" --project "${PROJECT_ID}"
+      batch=()
+    fi
+  done
+
+  if [ "${#batch[@]}" -gt 0 ]; then
+    batch_number=$((batch_number + 1))
+    selector="$(IFS=,; echo "${batch[*]}")"
+    echo "==> Deploying Homi Function batch ${batch_number} (${#batch[@]} functions)"
+    run_firebase deploy --only "${selector}" --project "${PROJECT_ID}"
+  fi
+}
+
+echo "==> Homi backend runtime: ${NODE_VERSION}"
 echo "==> Preparing Homi Functions dependency lock"
 npm install \
   --prefix functions \
@@ -96,10 +152,10 @@ else
 fi
 
 # Firebase cannot change an existing Function from HTTPS to an event trigger in
-# place. Homi has a stale HTTPS function named onConnectionDeleted, while the
+# place. Homi had a stale HTTPS function named onConnectionDeleted, while the
 # 0.8.2 source needs a Firestore deletion backstop. Migrate safely and
 # idempotently: deploy the renamed trigger, prove it ACTIVE, then delete only
-# the exact stale name/region before the normal full deployment continues.
+# the exact stale name/region before normal deployment continues.
 LEGACY_PRESENT=false
 if gcloud functions describe "${LEGACY_CONNECTION_DELETE_FUNCTION}" \
     --gen2 \
@@ -135,7 +191,14 @@ if [ "${LEGACY_PRESENT}" = true ]; then
     --force
 fi
 
-echo "==> Deploying Homi Firestore and Functions"
-run_firebase deploy --only firestore,functions --project "${PROJECT_ID}"
+# Rules/indexes are one deployment surface. Functions are intentionally batched
+# because Firebase documents that large simultaneous Function deployments can
+# hit provider deployment limits and recommends groups of 10 or fewer. Five at
+# a time keeps Homi comfortably below that boundary while remaining resumable:
+# already-updated functions are simply skipped on a later batch/retry.
+echo "==> Deploying Homi Firestore rules and indexes"
+run_firebase deploy --only firestore --project "${PROJECT_ID}"
+
+deploy_function_batches
 
 echo "Homi backend deployment completed."

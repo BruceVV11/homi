@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'homi_cloud_actions.dart';
+
 class HomiNotificationCampaign {
   const HomiNotificationCampaign({
     required this.id,
@@ -55,9 +57,12 @@ class HomiNotificationCampaign {
 }
 
 class DeveloperNotificationService {
-  DeveloperNotificationService({required this.firebaseReady});
+  DeveloperNotificationService({required this.firebaseReady})
+      : _cloudActions = HomiCloudActions(firebaseReady: firebaseReady);
 
   final bool firebaseReady;
+  final HomiCloudActions _cloudActions;
+
   FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
   User? get _user => firebaseReady ? FirebaseAuth.instance.currentUser : null;
@@ -96,16 +101,13 @@ class DeveloperNotificationService {
       throw StateError('Keep the title under 80 characters and the message under 280.');
     }
 
-    await _firestore.collection('notificationCampaigns').add({
+    await _cloudActions.call('queueDeveloperNotification', <String, dynamic>{
       'title': cleanTitle,
       'body': cleanBody,
       'category': category,
       'route': route,
       'audience': audience,
       'priority': priority,
-      'createdByUid': user.uid,
-      'status': 'queued',
-      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 

@@ -1,5 +1,30 @@
 # Homi Release Notes
 
+## 0.8.0 - Notifications, People hearts and critical Supply attention
+
+- Rewrote the Homi & account user-facing copy so Homi speaks as a complete product rather than saying it is “being built”, “pre-release” or describing visible capabilities as roadmap work. Internal engineering docs still record real verification/release boundaries.
+- Added `SupplyAttention` ranking: Need to buy → Expired → Use soon → Running low.
+- Overview now previews the three most important Supply items and shows `+ N more need attention` instead of forcing the user to open/scroll Supplies just to discover what matters.
+- Supplies now groups cards under Need to buy, Use soon, Running low and In stock while preserving the status line on every card.
+- Added the full **Notifications** settings surface under Homi & account with master permission plus Household attention, Tasks & routines, People, Homi updates and Service & security categories.
+- Added local notification scheduling for due Tasks/Routines, Supply expiry warnings/date and Home service warnings/date.
+- Added de-duplicated grouped immediate household attention for newly critical out-of-stock, expiry and maintenance conditions instead of firing a burst of separate alerts.
+- Added FCM device-token registration for signed-in enabled installations, token refresh handling, invalid-token cleanup and notification deep-link routing.
+- Added People-map **heart** check-ins. An accepted trusted person can receive **“{name} is thinking about you!”** without changing location or household permissions; a server-side one-minute cooldown limits repetition.
+- Added Cloud Functions notifications for connection requests, connection acceptance, shared Task assignment/creation/completion and People hearts.
+- Added an admin-only **Developer notifications** composer with title/body, update/service/security type, self-test vs all-enabled audience, deep-link destination, priority and send history.
+- Broad developer notices use opt-in FCM topics so local-only users can receive enabled Homi update/service/security notices without creating an account. Direct developer self-tests use the signed-in account's enabled device token(s).
+- Added restrictive Firestore rules for `developerAdmins`, `notificationCampaigns` and server-only `heartCooldowns`; the client cannot self-grant developer access or forge campaign send state.
+- Extended account deletion with notification token removal and server-side cleanup of heart cooldowns, developer-admin state and campaigns created by the deleted UID.
+- Added `scripts/enable-notifications-android.ps1`, `scripts/deploy-notification-backend.sh` and `scripts/manage-developer-admin.sh` with permanent Homi project guards.
+- Added notification/privacy architecture docs and notification/Supply-attention tests.
+- App Check debug token has been registered privately. Enforcement remains intentionally off until valid debug/release traffic is confirmed.
+- Bumped app version to `0.8.0+8`.
+
+Full handoff: `documentation/releases/0.8.0.md`.
+
+**Verification boundary:** 0.8 is a source pass until Bruce runs the Android-host notification helper, `flutter analyze`, `flutter test`, deploys the Firestore/Cloud Functions backend and verifies delivery/routing on the Samsung S25 Ultra.
+
 ## 0.7.0 - Account/data centre, supply amounts and sync hardening
 
 - Added optional lightweight Supply quantities and stable units for items, loaves, bottles, cartons, packs, bags, rolls, eggs, kg/g and L/mL. Common Quick Adds start with useful amounts and existing Supply records remain compatible.

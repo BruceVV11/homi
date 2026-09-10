@@ -40,9 +40,12 @@ Current local-first records can include:
 - utility readings;
 - legacy local reminders;
 - latest cached current-device location/battery state;
-- live-location preference state.
+- live-location preference state;
+- Homi notification category preferences;
+- a random Homi installation/device identifier used to associate a signed-in FCM token with that app installation;
+- local scheduled-notification IDs and de-duplication keys.
 
-Most household records above are currently stored in SharedPreferences and are **not yet full cloud backups**.
+Most household records above are stored in SharedPreferences and are not a full cloud backup unless the relevant product surface explicitly identifies them as shared.
 
 ### Cloud/account data
 
@@ -55,17 +58,20 @@ When a user signs in and uses relevant features, Firestore can contain:
 - narrowly shared household Tasks;
 - per-person location-sharing authorization;
 - latest shared latitude/longitude, accuracy, battery, charging state, update time and source;
-- per-device records under the account if/when written by active features.
+- per-device FCM registration token and notification-category preferences when notifications are enabled;
+- developer notification campaign metadata only for authorised developer accounts.
 
-Firebase Authentication also processes the authentication identity required for email/password or Google sign-in.
+Firebase Authentication processes the authentication identity required for email/password or Google sign-in.
+
+Server-only notification data can include short-lived heart anti-spam/cooldown records. Client Firestore rules deny direct access to those documents.
 
 ### Third-party processors/platforms
 
 Current technical providers include:
 
-- Google Firebase / Google Cloud for authentication and cloud data;
+- Google Firebase / Google Cloud for authentication, Firestore, Cloud Functions and Firebase Cloud Messaging;
 - Google Maps Platform for maps;
-- Google Play for Android distribution and future Play Billing.
+- Google Play for Android distribution and paid Android digital products when Homi+ is offered.
 
 A final privacy policy must link/describe relevant provider processing accurately and align with the Play Console Data safety form.
 
@@ -99,14 +105,62 @@ The disclosure must appear before the sensitive permission request, not only in 
 
 Current product architecture stores latest-state location by default, not long-term route history.
 
-If short location history is introduced later:
+If short location history is introduced, define the user purpose and retention before release of that capability, expose the retention/control in product copy, update the Data safety form and deletion pipeline, and revisit Firestore fan-out/cost/security rules.
 
-- define a specific user purpose;
-- choose a short default retention period;
-- make retention visible in product copy;
-- allow deletion/control;
-- update the privacy notice, Data safety form and account-deletion pipeline;
-- revisit Firestore cost/read fan-out and security rules.
+## Notifications
+
+### Purpose
+
+Homi notifications have three distinct purposes:
+
+- household attention such as due Tasks/Routines, out-of-stock Supplies, expiry and saved maintenance dates;
+- trusted-person/collaboration events such as connection requests, shared-Task activity and a user-initiated heart;
+- product/service/security notices sent by an authorised Homi developer.
+
+The persistent Android notification shown during live background location sharing is operational disclosure for the foreground service and is separate from optional reminder categories.
+
+### Consent and control
+
+Normal notification permission is not requested at first launch. The user enables notifications from Homi & account and can separately control:
+
+- Household attention;
+- Tasks & routines;
+- People;
+- Homi updates;
+- Service & security.
+
+A master off switch applies to the current installation. The app must not make location consent, stop-sharing, privacy or account deletion conditional on notification permission.
+
+### FCM tokens and topics
+
+A Firebase Cloud Messaging registration token identifies an app installation for message routing. It must be treated as account/device delivery metadata rather than an advertising identifier.
+
+For signed-in devices, the token is stored at `users/{uid}/devices/{deviceId}` only while the installation has Homi notifications enabled. Sign-out removes the token from that account/device record. Account deletion removes the device records.
+
+Developer broadcasts use category topics (`homi_updates`, `homi_service`, `homi_security`) so local-only installations can receive user-enabled product/service notices without account creation. Topic membership is changed when the user changes those Homi categories.
+
+### Sensitive notification content
+
+Lock-screen notification text can be visible without unlocking the phone. Therefore:
+
+- do not put precise coordinates or addresses in push notification payloads;
+- do not include household Task titles in server-generated shared-Task lock-screen notifications;
+- do not include household notes or Supply/Home content in developer broadcasts;
+- a People heart may show the sender display name because that identity is the purpose of the check-in;
+- a developer broadcast should contain only the message the authorised developer explicitly composes.
+
+Notification delivery is not an emergency mechanism and does not prove that the recipient saw a message.
+
+## People hearts
+
+A heart is a lightweight trusted-person interaction from the People map.
+
+- sender must be authenticated;
+- recipient must be an accepted trusted connection;
+- heart sending does not change location sharing or household scope;
+- server-side sender→recipient cooldown reduces accidental/spam repetition;
+- recipient notification can identify the sender by display name;
+- the feature is not an emergency/safety acknowledgement.
 
 ## Data minimisation principles
 
@@ -116,12 +170,15 @@ If short location history is introduced later:
 - Do not create hidden location history.
 - Do not make friends Household members merely to enable location sharing.
 - Do not make privacy, stop-sharing or account deletion dependent on a paid plan.
+- Do not keep dead FCM registration tokens indefinitely; disable/remove tokens that FCM reports as invalid/unregistered.
+- Do not use developer notifications as an unrestricted marketing backdoor. User category controls must be respected.
 
-## User-facing notices implemented in 0.7
+## User-facing notices implemented in 0.8
 
-The Account/Homi area now provides in-app sections for:
+The Account/Homi area provides in-app sections for:
 
 - Why Homi exists;
+- Notifications;
 - Help & support;
 - Privacy & your data;
 - Location & safety;
@@ -130,7 +187,7 @@ The Account/Homi area now provides in-app sections for:
 - Erase data from this phone;
 - Delete Homi account.
 
-The detailed copy should continue to match actual source behaviour. If cloud sync expands, update the notice in the same pass.
+User-facing product wording must read as finished-product copy. Internal engineering/legal documents may still identify verification or release obligations so unfinished infrastructure is not misrepresented to the team.
 
 ## Account deletion
 
@@ -141,19 +198,23 @@ Google Play requires an app that allows account creation to provide:
 
 Official source: https://support.google.com/googleplay/android-developer/answer/13327111
 
-Homi 0.7 adds the in-app deletion flow. The external deletion web resource is still a release blocker and must be published before production submission.
+The in-app deletion flow removes account-linked client-visible notification device data. A server-side user-deletion trigger also removes Homi notification metadata that clients cannot access directly, including heart cooldown records, developer-admin access for the deleted UID and developer campaign records created by that account.
+
+The external deletion web resource remains a production-release blocker and must be published before store submission.
 
 See `documentation/legal/ACCOUNT_DELETION.md`.
 
 ## Google Play Data safety preparation
 
-Before public release, reconcile every answer against the exact release build and current SDK list. At minimum review disclosures for:
+Before public release, reconcile every answer against the exact release build and SDK list. At minimum review disclosures for:
 
 - precise location;
 - account/user IDs;
 - email/name/profile photo;
+- device/app identifiers used for push delivery;
+- notification/Firebase Cloud Messaging processing;
 - app interactions/diagnostics if analytics/crash tools are active;
-- user-generated household content that is cloud-synced in the eventual release;
+- user-generated household content that is cloud-synced in the release;
 - data encryption in transit;
 - account deletion availability;
 - optional vs required collection;
@@ -169,6 +230,7 @@ Final Terms of Use should cover at least:
 - lawful/consensual use;
 - prohibition on covert tracking/harassment;
 - no emergency or safety guarantee;
+- notification delivery limitations;
 - service availability limitations;
 - user responsibility for entered content;
 - subscription/renewal/cancellation terms once Homi+ exists;
@@ -187,7 +249,10 @@ Before production:
 - App Check valid traffic confirmed, then enforcement enabled deliberately;
 - release/Play App Signing SHA credentials registered;
 - Firestore rules tested against allowed and denied paths;
-- account deletion tested for Google and email/password accounts;
+- Cloud Functions notification triggers/callable functions tested with valid and invalid users;
+- developer notification admin provisioning/revocation tested;
+- notification category opt-outs verified for direct sends and broadcast topics;
+- account deletion tested for Google and email/password accounts, including server-only notification metadata cleanup;
 - external account-deletion page published;
 - Data safety form completed from the actual release build;
 - privacy policy hosted at a stable public URL;

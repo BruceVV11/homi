@@ -13,6 +13,7 @@ const {getMessaging} = require("firebase-admin/messaging");
 setGlobalOptions({
   region: "africa-south1",
   maxInstances: 5,
+  serviceAccount: "homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com",
 });
 
 initializeApp();

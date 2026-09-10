@@ -1,290 +1,240 @@
 # Homi Location & Safety
 
-Date: 2026-09-10
-Source version: `0.9.1+12`
+Date: 2026-09-11
+Source version: `0.9.2+13`
 
 ## Purpose
 
-Homi lets people share their latest location with trusted people they explicitly choose, send lightweight arrival check-ins to selected trusted connections, and quickly open verified South African emergency numbers from the People safety surface.
+Homi lets people share their latest location with trusted people they explicitly choose, send lightweight Home/Work arrival check-ins, optionally show an exact saved Home/Work place under a separate privacy control, and quickly open South African emergency numbers.
 
-A trusted person may be a partner, family member, roommate, friend, caregiver or another appropriate contact. The People feature remains intentionally broader than the physical household.
+A trusted person may be a partner, family member, roommate, friend, caregiver or another appropriate contact. People remains intentionally broader than the physical household.
 
 ## Non-negotiable principle
 
-**Location sharing and arrival check-ins must be explicit, visible, reversible and understandable.**
+**Connection, current-location sharing, arrival delivery and exact saved-place visibility are separate choices.**
 
 - A Homi connection never starts location sharing automatically.
-- The person/device being located controls who can see their location.
-- Arrival check-ins are separately configured and separately enabled.
-- Live background updates require an explicit opt-in and Android background-location permission.
-- Android live location/check-ins keep a visible foreground-service notification.
-- Stopping live updates, disabling check-ins and revoking one person's location access remain understandable controls.
+- Household/Friend classification never starts location sharing.
+- Arrival recipients are chosen per Home/Work place.
+- Exact Home/Work visibility is separately off by default.
+- Exact Home/Work visibility additionally requires an active owner→viewer location share.
+- Arrival check-ins are separately enabled/disabled for the device.
+- Background use requires explicit Android background-location permission and a visible foreground-service notification.
 - Homi has no stealth-sharing mode.
-- Location/battery values must not be placed in analytics or general logs.
-- Arrival notification payloads must not contain saved Home/Work coordinates or readable addresses.
+- Location, Home/Work coordinates and readable addresses must not enter analytics/general logs.
+- Arrival notification payloads must never contain Home/Work coordinates or addresses.
 
 ## Emergency call shortcuts
 
-People → **Safety & check-ins** exposes South African emergency call shortcuts:
+People → **Safety & check-ins** exposes:
 
-- `112` — mobile emergency;
+- `112` — emergency from a mobile phone;
 - `10111` — police emergency;
 - `10177` — ambulance emergency.
 
-Homi opens the device phone application with the selected number through a `tel:` URI. It does not silently place the call, request direct-call permission, dispatch responders, transmit the user's location to emergency services or claim that an emergency request was received.
+The full-screen People map also keeps emergency controls at the bottom within normal thumb reach:
 
-The emergency shortcuts do not require a Homi account. They are a convenience layer over the phone/network, not an emergency-response service.
+- **SOS · 112** opens the phone application with 112 ready in one tap;
+- **Emergency numbers** opens all three service choices without leaving the map first.
 
-## Connection, relationship, location share and check-in are separate
+Homi uses `tel:` external phone-app handoff. It does not silently place the call, request direct-call permission, dispatch responders, transmit location to emergency services or claim an emergency request was received.
 
-Homi deliberately models independent decisions:
+These controls are convenience shortcuts, not an emergency-response service.
 
-1. **Connection** — both users accept a trusted-person connection.
-2. **Relationship/scope** — each user may privately label the other person, for example Mother, Roommate or Friend, and decide whether they are `household` or `friend`.
-3. **Location share** — the location owner explicitly chooses whether that connected person may see their current location.
-4. **Arrival check-in recipient** — the location owner explicitly chooses whether that accepted trusted person receives Home and/or Work arrival notifications.
+## People page and map
 
-None of these decisions silently enables the others.
+The approved People destination remains map-first inside the normal Homi shell. The embedded map, person chips, current-device location card and live-sharing controls appear before connection management.
 
-### Location-only friends
-
-Friends are a first-class use case. Two close friends may connect and mutually share location or receive explicitly selected arrival check-ins without being treated as members of the same household.
-
-A person marked Friend/location-only:
-
-- may receive location only when the owner separately enables a location share;
-- may receive a Home/Work check-in only when separately selected for that saved place;
-- does not receive access to Home, Supplies, Routines or other household records;
-- is not offered as a household Task assignee or household-Task viewer;
-- can be relabelled later without changing location consent automatically.
-
-### Household people
-
-A connected person may be privately marked **Household** when they genuinely participate in the user's home context. Household status makes that person eligible for narrowly scoped collaboration such as one-off Tasks.
-
-A household Task may be visible to the creator's chosen Household people so everybody can see who it is assigned to and whether it was completed. A Task explicitly assigned to **Me** remains private/local. Household Task visibility does not grant Home, Routine, Supply or location access.
-
-Household status still does not automatically share location or enable arrival check-ins.
-
-## People page and identity
-
-The approved primary People destination remains the map-first People page. The embedded map, person chips, current-device location card and live-sharing controls appear immediately when the user opens People inside the normal Homi shell.
-
-Accepted connections then appear underneath that location experience, separated into:
+Connections appear beneath that experience, grouped into:
 
 - **Household**;
 - **Friends & trusted people**.
 
-Both sections use the connection profile photo where available, with safe fallbacks when an image is unavailable. Pending requests and the existing Homi code remain surfaced. There is no separate required **Manage connections & live location** detour in the primary flow.
+The full map keeps the existing people markers/focus controls and adds the emergency controls above. Its Person Details sheet includes:
 
-Relationship editing is exposed with a labelled Edit action so Household/Friend classification is not hidden behind a small icon.
+- latest location;
+- Home;
+- Work.
 
-Task assignment continues to use the Household-only service boundary and displays profile images for identifiable assignees.
+For the signed-in user, Home/Work is read from the user's local arrival configuration. For another person, the exact place is displayed only if the server read authorization below succeeds.
 
-## Arrival check-ins
+## Connection and sharing decisions
 
-Arrival check-ins support two user-defined places: **Home** and **Work**.
+Homi models these independent decisions:
 
-The user must:
+1. **Connection** — both users accept the trusted-person relationship.
+2. **Relationship/scope** — each user privately labels the other and chooses Household/Friend context.
+3. **Location share** — the owner chooses whether that viewer may read the owner's latest/current location.
+4. **Arrival recipient** — the owner chooses whether that connection receives a Home and/or Work arrival event.
+5. **Exact place visibility** — the owner separately chooses whether selected arrival people may see the precise saved Home/Work place.
+6. **Arrival monitoring** — the tracked device separately turns background arrival detection on/off.
 
-1. sign in;
-2. configure Home or Work by entering an address or using **Set from here**;
-3. choose an arrival radius;
-4. choose accepted trusted people who should receive that place's arrival notification;
-5. turn Arrival check-ins on.
+None silently enables the others.
 
-The current UI offers 150 m, 250 m and 500 m arrival radii. The underlying local model accepts a bounded 75 m–1 km radius.
+## Home and Work setup
 
-The enable/disable surface follows the existing Notifications settings pattern: status hero, explicit enable button while off, and a settings-style switch while on. Educational detail is behind **How it works** rather than a persistent oversized help box.
+Arrival check-ins support **Home** and **Work**.
 
-### Address setup
+A user can set each place through:
 
-Home and Work can be configured two ways:
+- **Google Places autocomplete** — type an address/place, choose the correct South African Google result, then Homi fetches only the Place ID, formatted address and coordinate it needs;
+- **Set from here** — capture the phone's current coordinate and reverse-resolve a readable address where possible.
 
-- **Enter address** — Homi uses the existing device geocoding service to resolve the typed address/place into latitude/longitude and then stores a readable address locally.
-- **Set from here** — Homi captures the phone's current location locally and reverse-geocodes a readable address when available.
+The Google picker displays Google's attribution asset with results. The Android credential remains package/SHA restricted and is not committed to source.
 
-The current implementation resolves the entered text when the user submits it; it does not add a separate Google Places autocomplete SDK/API dependency.
+Local saved data includes:
 
-Older 0.9 saved places that contain coordinates but no readable address remain valid.
+- latitude/longitude;
+- readable address;
+- optional Google Place ID;
+- radius;
+- selected arrival recipients;
+- exact-place sharing switch;
+- most recent successful arrival-send timestamp.
 
-### Local-data boundary
+Older 0.9/0.9.1 records without Place IDs remain valid. Older records default exact-place sharing to **off**.
 
-Home/Work latitude/longitude and readable addresses are stored in user-scoped local preferences on the device. The `sendArrivalCheckIn` callable receives only:
+## Arrival monitoring UX
+
+The Arrival check-ins section uses one Notifications-style setting card at all times.
+
+- Switch ON: Homi watches configured Home/Work areas in the background while platform permission/conditions allow it.
+- Switch OFF: monitoring stops, but saved Home/Work configuration remains.
+- Missing setup/permission errors are shown only when actionable.
+- Successful state changes do not add a redundant success box.
+- **How it works** uses the standard information icon and a bottom sheet rather than an oversized passive help box.
+
+## Arrival detection
+
+Homi avoids startup false positives:
+
+- the first fresh sample establishes inside/outside state and sends nothing;
+- only outside → inside is an arrival;
+- leaving requires distance beyond radius + 100 m exit hysteresis;
+- one-hour local place cooldown reduces repeated edge sends;
+- changing a saved place resets the old place cooldown;
+- no route/breadcrumb history is created.
+
+This is convenience communication, not guaranteed geofencing or emergency monitoring.
+
+## Arrival notification privacy
+
+`sendArrivalCheckIn` receives only:
 
 - `place`: `home` or `work`;
 - selected trusted-recipient UIDs.
 
-It receives no saved place latitude/longitude or readable address. The push payload includes the place label but no coordinates or address.
-
-No route or long-term movement history is created by arrival check-ins.
-
-### Arrival detection
-
-Homi avoids false arrival messages on startup:
-
-- the first fresh location sample establishes whether the device is already inside or outside a saved place and does not send;
-- only an outside → inside transition is an arrival;
-- the device must move beyond the configured radius plus a 100 m exit margin before being considered outside again;
-- a one-hour per-place local cooldown reduces repeated edge notifications.
-
-This is a convenience check-in, not a guaranteed geofencing or emergency-monitoring service.
-
-### Background operation
-
-Arrival check-ins reuse Homi's existing foreground live-location stream instead of creating a hidden second tracker.
-
-The Android strategy remains:
-
-- visible foreground location service;
-- `Allow all the time` location permission for background use;
-- medium location accuracy;
-- roughly 100 m movement threshold;
-- roughly two-minute update interval;
-- no wake/Wi-Fi lock policy added by Homi.
-
-Live updates and Arrival check-ins retain independent local ownership flags. Turning one off does not stop the shared foreground stream if the other still requires it. When both are off, the stream stops.
-
-Force-stopping the Android app can interrupt background behaviour until the user opens Homi again. Do not claim Life360-equivalent force-stop/reboot persistence until it is proven on production devices.
-
-## Arrival notification authorization
-
-`sendArrivalCheckIn` is a callable Cloud Function in `africa-south1`.
+It receives no saved Home/Work coordinate or readable address. The push notification likewise contains no precise saved-place data.
 
 The backend requires:
 
 - Firebase Authentication;
-- verified email for password-provider accounts;
 - Firebase App Check;
-- place label limited to Home/Work;
-- 1–10 unique non-self recipients;
-- every delivered recipient to remain an accepted trusted connection.
+- verified email for password-provider accounts;
+- Home/Work event label only;
+- maximum 10 unique non-self recipients;
+- accepted trusted relationship for every delivered recipient.
 
-It also applies sender rate limits and respects each recipient device's People-notification preference. No client may use the arrival callable to notify an arbitrary UID that is not an accepted Homi connection.
+It applies sender rate limits and respects recipient People-notification preferences.
 
-The 0.9 backend containing this callable was deployed successfully according to Bruce's Cloud Shell result. 0.9.1 changes client/local UX only and does not require another backend deployment.
+## Optional exact saved-place sharing
+
+The per-place **Show this place to selected people** switch is distinct from arrival delivery and defaults off.
+
+When the owner enables it, Homi creates/updates a minimal server-controlled document:
+
+`sharedPlaces/{ownerUid}/places/{home|work}`
+
+It contains:
+
+- `ownerUid`;
+- `kind`;
+- latitude/longitude;
+- readable address;
+- `viewerUids` selected by the owner;
+- server timestamp.
+
+The client never writes this collection directly. `setSharedArrivalPlace` is App-Check-protected, validates Home/Work, bounds coordinate/address/viewer values, revalidates accepted connections and rate-limits changes.
+
+A different user can read one exact place only when:
+
+1. the owner's server document explicitly lists their UID;
+2. the connection remains accepted;
+3. `locationShares/{ownerUid}/viewers/{viewerUid}` remains active.
+
+Turning off normal location sharing therefore immediately blocks saved-place reads through Firestore rules even if a stale document still exists. Turning off the saved-place switch deletes the cloud copy. Removing a connection strips the UID from the saved-place viewer list so reconnecting later cannot silently revive old access.
+
+The owner sees their own saved Home/Work from local preferences; they do not need to upload a place merely to see it themselves.
+
+## Local erase and deletion
+
+**Erase data from this phone** clears local Home/Work configuration and background-arrival requirement state. In 0.9.2 it also attempts to revoke owned optional `sharedPlaces` Home/Work copies before/while clearing local state.
+
+If cloud revocation is temporarily unreachable, Homi stores only a local pending-revocation marker and retries the cloud clear on the next signed-in load. Server read authorization still independently requires the accepted connection and active location share.
+
+Account deletion removes the user's cloud identity/collaboration data and owned shared-place copies through server cleanup, then clears current-device local Homi data according to the account-deletion flow.
+
+## Background operation
+
+Live updates and Arrival check-ins share one visible Android foreground location stream but retain separate local ownership flags.
+
+The background strategy remains:
+
+- `Allow all the time` location permission when the user activates a background feature;
+- visible Homi foreground-service notification;
+- medium location accuracy;
+- roughly 100 m movement threshold;
+- roughly two-minute update interval;
+- no hidden wake/Wi-Fi-lock strategy added by Homi.
+
+Turning one background feature off does not stop the stream if the other still explicitly requires it. When both are off, the stream stops.
+
+Force-stopping Android can interrupt background behaviour until Homi is opened again. Do not claim Life360-equivalent persistence until real release-device tests prove it.
+
+## People authentication/reachability
+
+The People destination is kept alive for fast map return, but its auth-scoped realtime subscriptions must never remain bound to a stale user.
+
+`PeopleHubPage` observes Firebase ID-token identity changes and recreates the map-first `PeoplePage` when the UID changes/restores.
+
+`HomiCloudActions` handles protected callable mutations. If a callable returns `unauthenticated`, Homi forces one Firebase ID-token refresh and App Check-token refresh, retries once, then shows finished-product recovery text if verification still fails. Raw codes such as `UNAUTHENTICATED` must not be shown to the user.
+
+The Android log supplied during the first 0.9.1 device review also showed Firestore `UNAVAILABLE`/DNS name-resolution failures. Realtime Firestore connectivity is separate from callable authentication; listeners should recover when connectivity/DNS recovers and Homi should preserve/represent last valid state rather than expose transport codes.
+
+## Current-location authorization
+
+`locationShares/{ownerUid}/viewers/{viewerUid}` is server-controlled. A viewer can read `locations/{ownerUid}` only while the connection remains accepted and the owner→viewer share is active.
+
+Latest cloud location contains current-state latitude/longitude, accuracy, battery, charging state, update time and bounded source value. It is not route history.
+
+Check-in-only background sampling does not refresh `locations/{uid}` unless Live updates is independently active.
+
+## Friends and Household
+
+A Friend/location-only connection may receive location or arrival events only through the separate explicit choices above. Friend status never grants Home, Supplies, Routines or household Task data.
+
+A Household connection can be eligible for narrowly shared one-off Tasks. Household status alone still grants no location, arrival or precise saved-place visibility.
 
 ## People hearts
 
-A heart remains a lightweight check-in action on the full People map.
+A heart remains a lightweight authenticated action to an accepted trusted connection. It does not change any location/scope/place permission. It is server-rate-limited and respects People notifications.
 
-- sender must be authenticated;
-- recipient must be an accepted trusted connection;
-- the action never enables or changes location sharing;
-- the action never changes Household/Friend scope;
-- it does not create a chat thread or persistent social feed;
-- a server-side one-minute sender→recipient cooldown limits repetition;
-- the recipient can receive **“{sender} is thinking about you!”** when People notifications are enabled;
-- tapping the notification opens People;
-- the heart is not an emergency, acknowledgement or proof that the recipient saw it.
+The full-map heart action now uses the common protected-callable wrapper so stale auth/App Check is retried once and raw backend codes do not leak into UI.
 
-## Current cloud authorization
+## Google Play / release requirements
 
-### Trusted connections
+Before public production use of background location/check-ins:
 
-`connections/{connectionId}` stores the trusted-person relationship between two authenticated accounts. Sensitive connection create/accept/remove mutations are server-controlled through App-Check-protected callable Functions; clients retain only the reads required by the product.
+- verify foreground/background permission progression on real Android devices;
+- provide prominent contextual disclosure before the sensitive permission request;
+- verify persistent foreground notification behaviour;
+- test screen-off, multi-hour background operation, normal process recreation and reboot;
+- test Samsung power-saving/battery optimisation;
+- measure representative battery impact;
+- test Home and Work transitions using at least two accounts/devices;
+- verify exact-place grant/revoke/disconnect behaviour;
+- prepare Play background-location declaration/review evidence;
+- ensure Data Safety/public privacy wording reflects optional precise saved-place cloud sharing;
+- use Play Integrity App Check for release traffic.
 
-### Private relationship metadata
-
-`peoplePreferences/{ownerUid}/people/{otherUid}` contains the owner's private relationship label and household/friend scope. The owner may read this metadata; mutation is server-controlled through protected Homi Functions.
-
-### Location authorization
-
-`locationShares/{ownerUid}/viewers/{viewerUid}` is readable by the owner or viewer. Mutation is server-controlled through Homi's protected location-share callable.
-
-A viewer can read `locations/{ownerUid}` only when:
-
-- the users still have an accepted connection; and
-- the owner has an active share document for that viewer.
-
-Removing a connection therefore prevents stale share metadata from continuing to authorize location access.
-
-### Household Tasks do not broaden location or Home access
-
-`sharedTasks/{taskId}` is a narrowly scoped one-off Task document. Its `memberUids` visibility list is derived server-side from people the creator explicitly marked Household. A specific non-self assignee must be an accepted Household connection. Tasks assigned to the creator remain private/local.
-
-The Task contains only Task data and does not grant access to Home, Supplies, Routines or location.
-
-## Current location data
-
-Homi currently works with latest-state data:
-
-- latitude / longitude;
-- accuracy;
-- battery percentage;
-- charging state;
-- last update time;
-- optionally resolved human-readable address in the client UI.
-
-Latest location/battery is convenience/safety context, not emergency-grade telemetry.
-
-## Map markers, focus and details
-
-Authorized people can appear on the map with their profile picture, falling back to initials when no image is available.
-
-People has an embedded interactive map plus a full-screen map. The full map allows normal panning/zooming and includes person focus chips so the user can intentionally centre the map on a specific trusted person.
-
-Selecting a person or marker may show:
-
-- address;
-- coordinates;
-- battery and charging state;
-- accuracy;
-- last update;
-- individual copy controls for address and coordinates;
-- **Copy all**;
-- open coordinates in Google Maps;
-- a heart action for an accepted non-self trusted person on the full map.
-
-The UI must always show freshness so stale location/battery data is not presented as live.
-
-## Returning to People / cached state
-
-People reuses the app-level location service, cached latest snapshot and kept-alive state. Returning to the destination should show the last known state immediately rather than briefly reverting to an uninitialised state while an async refresh completes.
-
-A trusted-person sync failure must not erase the last successfully received locations. The UI should distinguish a secure-sync/unavailable failure from having no connections and avoid exposing raw Firestore errors.
-
-## Location history
-
-Default architecture favours current state, not indefinite route history.
-
-- latest location remains until replaced or sharing is revoked according to product policy;
-- long-term route history is not enabled by default;
-- Home/Work check-in coordinates/readable addresses remain local to the device;
-- check-ins store only the most recent local send time needed for cooldown/status;
-- any future breadcrumb/history feature requires a specific purpose, short retention by default and explicit user-facing controls.
-
-## Safety boundaries
-
-Homi is not:
-
-- emergency-service dispatch;
-- crash detection;
-- a medical or child-safety guarantee;
-- a covert tracker;
-- proof that a person is safe merely because a recent location/check-in exists;
-- guaranteed delivery of an arrival notification.
-
-User-facing copy must avoid implying any of those capabilities.
-
-## Notifications and sensitive data
-
-People notifications can include connection activity, sender name for a heart, and a selected Home/Work arrival label. They must not include precise coordinates, saved addresses or hidden household information in lock-screen text.
-
-Notification delivery is not guaranteed emergency communication. Android power management, connectivity, notification permissions and FCM delivery can delay or suppress a message.
-
-The normal People notification preference is separate from the persistent Android foreground-service notification required while live location/check-ins are active.
-
-## Google Play / Android release requirements
-
-Before production release of background location/check-ins:
-
-- verify background location is essential to the user-facing People/check-in feature;
-- provide contextual disclosure before permission requests;
-- test foreground-only behaviour;
-- verify persistent-notification behaviour;
-- test screen off, multi-hour background operation, process recreation and device reboot where supported;
-- test Home and Work arrival transitions on at least two Android devices;
-- prepare the Google Play background-location declaration/review material;
-- ensure Data Safety and public privacy wording disclose the real location/check-in processing;
-- verify all permission wording against Android/Google Play requirements current at release time.
+Homi must never present location/check-in data as emergency-grade telemetry or proof that a person is safe.

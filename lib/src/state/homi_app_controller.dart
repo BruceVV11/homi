@@ -271,6 +271,8 @@ class HomiAppController extends ChangeNotifier {
     SupplyStatus status,
     DateTime? expiryDate, {
     String iconKey = 'inventory',
+    double? quantity,
+    SupplyUnit? unit,
   }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
@@ -283,6 +285,8 @@ class HomiAppController extends ChangeNotifier {
         status: status,
         iconKey: iconKey,
         expiryDate: expiryDate,
+        quantity: quantity,
+        unit: unit,
       ),
     ];
     await _persistSupplies();
@@ -293,6 +297,27 @@ class HomiAppController extends ChangeNotifier {
     supplies = supplies
         .map((item) => item.id == id ? item.copyWith(status: status) : item)
         .toList(growable: false);
+    await _persistSupplies();
+    notifyListeners();
+  }
+
+  Future<void> updateSupplyQuantity(
+    String id, {
+    required double? quantity,
+    required SupplyUnit? unit,
+  }) async {
+    final safeQuantity = quantity == null
+        ? null
+        : quantity.isNaN || quantity.isInfinite
+            ? null
+            : quantity.clamp(0, 999999).toDouble();
+    supplies = supplies.map((item) {
+      if (item.id != id) return item;
+      if (safeQuantity == null || unit == null) {
+        return item.copyWith(clearQuantity: true, clearUnit: true);
+      }
+      return item.copyWith(quantity: safeQuantity, unit: unit);
+    }).toList(growable: false);
     await _persistSupplies();
     notifyListeners();
   }
@@ -436,6 +461,31 @@ class HomiAppController extends ChangeNotifier {
       _utilityReadingsKey,
       utilityReadings.map((item) => item.encode()).toList(growable: false),
     );
+  }
+
+  /// Clears household content stored only on this device. It deliberately
+  /// keeps onboarding/home identity and account sign-in state separate so a
+  /// user does not accidentally delete their cloud account by clearing local
+  /// household data.
+  Future<void> eraseLocalHouseholdData() async {
+    quickItems = <String>[];
+    tasks = <HouseholdTask>[];
+    routines = <RoutineItem>[];
+    supplies = <SupplyItem>[];
+    homeThings = <HomeThing>[];
+    homeEvents = <HomeEvent>[];
+    utilityReadings = <UtilityReading>[];
+
+    await Future.wait(<Future<bool>>[
+      _prefs?.remove(_quickItemsKey) ?? Future<bool>.value(false),
+      _prefs?.remove(_tasksKey) ?? Future<bool>.value(false),
+      _prefs?.remove(_routinesKey) ?? Future<bool>.value(false),
+      _prefs?.remove(_suppliesKey) ?? Future<bool>.value(false),
+      _prefs?.remove(_homeThingsKey) ?? Future<bool>.value(false),
+      _prefs?.remove(_homeEventsKey) ?? Future<bool>.value(false),
+      _prefs?.remove(_utilityReadingsKey) ?? Future<bool>.value(false),
+    ]);
+    notifyListeners();
   }
 
   String? _cleanOptional(String? value) {

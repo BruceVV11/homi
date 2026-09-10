@@ -21,6 +21,7 @@ class ArrivalCheckInPlace {
     required this.longitude,
     required this.radiusMeters,
     required this.recipientUids,
+    this.address,
     this.lastNotifiedAt,
   });
 
@@ -29,6 +30,7 @@ class ArrivalCheckInPlace {
   final double longitude;
   final double radiusMeters;
   final List<String> recipientUids;
+  final String? address;
   final DateTime? lastNotifiedAt;
 
   ArrivalCheckInPlace copyWith({
@@ -36,7 +38,9 @@ class ArrivalCheckInPlace {
     double? longitude,
     double? radiusMeters,
     List<String>? recipientUids,
+    String? address,
     DateTime? lastNotifiedAt,
+    bool clearAddress = false,
     bool clearLastNotifiedAt = false,
   }) {
     return ArrivalCheckInPlace(
@@ -45,6 +49,7 @@ class ArrivalCheckInPlace {
       longitude: longitude ?? this.longitude,
       radiusMeters: radiusMeters ?? this.radiusMeters,
       recipientUids: recipientUids ?? this.recipientUids,
+      address: clearAddress ? null : (address ?? this.address),
       lastNotifiedAt:
           clearLastNotifiedAt ? null : (lastNotifiedAt ?? this.lastNotifiedAt),
     );
@@ -56,6 +61,8 @@ class ArrivalCheckInPlace {
         'longitude': longitude,
         'radiusMeters': radiusMeters,
         'recipientUids': recipientUids,
+        if (address != null && address!.trim().isNotEmpty)
+          'address': address!.trim(),
         if (lastNotifiedAt != null)
           'lastNotifiedAt': lastNotifiedAt!.toIso8601String(),
       };
@@ -86,12 +93,17 @@ class ArrivalCheckInPlace {
             .take(10)
             .toList(growable: false) ??
         const <String>[];
+    final rawAddress = json['address'];
+    final address = rawAddress is String && rawAddress.trim().isNotEmpty
+        ? rawAddress.trim()
+        : null;
     return ArrivalCheckInPlace(
       kind: kind,
       latitude: latitude.toDouble(),
       longitude: longitude.toDouble(),
       radiusMeters: radius.toDouble(),
       recipientUids: recipients,
+      address: address,
       lastNotifiedAt: DateTime.tryParse(
         json['lastNotifiedAt'] as String? ?? '',
       ),

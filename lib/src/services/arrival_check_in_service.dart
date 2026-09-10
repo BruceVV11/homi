@@ -26,6 +26,7 @@ class ArrivalCheckInService extends ChangeNotifier {
 
   SharedPreferences? _preferences;
   StreamSubscription<LocationStatusSnapshot>? _locationSubscription;
+  StreamSubscription<void>? _localDataClearSubscription;
   StreamSubscription<User?>? _authSubscription;
   ArrivalCheckInConfig _config = const ArrivalCheckInConfig();
   String? _activeUid;
@@ -46,6 +47,9 @@ class ArrivalCheckInService extends ChangeNotifier {
     _preferences = await SharedPreferences.getInstance();
     _locationSubscription = locationService.updates.listen(
       (snapshot) => unawaited(_evaluate(snapshot)),
+    );
+    _localDataClearSubscription = locationService.localDataCleared.listen(
+      (_) => unawaited(_clearCurrentLocalCheckInData()),
     );
 
     if (firebaseReady) {
@@ -95,11 +99,11 @@ class ArrivalCheckInService extends ChangeNotifier {
     if (_config.enabled) {
       // This resume path never opens a permission prompt. If background access
       // was revoked, the Safety & check-ins screen explains how to restore it.
+      // Do not prime from locationService.latest here: it can be a cached point
+      // from a previous process. The first fresh stream update establishes the
+      // inside/outside state without sending an arrival.
       await locationService.resumeContinuousSharingIfEnabled();
     }
-
-    final latest = locationService.latest;
-    if (latest != null) _primeZoneState(latest);
     notifyListeners();
   }
 
@@ -144,8 +148,6 @@ class ArrivalCheckInService extends ChangeNotifier {
     }
     _config = _config.withPlace(place.copyWith(radiusMeters: radiusMeters));
     _inside.remove(kind);
-    final latest = locationService.latest;
-    if (latest != null) _primePlace(kind, latest);
     await _save();
     notifyListeners();
   }
@@ -191,33 +193,38 @@ class ArrivalCheckInService extends ChangeNotifier {
       );
     }
 
+    final previous = _config;
+    _inside.clear();
+    _config = _config.copyWith(enabled: enabled);
+    _lastError = null;
+
     if (enabled) {
       _setBusy(true);
       try {
         await locationService.startArrivalMonitoring();
+        // Force one fresh local-only point after the feature becomes active so
+        // it can establish zone state without relying on cached coordinates.
+        // A timeout is harmless; the next fresh stream update primes the state.
+        try {
+          await locationService.captureCurrentStatus(syncCloud: false);
+        } catch (_) {}
+      } catch (_) {
+        _config = previous;
+        _inside.clear();
+        rethrow;
       } finally {
         _setBusy(false);
       }
+    } else {
+      await locationService.stopArrivalMonitoring();
     }
 
-    _config = _config.copyWith(enabled: enabled);
-    _lastError = null;
-    final latest = locationService.latest;
-    _inside.clear();
-    if (latest != null) _primeZoneState(latest);
     await _save();
-    if (!enabled) await locationService.stopArrivalMonitoring();
     notifyListeners();
   }
 
   bool _hasUsablePlace(ArrivalCheckInConfig config) {
     return config.configuredPlaces.any((place) => place.recipientUids.isNotEmpty);
-  }
-
-  void _primeZoneState(LocationStatusSnapshot snapshot) {
-    for (final place in _config.configuredPlaces) {
-      _primePlace(place.kind, snapshot);
-    }
   }
 
   void _primePlace(ArrivalPlaceKind kind, LocationStatusSnapshot snapshot) {
@@ -300,6 +307,17 @@ class ArrivalCheckInService extends ChangeNotifier {
     }
   }
 
+  Future<void> _clearCurrentLocalCheckInData() async {
+    final uid = _activeUid;
+    if (uid != null && uid.isNotEmpty) {
+      await _preferences?.remove(_storageKey(uid));
+    }
+    _config = const ArrivalCheckInConfig();
+    _inside.clear();
+    _lastError = null;
+    notifyListeners();
+  }
+
   Future<void> _save() async {
     final uid = _activeUid;
     if (uid == null) return;
@@ -352,6 +370,7 @@ class ArrivalCheckInService extends ChangeNotifier {
   @override
   void dispose() {
     unawaited(_locationSubscription?.cancel());
+    unawaited(_localDataClearSubscription?.cancel());
     unawaited(_authSubscription?.cancel());
     super.dispose();
   }

@@ -10,14 +10,6 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
-    function shortString(value, maxLength) {
-      return value is string && value.size() > 0 && value.size() <= maxLength;
-    }
-
-    function optionalString(value, maxLength) {
-      return value == null || (value is string && value.size() <= maxLength);
-    }
-
     function isDeveloperAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/developerAdmins/$(request.auth.uid))
@@ -29,37 +21,15 @@ service cloud.firestore {
         && (data.aUid == request.auth.uid || data.bUid == request.auth.uid);
     }
 
-    function connectionCoreUnchanged() {
-      return request.resource.data.memberUids == resource.data.memberUids
-        && request.resource.data.initiatorUid == resource.data.initiatorUid
-        && request.resource.data.recipientUid == resource.data.recipientUid
-        && request.resource.data.aUid == resource.data.aUid
-        && request.resource.data.bUid == resource.data.bUid
-        && request.resource.data.aName == resource.data.aName
-        && request.resource.data.bName == resource.data.bName
-        && request.resource.data.aPhotoUrl == resource.data.aPhotoUrl
-        && request.resource.data.bPhotoUrl == resource.data.bPhotoUrl
-        && request.resource.data.createdAt == resource.data.createdAt;
-    }
-
     function hasAcceptedConnection(firstUid, secondUid) {
-      let forwardId = firstUid + '_' + secondUid;
-      let reverseId = secondUid + '_' + firstUid;
-      let forwardPath = /databases/$(database)/documents/connections/$(forwardId);
-      let reversePath = /databases/$(database)/documents/connections/$(reverseId);
-      return (exists(forwardPath)
-          && get(forwardPath).data.status == 'accepted'
-          && firstUid in get(forwardPath).data.memberUids
-          && secondUid in get(forwardPath).data.memberUids)
-        || (exists(reversePath)
-          && get(reversePath).data.status == 'accepted'
-          && firstUid in get(reversePath).data.memberUids
-          && secondUid in get(reversePath).data.memberUids);
-    }
-
-    function hasHouseholdPreference(ownerUid, otherUid) {
-      let path = /databases/$(database)/documents/peoplePreferences/$(ownerUid)/people/$(otherUid);
-      return exists(path) && get(path).data.scope == 'household';
+      let ids = firstUid < secondUid
+        ? [firstUid, secondUid]
+        : [secondUid, firstUid];
+      let path = /databases/$(database)/documents/connections/$(ids[0] + '_' + ids[1]);
+      return exists(path)
+        && get(path).data.status == 'accepted'
+        && get(path).data.aUid == ids[0]
+        && get(path).data.bUid == ids[1];
     }
 
     function hasActiveLocationShare(ownerUid, viewerUid) {
@@ -69,83 +39,9 @@ service cloud.firestore {
     }
 
     function isSharedTaskMember(data) {
-      return signedIn() && request.auth.uid in data.memberUids;
-    }
-
-    function sharedTaskCoreUnchanged() {
-      return request.resource.data.memberUids == resource.data.memberUids
-        && request.resource.data.createdByUid == resource.data.createdByUid
-        && request.resource.data.assigneeUid == resource.data.assigneeUid
-        && request.resource.data.title == resource.data.title
-        && request.resource.data.notes == resource.data.notes
-        && request.resource.data.createdByName == resource.data.createdByName
-        && request.resource.data.assigneeName == resource.data.assigneeName
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.dueAt == resource.data.dueAt;
-    }
-
-    function validSharedTaskCompletionUpdate() {
-      return isSharedTaskMember(resource.data)
-        && sharedTaskCoreUnchanged()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'completedAt',
-          'completedByName',
-          'completedByUid',
-          'purgeAt',
-          'updatedAt'
-        ])
-        && (
-          (
-            request.resource.data.completedAt == null
-            && request.resource.data.completedByUid == null
-            && request.resource.data.completedByName == null
-            && request.resource.data.purgeAt == null
-          )
-          || (
-            request.resource.data.completedAt is timestamp
-            && request.resource.data.completedByUid == request.auth.uid
-            && shortString(request.resource.data.completedByName, 80)
-            && request.resource.data.purgeAt is timestamp
-            && request.resource.data.purgeAt > request.resource.data.completedAt
-          )
-        );
-    }
-
-    function removesSelfFromSharedTask() {
       return signedIn()
-        && request.auth.uid in resource.data.memberUids
-        && resource.data.createdByUid != request.auth.uid
-        && !(request.auth.uid in request.resource.data.memberUids)
-        && request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1
-        && request.resource.data.memberUids.hasOnly(resource.data.memberUids)
-        && request.resource.data.createdByUid == resource.data.createdByUid
-        && request.resource.data.title == resource.data.title
-        && request.resource.data.notes == resource.data.notes
-        && request.resource.data.createdByName == resource.data.createdByName
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.dueAt == resource.data.dueAt
-        && (
-          resource.data.assigneeUid == request.auth.uid
-            ? request.resource.data.assigneeUid == null
-              && request.resource.data.assigneeName == 'Unassigned'
-            : request.resource.data.assigneeUid == resource.data.assigneeUid
-              && request.resource.data.assigneeName == resource.data.assigneeName
-        )
-        && (
-          resource.data.completedByUid == request.auth.uid
-            ? request.resource.data.completedByUid == null
-              && request.resource.data.completedByName == 'Former Homi user'
-            : request.resource.data.completedByUid == resource.data.completedByUid
-              && request.resource.data.completedByName == resource.data.completedByName
-        )
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'memberUids',
-          'assigneeUid',
-          'assigneeName',
-          'completedByUid',
-          'completedByName',
-          'updatedAt'
-        ]);
+        && data.memberUids is list
+        && request.auth.uid in data.memberUids;
     }
 
     function validDeviceRegistration(data) {
@@ -169,7 +65,8 @@ service cloud.firestore {
         && (!('tasksAndRoutines' in data) || data.tasksAndRoutines is bool)
         && (!('peopleNotifications' in data) || data.peopleNotifications is bool)
         && (!('homiUpdates' in data) || data.homiUpdates is bool)
-        && (!('serviceNotices' in data) || data.serviceNotices is bool);
+        && (!('serviceNotices' in data) || data.serviceNotices is bool)
+        && data.updatedAt == request.time;
     }
 
     function validLocationSnapshot(data) {
@@ -191,10 +88,13 @@ service cloud.firestore {
           'updatedAt',
           'source'
         ])
+        && data.latitude is number
         && data.latitude >= -90
         && data.latitude <= 90
+        && data.longitude is number
         && data.longitude >= -180
         && data.longitude <= 180
+        && data.accuracyMeters is number
         && data.accuracyMeters >= 0
         && data.accuracyMeters <= 100000
         && data.batteryPercent is int
@@ -209,29 +109,21 @@ service cloud.firestore {
         ];
     }
 
-    function validUserProfile(data) {
-      return data.keys().hasOnly([
-          'homiCode', 'displayName', 'photoUrl', 'updatedAt'
-        ])
-        && data.keys().hasAll(['homiCode', 'displayName', 'updatedAt'])
-        && data.homiCode is string
-        && data.homiCode.size() == 6
-        && shortString(data.displayName, 80)
-        && optionalString(data.photoUrl, 1000)
-        && data.updatedAt == request.time;
-    }
-
+    // Profile identity is provisioned by App-Check-protected Cloud Functions.
+    // The mobile client can read only its own profile. Keeping writes server-only
+    // prevents code/profile spoofing and makes Homi code ownership atomic.
     match /users/{uid} {
-      allow read, delete: if isSelf(uid);
-      allow create: if isSelf(uid)
-        && validUserProfile(request.resource.data);
-      allow update: if isSelf(uid)
-        && validUserProfile(request.resource.data)
-        && request.resource.data.homiCode == resource.data.homiCode;
+      allow read: if isSelf(uid);
+      allow create, update, delete: if false;
 
+      // Device push registration remains a direct owner write because FCM token
+      // refresh is device-local. Schema validation limits what it can contain.
+      // Firestore App Check enforcement is the production abuse boundary for
+      // this direct path.
       match /devices/{deviceId} {
         allow read, delete: if isSelf(uid);
         allow create, update: if isSelf(uid)
+          && deviceId.size() > 0
           && deviceId.size() <= 128
           && validDeviceRegistration(request.resource.data);
       }
@@ -242,34 +134,13 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
     }
 
+    // Campaign creation is server-only through queueDeveloperNotification.
     match /notificationCampaigns/{campaignId} {
       allow read: if isDeveloperAdmin();
-      allow create: if isDeveloperAdmin()
-        && request.resource.data.keys().hasOnly([
-          'title',
-          'body',
-          'category',
-          'route',
-          'audience',
-          'priority',
-          'createdByUid',
-          'status',
-          'createdAt'
-        ])
-        && request.resource.data.createdByUid == request.auth.uid
-        && request.resource.data.status == 'queued'
-        && shortString(request.resource.data.title, 80)
-        && shortString(request.resource.data.body, 280)
-        && request.resource.data.category in ['update', 'service', 'security']
-        && request.resource.data.route in [
-          'overview', 'tasks', 'routines', 'home', 'supplies', 'people', 'account'
-        ]
-        && request.resource.data.audience in ['self', 'all']
-        && request.resource.data.priority in ['normal', 'important']
-        && request.resource.data.createdAt == request.time;
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
+    // Server-only control-plane collections.
     match /heartCooldowns/{documentId} {
       allow read, write: if false;
     }
@@ -277,177 +148,47 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Codes are deliberately not readable from Firestore. Exact lookup and
+    // issuance happen through rate-limited, App-Check-protected callables.
     match /homiCodes/{code} {
-      allow get: if signedIn();
-      allow list: if false;
-      allow create: if signedIn()
-        && code.size() == 6
-        && request.resource.data.keys().hasOnly([
-          'uid', 'displayName', 'photoUrl', 'updatedAt'
-        ])
-        && request.resource.data.uid == request.auth.uid
-        && shortString(request.resource.data.displayName, 80)
-        && optionalString(request.resource.data.photoUrl, 1000)
-        && request.resource.data.updatedAt == request.time;
-      allow update: if signedIn()
-        && resource.data.uid == request.auth.uid
-        && request.resource.data.uid == request.auth.uid
-        && code.size() == 6
-        && request.resource.data.keys().hasOnly([
-          'uid', 'displayName', 'photoUrl', 'updatedAt'
-        ])
-        && shortString(request.resource.data.displayName, 80)
-        && optionalString(request.resource.data.photoUrl, 1000)
-        && request.resource.data.updatedAt == request.time;
-      allow delete: if signedIn()
-        && resource.data.uid == request.auth.uid;
+      allow read, write: if false;
     }
 
+    // Clients can observe only connections they participate in. Every mutation
+    // is server-authorised so status transitions and cleanup are atomic.
     match /connections/{connectionId} {
       allow get, list: if isConnectionMember(resource.data);
-
-      allow create: if signedIn()
-        && request.resource.data.keys().hasOnly([
-          'memberUids',
-          'initiatorUid',
-          'recipientUid',
-          'status',
-          'aUid',
-          'aName',
-          'aPhotoUrl',
-          'bUid',
-          'bName',
-          'bPhotoUrl',
-          'createdAt',
-          'updatedAt'
-        ])
-        && request.resource.data.status == 'pending'
-        && request.resource.data.initiatorUid == request.auth.uid
-        && request.resource.data.recipientUid != request.auth.uid
-        && request.resource.data.memberUids is list
-        && request.resource.data.memberUids.size() == 2
-        && request.resource.data.memberUids[0] == request.resource.data.aUid
-        && request.resource.data.memberUids[1] == request.resource.data.bUid
-        && request.resource.data.initiatorUid in request.resource.data.memberUids
-        && request.resource.data.recipientUid in request.resource.data.memberUids
-        && request.resource.data.aUid != request.resource.data.bUid
-        && connectionId == request.resource.data.aUid + '_' + request.resource.data.bUid
-        && shortString(request.resource.data.aName, 80)
-        && shortString(request.resource.data.bName, 80)
-        && optionalString(request.resource.data.aPhotoUrl, 1000)
-        && optionalString(request.resource.data.bPhotoUrl, 1000)
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.updatedAt == request.time;
-
-      allow update: if signedIn()
-        && resource.data.status == 'pending'
-        && resource.data.recipientUid == request.auth.uid
-        && request.resource.data.status == 'accepted'
-        && connectionCoreUnchanged()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'acceptedAt', 'updatedAt'
-        ])
-        && request.resource.data.acceptedAt == request.time
-        && request.resource.data.updatedAt == request.time;
-
-      allow delete: if isConnectionMember(resource.data);
+      allow create, update, delete: if false;
     }
 
     match /peoplePreferences/{ownerUid}/people/{otherUid} {
       allow read: if isSelf(ownerUid);
-      allow create, update: if isSelf(ownerUid)
-        && ownerUid != otherUid
-        && hasAcceptedConnection(ownerUid, otherUid)
-        && request.resource.data.keys().hasOnly([
-          'relationship', 'scope', 'updatedAt'
-        ])
-        && shortString(request.resource.data.relationship, 40)
-        && request.resource.data.scope in ['household', 'friend']
-        && request.resource.data.updatedAt == request.time;
-      allow delete: if isSelf(ownerUid) || isSelf(otherUid);
+      allow create, update, delete: if false;
     }
 
+    // Task membership is derived server-side from accepted Household
+    // relationships; clients cannot forge member lists, completion actors or
+    // purge timing.
     match /sharedTasks/{taskId} {
       allow get, list: if isSharedTaskMember(resource.data);
-
-      allow create: if signedIn()
-        && request.resource.data.keys().hasOnly([
-          'title',
-          'notes',
-          'assigneeUid',
-          'assigneeName',
-          'createdByUid',
-          'createdByName',
-          'memberUids',
-          'createdAt',
-          'dueAt',
-          'completedAt',
-          'completedByName',
-          'completedByUid',
-          'purgeAt'
-        ])
-        && shortString(request.resource.data.title, 120)
-        && optionalString(request.resource.data.notes, 1000)
-        && shortString(request.resource.data.createdByName, 80)
-        && optionalString(request.resource.data.assigneeName, 80)
-        && request.resource.data.memberUids is list
-        && request.resource.data.memberUids.size() >= 2
-        && request.resource.data.memberUids.size() <= 20
-        && request.resource.data.createdByUid == request.auth.uid
-        && request.resource.data.createdByUid in request.resource.data.memberUids
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.completedAt == null
-        && request.resource.data.completedByName == null
-        && request.resource.data.completedByUid == null
-        && request.resource.data.purgeAt == null
-        && (
-          request.resource.data.assigneeUid == null
-          || (
-            request.resource.data.assigneeUid != request.auth.uid
-            && request.resource.data.assigneeUid in request.resource.data.memberUids
-            && hasAcceptedConnection(
-              request.resource.data.createdByUid,
-              request.resource.data.assigneeUid
-            )
-            && hasHouseholdPreference(
-              request.resource.data.createdByUid,
-              request.resource.data.assigneeUid
-            )
-          )
-        );
-
-      allow update: if validSharedTaskCompletionUpdate()
-        || removesSelfFromSharedTask();
-
-      allow delete: if isSharedTaskMember(resource.data)
-        && (
-          resource.data.createdByUid == request.auth.uid
-          || (
-            resource.data.purgeAt is timestamp
-            && resource.data.purgeAt <= request.time
-          )
-        );
+      allow create, update, delete: if false;
     }
 
+    // Share state is readable only by the owner/viewer pair and mutated through
+    // setLocationShare. Disconnect cleanup therefore cannot leave a client-
+    // writable stale authorization behind.
     match /locationShares/{ownerUid}/viewers/{viewerUid} {
       allow read: if isSelf(ownerUid) || isSelf(viewerUid);
-      allow create, update: if isSelf(ownerUid)
-        && ownerUid != viewerUid
-        && request.resource.data.keys().hasOnly([
-          'ownerUid', 'viewerUid', 'active', 'updatedAt'
-        ])
-        && request.resource.data.ownerUid == ownerUid
-        && request.resource.data.viewerUid == viewerUid
-        && request.resource.data.active is bool
-        && request.resource.data.updatedAt == request.time
-        && hasAcceptedConnection(ownerUid, viewerUid);
-      allow delete: if isSelf(ownerUid) || isSelf(viewerUid);
+      allow create, update, delete: if false;
     }
 
+    // Latest location is the only high-frequency direct collaboration write.
+    // It remains owner-only and schema constrained. Production Firestore App
+    // Check enforcement is required before public release.
     match /locations/{ownerUid} {
       allow create, update: if isSelf(ownerUid)
         && validLocationSnapshot(request.resource.data);
-      allow delete: if isSelf(ownerUid);
+      allow delete: if false;
       allow read: if isSelf(ownerUid)
         || (signedIn() && hasActiveLocationShare(ownerUid, request.auth.uid));
     }

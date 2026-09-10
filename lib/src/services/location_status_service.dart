@@ -63,6 +63,8 @@ class LocationStatusService {
 
   static const _cachedStatusKey = 'homi.location.cachedStatus';
   static const _continuousEnabledKey = 'homi.location.continuousEnabled';
+  static const _arrivalMonitoringEnabledKey =
+      'homi.location.arrivalMonitoringEnabled';
   static const _minimumCloudWriteGap = Duration(seconds: 30);
 
   final bool firebaseReady;
@@ -74,10 +76,18 @@ class LocationStatusService {
   LocationStatusSnapshot? _latest;
   DateTime? _lastCloudSyncAt;
   bool _cloudSyncInFlight = false;
+  bool _liveSharingRequested = false;
+  bool _arrivalMonitoringRequested = false;
 
   Stream<LocationStatusSnapshot> get updates => _updates.stream;
   LocationStatusSnapshot? get latest => _latest;
-  bool get isStreaming => _positionSubscription != null;
+
+  /// Kept for the established People UI: this represents the user's explicit
+  /// Live updates choice, not whether another feature is sharing the same
+  /// Android foreground location stream.
+  bool get isStreaming => _liveSharingRequested;
+
+  bool get isBackgroundLocationActive => _positionSubscription != null;
 
   Future<LocationStatusSnapshot?> loadCachedStatus() async {
     final prefs = await SharedPreferences.getInstance();
@@ -97,7 +107,15 @@ class LocationStatusService {
 
   Future<bool> continuousSharingEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_continuousEnabledKey) ?? false;
+    _liveSharingRequested = prefs.getBool(_continuousEnabledKey) ?? false;
+    return _liveSharingRequested;
+  }
+
+  Future<bool> arrivalMonitoringEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    _arrivalMonitoringRequested =
+        prefs.getBool(_arrivalMonitoringEnabledKey) ?? false;
+    return _arrivalMonitoringRequested;
   }
 
   Future<LocationStatusSnapshot?> refreshIfAlreadyAllowed() async {
@@ -132,31 +150,34 @@ class LocationStatusService {
   }
 
   Future<void> startContinuousSharing() async {
-    if (!firebaseReady || FirebaseAuth.instance.currentUser == null) {
-      throw StateError(
-        'Sign in to share your live location with people you trust.',
-      );
-    }
-    await _ensureLocationService();
-    final permission = await _permission(requestIfNeeded: true);
-    if (permission == LocationPermission.deniedForever) {
-      throw StateError(
-        'Location permission is disabled in Android Settings.',
-      );
-    }
-    if (permission != LocationPermission.always) {
-      throw StateError(
-        'For background sharing, set Homi location access to “Allow all the time” in Android Settings.',
-      );
-    }
-
+    await _ensureBackgroundLocation(
+      signInMessage:
+          'Sign in to share your live location with people you trust.',
+      permissionMessage:
+          'For background sharing, set Homi location access to “Allow all the time” in Android Settings.',
+    );
     await _startPositionStream();
+    _liveSharingRequested = true;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_continuousEnabledKey, true);
   }
 
+  Future<void> startArrivalMonitoring() async {
+    await _ensureBackgroundLocation(
+      signInMessage: 'Sign in to use arrival check-ins.',
+      permissionMessage:
+          'For background check-ins, set Homi location access to “Allow all the time” in Android Settings.',
+    );
+    await _startPositionStream();
+    _arrivalMonitoringRequested = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_arrivalMonitoringEnabledKey, true);
+  }
+
   Future<bool> resumeContinuousSharingIfEnabled() async {
-    if (!await continuousSharingEnabled()) return false;
+    final liveEnabled = await continuousSharingEnabled();
+    final arrivalEnabled = await arrivalMonitoringEnabled();
+    if (!liveEnabled && !arrivalEnabled) return false;
     if (!firebaseReady || FirebaseAuth.instance.currentUser == null) {
       return false;
     }
@@ -164,29 +185,68 @@ class LocationStatusService {
     final permission = await Geolocator.checkPermission();
     if (permission != LocationPermission.always) return false;
     await _startPositionStream();
-    return true;
+
+    // Existing callers use this return value to render the explicit Live
+    // updates switch. Arrival-only monitoring must not make that switch look on.
+    return liveEnabled;
   }
 
   Future<void> stopContinuousSharing() async {
-    await _positionSubscription?.cancel();
-    _positionSubscription = null;
+    _liveSharingRequested = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_continuousEnabledKey, false);
+    if (!await arrivalMonitoringEnabled()) {
+      await _stopPositionStream();
+    }
+  }
+
+  Future<void> stopArrivalMonitoring() async {
+    _arrivalMonitoringRequested = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_arrivalMonitoringEnabledKey, false);
+    if (!await continuousSharingEnabled()) {
+      await _stopPositionStream();
+    }
+  }
+
+  Future<void> _stopPositionStream() async {
+    await _positionSubscription?.cancel();
+    _positionSubscription = null;
   }
 
   /// Clears location state stored by Homi on this device. Android's permission
   /// itself remains under the user's system settings and is never changed
   /// silently by an in-app data reset.
   Future<void> clearCachedStatus() async {
-    await stopContinuousSharing();
+    _liveSharingRequested = false;
+    _arrivalMonitoringRequested = false;
+    await _stopPositionStream();
     _latest = null;
     _lastCloudSyncAt = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_cachedStatusKey);
     await prefs.remove(_continuousEnabledKey);
+    await prefs.remove(_arrivalMonitoringEnabledKey);
   }
 
   Future<bool> openAppSettings() => Geolocator.openAppSettings();
+
+  Future<void> _ensureBackgroundLocation({
+    required String signInMessage,
+    required String permissionMessage,
+  }) async {
+    if (!firebaseReady || FirebaseAuth.instance.currentUser == null) {
+      throw StateError(signInMessage);
+    }
+    await _ensureLocationService();
+    final permission = await _permission(requestIfNeeded: true);
+    if (permission == LocationPermission.deniedForever) {
+      throw StateError('Location permission is disabled in Android Settings.');
+    }
+    if (permission != LocationPermission.always) {
+      throw StateError(permissionMessage);
+    }
+  }
 
   Future<void> _startPositionStream() async {
     if (_positionSubscription != null) return;
@@ -198,8 +258,8 @@ class LocationStatusService {
         distanceFilter: 100,
         intervalDuration: const Duration(minutes: 2),
         foregroundNotificationConfig: ForegroundNotificationConfig(
-          notificationTitle: 'Homi live location',
-          notificationText: 'Location sharing is active.',
+          notificationTitle: 'Homi location',
+          notificationText: 'Live location or arrival check-ins are active.',
           notificationChannelName: 'Live location',
           notificationIcon: const AndroidResource(
             name: 'homi_notification',
@@ -343,8 +403,7 @@ class LocationStatusService {
   }
 
   Future<void> dispose() async {
-    await _positionSubscription?.cancel();
-    _positionSubscription = null;
+    await _stopPositionStream();
     await _updates.close();
   }
 }

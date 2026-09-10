@@ -1,0 +1,414 @@
+const {setGlobalOptions} = require("firebase-functions/v2");
+const {onCall, HttpsError} = require("firebase-functions/v2/https");
+const {
+  onDocumentCreated,
+  onDocumentUpdated,
+} = require("firebase-functions/v2/firestore");
+const logger = require("firebase-functions/logger");
+const {initializeApp} = require("firebase-admin/app");
+const {getFirestore, FieldValue} = require("firebase-admin/firestore");
+const {getMessaging} = require("firebase-admin/messaging");
+
+setGlobalOptions({
+  region: "africa-south1",
+  maxInstances: 10,
+});
+
+initializeApp();
+const db = getFirestore();
+const messaging = getMessaging();
+
+const HEART_COOLDOWN_MS = 60 * 1000;
+const MAX_CAMPAIGN_DEVICES = 10000;
+
+function channelForCategory(category) {
+  switch (category) {
+    case "household":
+    case "supply":
+    case "maintenance":
+      return "homi_attention";
+    case "task":
+    case "routine":
+      return "homi_tasks";
+    case "people":
+    case "heart":
+    case "connection":
+      return "homi_people";
+    case "service":
+    case "security":
+      return "homi_service";
+    default:
+      return "homi_updates";
+  }
+}
+
+function deviceAllowsCategory(data, category) {
+  if (data.notificationsEnabled !== true || !data.pushToken) return false;
+  switch (category) {
+    case "household":
+    case "supply":
+    case "maintenance":
+      return data.householdAttention !== false;
+    case "task":
+    case "routine":
+      return data.tasksAndRoutines !== false;
+    case "people":
+    case "heart":
+    case "connection":
+      return data.peopleNotifications !== false;
+    case "service":
+    case "security":
+      return data.serviceNotices !== false;
+    case "update":
+    case "product":
+      return data.homiUpdates !== false;
+    default:
+      return true;
+  }
+}
+
+async function userDeviceDocs(uid) {
+  const snapshot = await db
+      .collection("users")
+      .doc(uid)
+      .collection("devices")
+      .where("notificationsEnabled", "==", true)
+      .get();
+  return snapshot.docs;
+}
+
+async function allEnabledDeviceDocs() {
+  const snapshot = await db
+      .collectionGroup("devices")
+      .where("notificationsEnabled", "==", true)
+      .limit(MAX_CAMPAIGN_DEVICES)
+      .get();
+  return snapshot.docs;
+}
+
+async function sendToDeviceDocs({
+  deviceDocs,
+  title,
+  body,
+  category,
+  route = "overview",
+  priority = "normal",
+  extraData = {},
+}) {
+  const eligible = deviceDocs
+      .map((doc) => ({doc, data: doc.data()}))
+      .filter(({data}) => deviceAllowsCategory(data, category));
+
+  let successCount = 0;
+  let failureCount = 0;
+
+  for (let start = 0; start < eligible.length; start += 500) {
+    const group = eligible.slice(start, start + 500);
+    const tokens = group.map(({data}) => data.pushToken);
+    if (tokens.length === 0) continue;
+
+    const response = await messaging.sendEachForMulticast({
+      tokens,
+      notification: {title, body},
+      data: {
+        category,
+        route,
+        ...Object.fromEntries(
+            Object.entries(extraData).map(([key, value]) => [key, String(value)]),
+        ),
+      },
+      android: {
+        priority: priority === "important" ? "high" : "normal",
+        notification: {
+          channelId: channelForCategory(category),
+          icon: "homi_notification",
+        },
+      },
+    });
+
+    successCount += response.successCount;
+    failureCount += response.failureCount;
+
+    const cleanup = [];
+    response.responses.forEach((result, index) => {
+      if (result.success) return;
+      const code = result.error && result.error.code;
+      if (
+        code === "messaging/registration-token-not-registered" ||
+        code === "messaging/invalid-registration-token"
+      ) {
+        cleanup.push(
+            group[index].doc.ref.set(
+                {
+                  pushToken: FieldValue.delete(),
+                  updatedAt: FieldValue.serverTimestamp(),
+                },
+                {merge: true},
+            ),
+        );
+      }
+    });
+    await Promise.all(cleanup);
+  }
+
+  return {successCount, failureCount, eligibleCount: eligible.length};
+}
+
+async function sendToUser(uid, payload) {
+  return sendToDeviceDocs({
+    deviceDocs: await userDeviceDocs(uid),
+    ...payload,
+  });
+}
+
+async function acceptedConnection(firstUid, secondUid) {
+  const ids = [firstUid, secondUid].sort();
+  const snapshot = await db
+      .collection("connections")
+      .doc(`${ids[0]}_${ids[1]}`)
+      .get();
+  if (!snapshot.exists) return null;
+  const data = snapshot.data();
+  if (
+    data.status !== "accepted" ||
+    data.aUid !== ids[0] ||
+    data.bUid !== ids[1]
+  ) {
+    return null;
+  }
+  return data;
+}
+
+async function displayNameFor(uid) {
+  const snapshot = await db.collection("users").doc(uid).get();
+  const name = snapshot.data() && snapshot.data().displayName;
+  return typeof name === "string" && name.trim() ? name.trim() : "Someone";
+}
+
+exports.sendHeart = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Sign in to send a heart.");
+  }
+  const senderUid = request.auth.uid;
+  const recipientUid = String(
+      request.data && request.data.recipientUid || "",
+  ).trim();
+  if (!recipientUid || recipientUid === senderUid) {
+    throw new HttpsError("invalid-argument", "Choose a connected person.");
+  }
+
+  const connection = await acceptedConnection(senderUid, recipientUid);
+  if (!connection) {
+    throw new HttpsError(
+        "permission-denied",
+        "Hearts can only be sent to an accepted trusted person.",
+    );
+  }
+
+  const cooldownRef = db
+      .collection("heartCooldowns")
+      .doc(`${senderUid}_${recipientUid}`);
+  const now = Date.now();
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(cooldownRef);
+    const last = snapshot.data() && snapshot.data().sentAt;
+    const lastMillis = last && typeof last.toMillis === "function" ?
+      last.toMillis() : 0;
+    if (lastMillis && now - lastMillis < HEART_COOLDOWN_MS) {
+      throw new HttpsError(
+          "resource-exhausted",
+          "Give it a moment before sending another heart.",
+      );
+    }
+    transaction.set(
+        cooldownRef,
+        {
+          senderUid,
+          recipientUid,
+          sentAt: FieldValue.serverTimestamp(),
+        },
+        {merge: true},
+    );
+  });
+
+  const senderName = await displayNameFor(senderUid);
+  const result = await sendToUser(recipientUid, {
+    title: `${senderName} is thinking about you!`,
+    body: "A little check-in from someone you trust on Homi.",
+    category: "heart",
+    route: "people",
+    priority: "important",
+    extraData: {senderUid},
+  });
+
+  return {
+    accepted: true,
+    deliveredDevices: result.successCount,
+  };
+});
+
+exports.onConnectionRequestCreated = onDocumentCreated(
+    "connections/{connectionId}",
+    async (event) => {
+      const data = event.data && event.data.data();
+      if (!data || data.status !== "pending") return;
+      const initiatorUid = data.initiatorUid;
+      const recipientUid = data.recipientUid;
+      if (!initiatorUid || !recipientUid) return;
+      const initiatorName = data.aUid === initiatorUid ? data.aName : data.bName;
+      await sendToUser(recipientUid, {
+        title: "New Homi connection request",
+        body: `${initiatorName || "Someone"} wants to connect with you.`,
+        category: "connection",
+        route: "people",
+        priority: "important",
+      });
+    },
+);
+
+exports.onConnectionAccepted = onDocumentUpdated(
+    "connections/{connectionId}",
+    async (event) => {
+      const before = event.data && event.data.before.data();
+      const after = event.data && event.data.after.data();
+      if (!before || !after) return;
+      if (before.status === "accepted" || after.status !== "accepted") return;
+      const initiatorUid = after.initiatorUid;
+      const recipientUid = after.recipientUid;
+      if (!initiatorUid || !recipientUid) return;
+      const recipientName = after.aUid === recipientUid ? after.aName : after.bName;
+      await sendToUser(initiatorUid, {
+        title: "Homi connection accepted",
+        body: `${recipientName || "Your trusted person"} accepted your connection.`,
+        category: "connection",
+        route: "people",
+        priority: "normal",
+      });
+    },
+);
+
+exports.onSharedTaskCreated = onDocumentCreated(
+    "sharedTasks/{taskId}",
+    async (event) => {
+      const data = event.data && event.data.data();
+      if (!data) return;
+      const creatorUid = data.createdByUid;
+      const title = data.title || "Household task";
+      const creatorName = data.createdByName || "Someone at home";
+      const members = Array.isArray(data.memberUids) ? data.memberUids : [];
+      const assigneeUid = data.assigneeUid;
+      const recipients = assigneeUid && assigneeUid !== creatorUid ?
+        [assigneeUid] : members.filter((uid) => uid !== creatorUid);
+
+      await Promise.all(
+          [...new Set(recipients)].map((uid) => sendToUser(uid, {
+            title: assigneeUid ? "A task was assigned to you" : "New household task",
+            body: `${title} · from ${creatorName}`,
+            category: "task",
+            route: "tasks",
+            priority: "important",
+            extraData: {taskId: event.params.taskId},
+          })),
+      );
+    },
+);
+
+exports.onSharedTaskUpdated = onDocumentUpdated(
+    "sharedTasks/{taskId}",
+    async (event) => {
+      const before = event.data && event.data.before.data();
+      const after = event.data && event.data.after.data();
+      if (!before || !after) return;
+      if (before.completedAt || !after.completedAt) return;
+      const creatorUid = after.createdByUid;
+      const completedByUid = after.completedByUid;
+      if (!creatorUid || !completedByUid || creatorUid === completedByUid) return;
+      const completedByName = after.completedByName || "Someone at home";
+      await sendToUser(creatorUid, {
+        title: "Household task completed",
+        body: `${completedByName} completed ${after.title || "a household task"}.`,
+        category: "task",
+        route: "tasks",
+        priority: "normal",
+        extraData: {taskId: event.params.taskId},
+      });
+    },
+);
+
+exports.onNotificationCampaignCreated = onDocumentCreated(
+    "notificationCampaigns/{campaignId}",
+    async (event) => {
+      const snapshot = event.data;
+      if (!snapshot) return;
+      const data = snapshot.data();
+      const campaignRef = snapshot.ref;
+      const creatorUid = data.createdByUid;
+
+      try {
+        const admin = creatorUid ?
+          await db.collection("developerAdmins").doc(creatorUid).get() : null;
+        if (!admin || !admin.exists || admin.data().active !== true) {
+          throw new Error("Campaign creator is not an active developer admin.");
+        }
+
+        const allowedCategories = new Set(["update", "service", "security"]);
+        const allowedRoutes = new Set([
+          "overview",
+          "tasks",
+          "routines",
+          "home",
+          "supplies",
+          "people",
+          "account",
+        ]);
+        const category = allowedCategories.has(data.category) ?
+          data.category : "update";
+        const route = allowedRoutes.has(data.route) ? data.route : "overview";
+        const audience = data.audience === "self" ? "self" : "all";
+        const priority = data.priority === "important" ? "important" : "normal";
+        const title = String(data.title || "").trim();
+        const body = String(data.body || "").trim();
+        if (!title || !body || title.length > 80 || body.length > 280) {
+          throw new Error("Campaign title/body did not pass validation.");
+        }
+
+        await campaignRef.set(
+            {status: "sending", startedAt: FieldValue.serverTimestamp()},
+            {merge: true},
+        );
+
+        const deviceDocs = audience === "self" ?
+          await userDeviceDocs(creatorUid) : await allEnabledDeviceDocs();
+        const result = await sendToDeviceDocs({
+          deviceDocs,
+          title,
+          body,
+          category,
+          route,
+          priority,
+          extraData: {campaignId: event.params.campaignId},
+        });
+
+        await campaignRef.set(
+            {
+              status: "sent",
+              sentAt: FieldValue.serverTimestamp(),
+              eligibleCount: result.eligibleCount,
+              sentCount: result.successCount,
+              failureCount: result.failureCount,
+            },
+            {merge: true},
+        );
+      } catch (error) {
+        logger.error("Homi notification campaign failed", error);
+        await campaignRef.set(
+            {
+              status: "failed",
+              failedAt: FieldValue.serverTimestamp(),
+              errorCode: "delivery-failed",
+            },
+            {merge: true},
+        );
+      }
+    },
+);

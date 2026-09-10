@@ -1,10 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'homi_cloud_actions.dart';
+
 class AuthService {
-  AuthService({required this.firebaseReady});
+  AuthService({required this.firebaseReady})
+      : _cloudActions = HomiCloudActions(firebaseReady: firebaseReady);
 
   final bool firebaseReady;
+  final HomiCloudActions _cloudActions;
 
   FirebaseAuth get _auth => FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: const ['email']);
@@ -75,7 +79,10 @@ class AuthService {
     if (trimmed.isEmpty) return user;
     await user.updateDisplayName(trimmed);
     await user.reload();
-    return _auth.currentUser;
+    final refreshed = _auth.currentUser;
+    await refreshed?.getIdToken(true);
+    await _syncIdentityBestEffort();
+    return refreshed;
   }
 
   Future<void> sendCurrentUserVerification() async {
@@ -104,6 +111,7 @@ class AuthService {
         idToken: authentication.idToken,
       );
       await user.reauthenticateWithCredential(credential);
+      await _auth.currentUser?.getIdToken(true);
       return;
     }
 
@@ -121,6 +129,7 @@ class AuthService {
         password: currentPassword,
       );
       await user.reauthenticateWithCredential(credential);
+      await _auth.currentUser?.getIdToken(true);
       return;
     }
 
@@ -146,6 +155,16 @@ class AuthService {
     if (!firebaseReady) return;
     await _auth.signOut();
     await _googleSignIn.signOut();
+  }
+
+  Future<void> _syncIdentityBestEffort() async {
+    if (!firebaseReady || _auth.currentUser == null) return;
+    try {
+      await _cloudActions.call('ensureHomiIdentity');
+    } catch (_) {
+      // Profile changes remain valid in Firebase Authentication. Homi retries
+      // its connection identity sync the next time People is opened.
+    }
   }
 
   void _requireFirebase() {

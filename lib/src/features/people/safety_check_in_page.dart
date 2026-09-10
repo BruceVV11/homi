@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_google_places_sdk/flutter_google_places_sdk.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/arrival_check_in.dart';
 import '../../services/arrival_check_in_service.dart';
+import '../../services/google_places_service.dart';
 import '../../services/location_status_service.dart';
 import '../../services/trusted_people_service.dart';
 import '../../theme/homi_theme.dart';
@@ -32,6 +34,7 @@ class SafetyCheckInPage extends StatefulWidget {
 }
 
 class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
+  final HomiGooglePlacesService _places = HomiGooglePlacesService();
   StreamSubscription<List<TrustedConnection>>? _connectionSubscription;
   StreamSubscription<User?>? _authSubscription;
   List<TrustedConnection> _connections = const <TrustedConnection>[];
@@ -46,7 +49,7 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
     super.initState();
     widget.checkInService.addListener(_refresh);
     if (widget.firebaseReady) {
-      _authSubscription = FirebaseAuth.instance.authStateChanges().listen((_) {
+      _authSubscription = FirebaseAuth.instance.idTokenChanges().listen((_) {
         _bindConnections();
         if (mounted) setState(() {});
       });
@@ -65,7 +68,8 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
   void _refresh() {
     if (!mounted) return;
     setState(() {
-      _message ??= widget.checkInService.lastError;
+      final error = widget.checkInService.lastError;
+      if (error != null && error.trim().isNotEmpty) _message = error;
     });
   }
 
@@ -85,7 +89,7 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
     }, onError: (_) {
       if (mounted) {
         setState(() => _message =
-            'Trusted people could not refresh. Homi will try again automatically.');
+            'Trusted people could not refresh. Check your connection and try again.');
       }
     });
   }
@@ -107,10 +111,7 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
       _message = null;
     });
     try {
-      final place = await widget.checkInService.saveCurrentLocationAs(kind);
-      if (!mounted) return;
-      setState(() => _message =
-          '${kind.label} set to ${place.address ?? 'your current location'}.');
+      await widget.checkInService.saveCurrentLocationAs(kind);
     } catch (error) {
       if (mounted) setState(() => _message = _friendly(error));
     } finally {
@@ -118,28 +119,25 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
     }
   }
 
-  Future<void> _enterAddress(ArrivalPlaceKind kind) async {
-    final existing = widget.checkInService.config.place(kind);
-    final address = await showModalBottomSheet<String>(
+  Future<void> _chooseGooglePlace(ArrivalPlaceKind kind) async {
+    final selected = await showModalBottomSheet<HomiResolvedPlace>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _AddressEntrySheet(
+      builder: (_) => _GooglePlacePickerSheet(
         kind: kind,
-        initialAddress: existing?.address,
+        service: _places,
+        initialAddress: widget.checkInService.config.place(kind)?.address,
       ),
     );
-    if (address == null || address.trim().isEmpty || _busy) return;
+    if (selected == null || _busy) return;
 
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
-      final place = await widget.checkInService.saveAddressAs(kind, address);
-      if (!mounted) return;
-      setState(() => _message =
-          '${kind.label} set to ${place.address ?? address.trim()}.');
+      await widget.checkInService.saveGooglePlaceAs(kind, selected);
     } catch (error) {
       if (mounted) setState(() => _message = _friendly(error));
     } finally {
@@ -151,7 +149,7 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
       .any((place) => place.recipientUids.isNotEmpty);
 
   Future<void> _toggleCheckIns(bool value) async {
-    if (_busy) return;
+    if (_busy || widget.checkInService.busy) return;
     if (value && !_hasReadyPlace()) {
       setState(() => _message =
           'Set Home or Work and choose at least one trusted person before turning arrival check-ins on.');
@@ -164,10 +162,7 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
     });
     try {
       await widget.checkInService.setEnabled(value);
-      if (!mounted) return;
-      setState(() => _message = value
-          ? 'Arrival check-ins are on.'
-          : 'Arrival check-ins are off. Your saved places stay on this phone.');
+      if (mounted) setState(() => _message = null);
     } catch (error) {
       if (!mounted) return;
       final message = _friendly(error);
@@ -179,7 +174,7 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
           context,
           title: 'Allow background location',
           message:
-              'Arrival check-ins need Location set to “Allow all the time” so Homi can notice an arrival while you are using another app.',
+              'Arrival check-ins need Location set to “Allow all the time” so Homi can notice an arrival while you are using another app. Android keeps the Homi location notification visible while this is active.',
           confirmLabel: 'Open settings',
           cancelLabel: 'Not now',
           icon: Icons.location_on_outlined,
@@ -189,14 +184,30 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
           if (!mounted) return;
           try {
             await widget.checkInService.setEnabled(true);
-            if (mounted) {
-              setState(() => _message = 'Arrival check-ins are on.');
-            }
+            if (mounted) setState(() => _message = null);
           } catch (retryError) {
             if (mounted) setState(() => _message = _friendly(retryError));
           }
         }
       }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _setPlaceSharing(
+    ArrivalPlaceKind kind,
+    bool value,
+  ) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      await widget.checkInService.setShareAddressWithRecipients(kind, value);
+    } catch (error) {
+      if (mounted) setState(() => _message = _friendly(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -249,7 +260,13 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
         ),
       ),
     );
-    if (selected != null) await widget.checkInService.setRadius(kind, selected);
+    if (selected == null) return;
+    try {
+      await widget.checkInService.setRadius(kind, selected);
+      if (mounted) setState(() => _message = null);
+    } catch (error) {
+      if (mounted) setState(() => _message = _friendly(error));
+    }
   }
 
   Future<void> _chooseRecipients(ArrivalPlaceKind kind) async {
@@ -314,6 +331,7 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
                               secondary: _PersonAvatar(
                                 name: connection.otherName(user.uid),
                                 photoUrl: connection.otherPhotoUrl(user.uid),
+                                size: 42,
                               ),
                               title: Text(connection.otherName(user.uid)),
                               subtitle: const Text('Trusted Homi connection'),
@@ -337,8 +355,12 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
         ),
       ),
     );
-    if (result != null) {
+    if (result == null) return;
+    try {
       await widget.checkInService.setRecipients(kind, result);
+      if (mounted) setState(() => _message = null);
+    } catch (error) {
+      if (mounted) setState(() => _message = _friendly(error));
     }
   }
 
@@ -347,13 +369,19 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
       context,
       title: 'Remove ${kind.label}?',
       message:
-          'Homi will stop checking for arrivals at this saved place. Other location-sharing settings are not changed.',
+          'Homi will stop checking for arrivals at this saved place and remove any exact place share for it. Other live-location settings are not changed.',
       confirmLabel: 'Remove place',
       cancelLabel: 'Keep place',
       icon: Icons.location_off_outlined,
       destructive: true,
     );
-    if (confirmed) await widget.checkInService.removePlace(kind);
+    if (!confirmed) return;
+    try {
+      await widget.checkInService.removePlace(kind);
+      if (mounted) setState(() => _message = null);
+    } catch (error) {
+      if (mounted) setState(() => _message = _friendly(error));
+    }
   }
 
   void _showHowItWorks() {
@@ -372,33 +400,33 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
               const SizedBox(height: 16),
               const _HelpPoint(
                 icon: Icons.home_work_outlined,
-                title: 'You choose the places',
+                title: 'You choose Home and Work',
                 text:
-                    'Set Home or Work by entering an address or by using your current location while you are there.',
+                    'Search Google Maps for the correct place or use Set from here while you are physically there.',
               ),
               const _HelpPoint(
                 icon: Icons.people_outline_rounded,
-                title: 'You choose who is notified',
+                title: 'You choose who gets the arrival',
                 text:
-                    'Each saved place has its own trusted recipients. Connecting with someone does not automatically add them.',
+                    'Each place has its own trusted people. A normal Homi connection does not automatically receive check-ins.',
               ),
               const _HelpPoint(
                 icon: Icons.where_to_vote_outlined,
                 title: 'Only a real arrival sends',
                 text:
-                    'Homi first establishes whether you are inside or outside the saved area. It sends only after you leave and later arrive again.',
+                    'Homi establishes whether you are inside or outside first. It sends only after you leave and later arrive again.',
               ),
               const _HelpPoint(
                 icon: Icons.visibility_outlined,
-                title: 'Background use stays visible',
+                title: 'Background monitoring stays visible',
                 text:
                     'Android keeps a Homi location notification visible while arrival monitoring is active. There is no hidden tracking mode.',
               ),
               const _HelpPoint(
                 icon: Icons.lock_outline_rounded,
-                title: 'Saved addresses stay on this phone',
+                title: 'Exact place sharing is separate',
                 text:
-                    'The arrival notification sends only Home or Work and the selected trusted recipients. It does not send your saved address or coordinates.',
+                    'Arrival messages never include your address. Showing Home or Work in another person’s map details requires its own switch and an active location share to that person.',
               ),
               const SizedBox(height: 4),
               SizedBox(
@@ -419,7 +447,7 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
   Widget build(BuildContext context) {
     final config = widget.checkInService.config;
     final signedIn = _user != null;
-    final active = config.enabled;
+    final busy = _busy || widget.checkInService.busy;
 
     return Scaffold(
       backgroundColor: HomiColors.cream,
@@ -436,7 +464,7 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
             Text('Emergency calls', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 5),
             Text(
-              'Tapping a service opens your phone app with the South African emergency number ready. Homi does not place the call automatically.',
+              'Tap a service to open your phone app with the South African emergency number ready. Homi does not place the call automatically.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
@@ -473,38 +501,20 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
             if (!signedIn)
               _SignedOutCard(onSignIn: widget.onSignIn)
             else ...[
-              _CheckInHero(active: active),
-              const SizedBox(height: 14),
-              if (!active)
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _busy || widget.checkInService.busy
-                        ? null
-                        : () => _toggleCheckIns(true),
-                    icon: const Icon(Icons.where_to_vote_outlined),
-                    label: Text(
-                      _busy || widget.checkInService.busy
-                          ? 'Please wait…'
-                          : 'Enable arrival check-ins',
-                    ),
-                  ),
-                )
-              else
-                _CheckInPreferenceCard(
-                  value: true,
-                  enabled: !_busy && !widget.checkInService.busy,
-                  onChanged: _toggleCheckIns,
-                ),
+              _CheckInToggleCard(
+                value: config.enabled,
+                enabled: !busy,
+                onChanged: _toggleCheckIns,
+              ),
               if (_message != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _InlineMessage(text: _message!),
               ],
               const SizedBox(height: 22),
               Text('Saved places', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 5),
               Text(
-                'Use a real address or set the place from where your phone is now.',
+                'Search Google Maps for the exact address or set the place from where your phone is now.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 10),
@@ -513,11 +523,13 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
                 place: config.home,
                 connections: _connections,
                 currentUid: _user!.uid,
-                busy: _busy,
+                busy: busy,
                 onSetHere: () => _saveCurrentLocation(ArrivalPlaceKind.home),
-                onEnterAddress: () => _enterAddress(ArrivalPlaceKind.home),
+                onChooseAddress: () => _chooseGooglePlace(ArrivalPlaceKind.home),
                 onRecipients: () => _chooseRecipients(ArrivalPlaceKind.home),
                 onRadius: () => _chooseRadius(ArrivalPlaceKind.home),
+                onSharePlace: (value) =>
+                    _setPlaceSharing(ArrivalPlaceKind.home, value),
                 onRemove: () => _removePlace(ArrivalPlaceKind.home),
               ),
               _PlaceCard(
@@ -525,11 +537,13 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
                 place: config.work,
                 connections: _connections,
                 currentUid: _user!.uid,
-                busy: _busy,
+                busy: busy,
                 onSetHere: () => _saveCurrentLocation(ArrivalPlaceKind.work),
-                onEnterAddress: () => _enterAddress(ArrivalPlaceKind.work),
+                onChooseAddress: () => _chooseGooglePlace(ArrivalPlaceKind.work),
                 onRecipients: () => _chooseRecipients(ArrivalPlaceKind.work),
                 onRadius: () => _chooseRadius(ArrivalPlaceKind.work),
+                onSharePlace: (value) =>
+                    _setPlaceSharing(ArrivalPlaceKind.work, value),
                 onRemove: () => _removePlace(ArrivalPlaceKind.work),
               ),
             ],
@@ -566,68 +580,18 @@ class _SectionHeader extends StatelessWidget {
     return Row(
       children: [
         Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
-        TextButton(onPressed: onAction, child: Text(actionLabel)),
+        TextButton.icon(
+          onPressed: onAction,
+          icon: const Icon(Icons.info_outline_rounded, size: 17),
+          label: Text(actionLabel),
+        ),
       ],
     );
   }
 }
 
-class _CheckInHero extends StatelessWidget {
-  const _CheckInHero({required this.active});
-
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: active ? HomiColors.sage.withValues(alpha: 0.20) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: HomiColors.border),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: HomiColors.peach.withValues(alpha: 0.22),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Icon(
-              active ? Icons.where_to_vote_rounded : Icons.location_on_outlined,
-              color: HomiColors.coral,
-            ),
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  active
-                      ? 'Arrival check-ins are on'
-                      : 'Choose when Homi may check you in',
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  'Homi watches only the Home and Work places you configure and notifies only the trusted people you choose.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CheckInPreferenceCard extends StatelessWidget {
-  const _CheckInPreferenceCard({
+class _CheckInToggleCard extends StatelessWidget {
+  const _CheckInToggleCard({
     required this.value,
     required this.enabled,
     required this.onChanged,
@@ -651,8 +615,10 @@ class _CheckInPreferenceCard extends StatelessWidget {
                 color: HomiColors.peach.withValues(alpha: 0.17),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(
-                Icons.where_to_vote_outlined,
+              child: Icon(
+                value
+                    ? Icons.where_to_vote_rounded
+                    : Icons.where_to_vote_outlined,
                 color: HomiColors.coral,
                 size: 21,
               ),
@@ -666,7 +632,7 @@ class _CheckInPreferenceCard extends StatelessWidget {
                       style: TextStyle(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 3),
                   Text(
-                    'Turn this off without deleting your saved Home or Work places.',
+                    'When on, Homi watches the Home and Work areas you saved in the background and sends arrivals only to the people you chose. Turning it off keeps your saved places.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ],
@@ -773,9 +739,10 @@ class _PlaceCard extends StatelessWidget {
     required this.currentUid,
     required this.busy,
     required this.onSetHere,
-    required this.onEnterAddress,
+    required this.onChooseAddress,
     required this.onRecipients,
     required this.onRadius,
+    required this.onSharePlace,
     required this.onRemove,
   });
 
@@ -785,21 +752,21 @@ class _PlaceCard extends StatelessWidget {
   final String currentUid;
   final bool busy;
   final VoidCallback onSetHere;
-  final VoidCallback onEnterAddress;
+  final VoidCallback onChooseAddress;
   final VoidCallback onRecipients;
   final VoidCallback onRadius;
+  final ValueChanged<bool> onSharePlace;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
     final saved = place != null;
-    final recipientNames = saved
+    final recipients = saved
         ? connections
             .where((connection) =>
                 place!.recipientUids.contains(connection.otherUid(currentUid)))
-            .map((connection) => connection.otherName(currentUid))
             .toList(growable: false)
-        : const <String>[];
+        : const <TrustedConnection>[];
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -842,13 +809,69 @@ class _PlaceCard extends StatelessWidget {
               if (saved) ...[
                 const SizedBox(height: 5),
                 Text(
-                  '${place!.radiusMeters.round()} m arrival area · ${recipientNames.isEmpty ? 'no people selected' : recipientNames.length == 1 ? 'notifies ${recipientNames.first}' : 'notifies ${recipientNames.length} people'}',
+                  '${place!.radiusMeters.round()} m arrival area',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
-                if (place!.lastNotifiedAt != null) ...[
-                  const SizedBox(height: 3),
+                const SizedBox(height: 14),
+                Text('Arrival check-in people',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 9),
+                if (recipients.isEmpty)
                   Text(
-                    'Last check-in sent ${_timeLabel(place!.lastNotifiedAt!)}',
+                    'No people selected yet.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  )
+                else
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 10,
+                    children: recipients
+                        .map((connection) => _RecipientBadge(
+                              name: connection.otherName(currentUid),
+                              photoUrl: connection.otherPhotoUrl(currentUid),
+                            ))
+                        .toList(growable: false),
+                  ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(12, 9, 6, 9),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: HomiColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.home_work_outlined,
+                          size: 20, color: HomiColors.coral),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Show this place to selected people',
+                                style: TextStyle(fontWeight: FontWeight.w900)),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Lets them see this exact ${kind.label} in your map details only while you are also sharing your location with them.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: place!.shareAddressWithRecipients,
+                        onChanged: busy || recipients.isEmpty
+                            ? null
+                            : onSharePlace,
+                      ),
+                    ],
+                  ),
+                ),
+                if (place!.lastNotifiedAt != null) ...[
+                  const SizedBox(height: 9),
+                  Text(
+                    'Last arrival sent ${_timeLabel(place!.lastNotifiedAt!)}',
                     style: const TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w800,
@@ -863,9 +886,9 @@ class _PlaceCard extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   FilledButton.tonalIcon(
-                    onPressed: busy ? null : onEnterAddress,
+                    onPressed: busy ? null : onChooseAddress,
                     icon: const Icon(Icons.search_rounded, size: 18),
-                    label: Text(saved ? 'Change address' : 'Enter address'),
+                    label: Text(saved ? 'Change address' : 'Find address'),
                   ),
                   OutlinedButton.icon(
                     onPressed: busy ? null : onSetHere,
@@ -905,81 +928,226 @@ class _PlaceCard extends StatelessWidget {
   }
 }
 
-class _AddressEntrySheet extends StatefulWidget {
-  const _AddressEntrySheet({required this.kind, this.initialAddress});
+class _RecipientBadge extends StatelessWidget {
+  const _RecipientBadge({required this.name, required this.photoUrl});
+
+  final String name;
+  final String? photoUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 66,
+      child: Column(
+        children: [
+          _PersonAvatar(name: name, photoUrl: photoUrl, size: 48),
+          const SizedBox(height: 5),
+          Text(
+            name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GooglePlacePickerSheet extends StatefulWidget {
+  const _GooglePlacePickerSheet({
+    required this.kind,
+    required this.service,
+    this.initialAddress,
+  });
 
   final ArrivalPlaceKind kind;
+  final HomiGooglePlacesService service;
   final String? initialAddress;
 
   @override
-  State<_AddressEntrySheet> createState() => _AddressEntrySheetState();
+  State<_GooglePlacePickerSheet> createState() =>
+      _GooglePlacePickerSheetState();
 }
 
-class _AddressEntrySheetState extends State<_AddressEntrySheet> {
+class _GooglePlacePickerSheetState extends State<_GooglePlacePickerSheet> {
   late final TextEditingController _controller;
+  Timer? _debounce;
+  List<HomiPlaceSuggestion> _suggestions = const <HomiPlaceSuggestion>[];
+  String? _error;
+  bool _loading = false;
+  String _lastQuery = '';
 
   @override
   void initState() {
     super.initState();
+    widget.service.startNewSession();
     _controller = TextEditingController(text: widget.initialAddress ?? '');
+    if (_controller.text.trim().length >= 3 && widget.service.configured) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scheduleSearch(_controller.text);
+      });
+    }
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
-  void _submit() {
-    final value = _controller.text.trim();
-    if (value.length < 4) return;
-    Navigator.pop(context, value);
+  void _scheduleSearch(String value) {
+    _debounce?.cancel();
+    final query = value.trim();
+    if (query.length < 3) {
+      setState(() {
+        _suggestions = const <HomiPlaceSuggestion>[];
+        _error = null;
+        _loading = false;
+      });
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 350), () => _search(query));
   }
+
+  Future<void> _search(String query) async {
+    if (!widget.service.configured) return;
+    _lastQuery = query;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final results = await widget.service.search(query);
+      if (!mounted || query != _lastQuery) return;
+      setState(() => _suggestions = results);
+    } catch (error) {
+      if (!mounted || query != _lastQuery) return;
+      setState(() {
+        _suggestions = const <HomiPlaceSuggestion>[];
+        _error = _friendly(error);
+      });
+    } finally {
+      if (mounted && query == _lastQuery) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _select(HomiPlaceSuggestion suggestion) async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final resolved = await widget.service.resolve(suggestion);
+      if (mounted) Navigator.pop(context, resolved);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = _friendly(error);
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  String _friendly(Object error) => error
+      .toString()
+      .replaceFirst('Bad state: ', '')
+      .replaceFirst('StateError: ', '')
+      .replaceFirst('Exception: ', '');
 
   @override
   Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          4,
-          20,
-          20 + MediaQuery.viewInsetsOf(context).bottom,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.82,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Set ${widget.kind.label} address',
-                style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 6),
-            Text(
-              'Enter a street address, suburb and city, or a recognised place name. Homi resolves it to a map location before saving it.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _controller,
-              autofocus: true,
-              keyboardType: TextInputType.streetAddress,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                labelText: '${widget.kind.label} address',
-                hintText: '12 Long Street, Cape Town',
-                prefixIcon: const Icon(Icons.location_on_outlined),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Find ${widget.kind.label}',
+                  style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 6),
+              Text(
+                'Start typing an address or place in South Africa, then choose the correct Google Maps result.',
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _submit,
-                icon: const Icon(Icons.search_rounded),
-                label: const Text('Find and use this address'),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _controller,
+                autofocus: true,
+                keyboardType: TextInputType.streetAddress,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  labelText: '${widget.kind.label} address',
+                  hintText: 'Start typing an address',
+                  prefixIcon: const Icon(Icons.location_on_outlined),
+                  suffixIcon: _loading
+                      ? const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : null,
+                ),
+                onChanged: _scheduleSearch,
               ),
-            ),
-          ],
+              if (!widget.service.configured) ...[
+                const SizedBox(height: 12),
+                const _InlineMessage(
+                  text:
+                      'Google address search needs the Homi Places key configured for this build. You can close this and use Set from here in the meantime.',
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                _InlineMessage(text: _error!),
+              ],
+              const SizedBox(height: 8),
+              if (widget.service.configured)
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: _suggestions.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final suggestion = _suggestions[index];
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.place_outlined,
+                            color: HomiColors.coral),
+                        title: Text(suggestion.primaryText),
+                        subtitle: suggestion.secondaryText.trim().isEmpty
+                            ? null
+                            : Text(suggestion.secondaryText),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: _loading ? null : () => _select(suggestion),
+                      );
+                    },
+                  ),
+                ),
+              if (widget.service.configured) ...[
+                const SizedBox(height: 10),
+                Center(
+                  child: Image(
+                    image: FlutterGooglePlacesSdk.ASSET_POWERED_BY_GOOGLE_ON_WHITE,
+                    height: 18,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -994,10 +1162,11 @@ class _InlineMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      width: double.infinity,
+      padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
         color: HomiColors.peach.withValues(alpha: 0.13),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: HomiColors.border),
       ),
       child: Text(text),
@@ -1006,27 +1175,41 @@ class _InlineMessage extends StatelessWidget {
 }
 
 class _PersonAvatar extends StatelessWidget {
-  const _PersonAvatar({required this.name, required this.photoUrl});
+  const _PersonAvatar({
+    required this.name,
+    required this.photoUrl,
+    required this.size,
+  });
 
   final String name;
   final String? photoUrl;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
+    final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
     final url = photoUrl?.trim();
-    return CircleAvatar(
-      radius: 20,
-      backgroundColor: HomiColors.sage.withValues(alpha: 0.28),
-      backgroundImage: url != null && url.isNotEmpty ? NetworkImage(url) : null,
+    return Container(
+      width: size,
+      height: size,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: HomiColors.sage.withValues(alpha: 0.28),
+      ),
       child: url == null || url.isEmpty
-          ? Text(
-              name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase(),
-              style: const TextStyle(
-                color: HomiColors.slate,
-                fontWeight: FontWeight.w900,
-              ),
+          ? Center(
+              child: Text(initial,
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
             )
-          : null,
+          : Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Center(
+                child: Text(initial,
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
+              ),
+            ),
     );
   }
 }

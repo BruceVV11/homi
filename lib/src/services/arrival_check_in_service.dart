@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -23,6 +24,7 @@ class ArrivalCheckInService extends ChangeNotifier {
   final bool firebaseReady;
   final LocationStatusService locationService;
   final HomiCloudActions _cloudActions;
+  final Geocoding _geocoding = Geocoding();
 
   SharedPreferences? _preferences;
   StreamSubscription<LocationStatusSnapshot>? _locationSubscription;
@@ -97,11 +99,8 @@ class ArrivalCheckInService extends ChangeNotifier {
     }
     await locationService.syncArrivalMonitoringPreference(_config.enabled);
     if (_config.enabled) {
-      // This resume path never opens a permission prompt. If background access
-      // was revoked, the Safety & check-ins screen explains how to restore it.
-      // Do not prime from locationService.latest here: it can be a cached point
-      // from a previous process. The first fresh stream update establishes the
-      // inside/outside state without sending an arrival.
+      // Startup resume never opens a permission prompt. Do not prime from a
+      // cached point; the first fresh stream update establishes zone state.
       await locationService.resumeContinuousSharingIfEnabled();
     }
     notifyListeners();
@@ -113,21 +112,21 @@ class ArrivalCheckInService extends ChangeNotifier {
     _requireSignedIn();
     _setBusy(true);
     try {
-      // Saving Home/Work is deliberately local-only. It must not refresh the
-      // cloud latest-location document unless Live updates is independently on.
+      // Home/Work setup is local-only. It must not refresh the cloud latest
+      // location document unless Live updates is independently on.
       final snapshot = await locationService.captureCurrentStatus(
         syncCloud: false,
       );
-      final existing = _config.place(kind);
-      final place = ArrivalCheckInPlace(
+      final address = await _readableAddress(
+        snapshot.latitude,
+        snapshot.longitude,
+      );
+      final place = _replacePlace(
         kind: kind,
         latitude: snapshot.latitude,
         longitude: snapshot.longitude,
-        radiusMeters: existing?.radiusMeters ?? _defaultRadiusMeters,
-        recipientUids: existing?.recipientUids ?? const <String>[],
-        lastNotifiedAt: existing?.lastNotifiedAt,
+        address: address,
       );
-      _config = _config.withPlace(place);
       _inside[kind] = true;
       _lastError = null;
       await _save();
@@ -136,6 +135,107 @@ class ArrivalCheckInService extends ChangeNotifier {
     } finally {
       _setBusy(false);
     }
+  }
+
+  Future<ArrivalCheckInPlace> saveAddressAs(
+    ArrivalPlaceKind kind,
+    String address,
+  ) async {
+    _requireSignedIn();
+    final query = address.trim();
+    if (query.length < 4) {
+      throw StateError('Enter a street address or place first.');
+    }
+
+    _setBusy(true);
+    try {
+      final matches = await _geocoding.locationFromAddress(query);
+      if (matches.isEmpty) {
+        throw StateError('Homi could not find that address.');
+      }
+      final match = matches.first;
+      final resolvedAddress = await _readableAddress(
+        match.latitude,
+        match.longitude,
+        fallback: query,
+      );
+      final place = _replacePlace(
+        kind: kind,
+        latitude: match.latitude,
+        longitude: match.longitude,
+        address: resolvedAddress,
+      );
+      // An entered address may be somewhere other than the phone's current
+      // position, so let the next fresh sample establish inside/outside state.
+      _inside.remove(kind);
+      _lastError = null;
+      await _save();
+      notifyListeners();
+      return place;
+    } catch (error) {
+      if (error is StateError) rethrow;
+      throw StateError(
+        'Homi could not resolve that address right now. Check the address and your connection, then try again.',
+      );
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  ArrivalCheckInPlace _replacePlace({
+    required ArrivalPlaceKind kind,
+    required double latitude,
+    required double longitude,
+    required String address,
+  }) {
+    final existing = _config.place(kind);
+    final place = ArrivalCheckInPlace(
+      kind: kind,
+      latitude: latitude,
+      longitude: longitude,
+      radiusMeters: existing?.radiusMeters ?? _defaultRadiusMeters,
+      recipientUids: existing?.recipientUids ?? const <String>[],
+      address: address,
+      lastNotifiedAt: existing?.lastNotifiedAt,
+    );
+    _config = _config.withPlace(place);
+    return place;
+  }
+
+  Future<String> _readableAddress(
+    double latitude,
+    double longitude, {
+    String? fallback,
+  }) async {
+    try {
+      final placemarks = await _geocoding.placemarkFromCoordinates(
+        latitude,
+        longitude,
+      );
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        final parts = <String?>[
+          place.street,
+          place.subLocality,
+          place.locality,
+          place.administrativeArea,
+          place.postalCode,
+          place.country,
+        ]
+            .whereType<String>()
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList(growable: false);
+        if (parts.isNotEmpty) return parts.join(', ');
+      }
+    } catch (_) {
+      // The coordinates remain valid even when the platform geocoder cannot
+      // provide a friendly label at that moment.
+    }
+    final safeFallback = fallback?.trim();
+    if (safeFallback != null && safeFallback.isNotEmpty) return safeFallback;
+    return '${latitude.toStringAsFixed(5)}, ${longitude.toStringAsFixed(5)}';
   }
 
   Future<void> setRadius(
@@ -202,9 +302,9 @@ class ArrivalCheckInService extends ChangeNotifier {
       _setBusy(true);
       try {
         await locationService.startArrivalMonitoring();
-        // Force one fresh local-only point after the feature becomes active so
-        // it can establish zone state without relying on cached coordinates.
-        // A timeout is harmless; the next fresh stream update primes the state.
+        // Force a fresh local-only point so enabling never relies on a cached
+        // position. A timeout is harmless; the stream will prime on its next
+        // fresh update.
         try {
           await locationService.captureCurrentStatus(syncCloud: false);
         } catch (_) {}
@@ -336,7 +436,7 @@ class ArrivalCheckInService extends ChangeNotifier {
     _requireSignedIn();
     final place = _config.place(kind);
     if (place == null) {
-      throw StateError('Set ${kind.label} from your current location first.');
+      throw StateError('Set ${kind.label} first.');
     }
     return place;
   }

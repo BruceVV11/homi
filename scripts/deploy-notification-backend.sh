@@ -3,6 +3,9 @@ set -Eeuo pipefail
 
 PROJECT_ID="homi-ee80a"
 EXPECTED_PROJECT_NUMBER="883068189841"
+FUNCTION_REGION="africa-south1"
+LEGACY_CONNECTION_DELETE_FUNCTION="onConnectionDeleted"
+REPLACEMENT_CONNECTION_DELETE_FUNCTION="onTrustedConnectionDeleted"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FUNCTIONS_DIR="${REPO_ROOT}/functions"
@@ -15,7 +18,7 @@ if [ "${ACTUAL_PROJECT_NUMBER}" != "${EXPECTED_PROJECT_NUMBER}" ]; then
   exit 1
 fi
 
-if [ ! -f functions/package.json ] || [ ! -f functions/index.js ]; then
+if [ ! -f functions/package.json ] || [ ! -f functions/index.js ] || [ ! -f functions/entrypoint.js ]; then
   echo "Homi Functions source is incomplete." >&2
   exit 1
 fi
@@ -48,6 +51,14 @@ trap cleanup EXIT
 
 NPM_CACHE_DIR="${WORK_ROOT}/npm-cache"
 mkdir -p "${NPM_CACHE_DIR}"
+
+run_firebase() {
+  if command -v firebase >/dev/null 2>&1; then
+    firebase "$@"
+  else
+    npm_config_cache="${NPM_CACHE_DIR}" npx -y firebase-tools "$@"
+  fi
+}
 
 echo "==> Preparing Homi Functions dependency lock"
 npm install \
@@ -84,11 +95,47 @@ else
   exit 1
 fi
 
-if command -v firebase >/dev/null 2>&1; then
-  firebase deploy --only firestore,functions --project "${PROJECT_ID}"
-else
-  npm_config_cache="${NPM_CACHE_DIR}" \
-    npx -y firebase-tools deploy --only firestore,functions --project "${PROJECT_ID}"
+# Firebase cannot change an existing Function from HTTPS to an event trigger in
+# place. Homi has a stale HTTPS function named onConnectionDeleted, while the
+# 0.8.2 source needs a Firestore deletion backstop. Migrate safely and
+# idempotently: deploy the renamed trigger, prove it ACTIVE, then delete only
+# the exact stale name/region before the normal full deployment continues.
+LEGACY_PRESENT=false
+if gcloud functions describe "${LEGACY_CONNECTION_DELETE_FUNCTION}" \
+    --gen2 \
+    --region "${FUNCTION_REGION}" \
+    --project "${PROJECT_ID}" >/dev/null 2>&1; then
+  LEGACY_PRESENT=true
+elif gcloud functions describe "${LEGACY_CONNECTION_DELETE_FUNCTION}" \
+    --region "${FUNCTION_REGION}" \
+    --project "${PROJECT_ID}" >/dev/null 2>&1; then
+  LEGACY_PRESENT=true
 fi
+
+if [ "${LEGACY_PRESENT}" = true ]; then
+  echo "==> Migrating legacy Homi connection-delete trigger"
+  run_firebase deploy \
+    --only "functions:${REPLACEMENT_CONNECTION_DELETE_FUNCTION}" \
+    --project "${PROJECT_ID}"
+
+  REPLACEMENT_STATE="$(gcloud functions describe "${REPLACEMENT_CONNECTION_DELETE_FUNCTION}" \
+    --gen2 \
+    --region "${FUNCTION_REGION}" \
+    --project "${PROJECT_ID}" \
+    --format='value(state)' 2>/dev/null || true)"
+  if [ "${REPLACEMENT_STATE}" != "ACTIVE" ]; then
+    echo "Replacement connection-delete trigger is not ACTIVE; refusing to delete the legacy function." >&2
+    exit 1
+  fi
+
+  echo "Replacement trigger is ACTIVE. Removing exact stale HTTPS function."
+  run_firebase functions:delete "${LEGACY_CONNECTION_DELETE_FUNCTION}" \
+    --region "${FUNCTION_REGION}" \
+    --project "${PROJECT_ID}" \
+    --force
+fi
+
+echo "==> Deploying Homi Firestore and Functions"
+run_firebase deploy --only firestore,functions --project "${PROJECT_ID}"
 
 echo "Homi backend deployment completed."

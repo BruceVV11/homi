@@ -209,8 +209,25 @@ service cloud.firestore {
         ];
     }
 
+    function validUserProfile(data) {
+      return data.keys().hasOnly([
+          'homiCode', 'displayName', 'photoUrl', 'updatedAt'
+        ])
+        && data.keys().hasAll(['homiCode', 'displayName', 'updatedAt'])
+        && data.homiCode is string
+        && data.homiCode.size() == 6
+        && shortString(data.displayName, 80)
+        && optionalString(data.photoUrl, 1000)
+        && data.updatedAt == request.time;
+    }
+
     match /users/{uid} {
-      allow read, create, update, delete: if isSelf(uid);
+      allow read, delete: if isSelf(uid);
+      allow create: if isSelf(uid)
+        && validUserProfile(request.resource.data);
+      allow update: if isSelf(uid)
+        && validUserProfile(request.resource.data)
+        && request.resource.data.homiCode == resource.data.homiCode;
 
       match /devices/{deviceId} {
         allow read, delete: if isSelf(uid);
@@ -220,17 +237,11 @@ service cloud.firestore {
       }
     }
 
-    // Developer access is provisioned outside the app. A signed-in user may
-    // only inspect their own record so Homi can decide whether to show the
-    // developer notification centre.
     match /developerAdmins/{uid} {
       allow get: if isSelf(uid);
       allow list, create, update, delete: if false;
     }
 
-    // Developers may queue a narrowly validated campaign. Delivery state is
-    // written only by the Admin SDK in Cloud Functions, which bypasses client
-    // rules. No user can grant themselves developer access from the app.
     match /notificationCampaigns/{campaignId} {
       allow read: if isDeveloperAdmin();
       allow create: if isDeveloperAdmin()
@@ -259,7 +270,6 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Server-only anti-spam/rate-limit state.
     match /heartCooldowns/{documentId} {
       allow read, write: if false;
     }
@@ -267,9 +277,6 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Homi codes are authenticated exact-lookups only. They are not a
-    // browseable people directory. Writes are limited to the owner's own
-    // compact identity record.
     match /homiCodes/{code} {
       allow get: if signedIn();
       allow list: if false;
@@ -296,10 +303,6 @@ service cloud.firestore {
         && resource.data.uid == request.auth.uid;
     }
 
-    // aUid/bUid are deterministic participant fields. The client uses one
-    // equality query for each field and merges the results. The document ID
-    // must match those participant fields so callers cannot create unlimited
-    // duplicate request documents for the same ordered pair.
     match /connections/{connectionId} {
       allow get, list: if isConnectionMember(resource.data);
 
@@ -350,8 +353,6 @@ service cloud.firestore {
       allow delete: if isConnectionMember(resource.data);
     }
 
-    // Relationship labels and household-vs-friend scope are private to the
-    // owner and may only exist for an accepted trusted connection.
     match /peoplePreferences/{ownerUid}/people/{otherUid} {
       allow read: if isSelf(ownerUid);
       allow create, update: if isSelf(ownerUid)
@@ -366,8 +367,6 @@ service cloud.firestore {
       allow delete: if isSelf(ownerUid) || isSelf(otherUid);
     }
 
-    // Household tasks carry an explicit memberUids visibility list. Personal
-    // tasks assigned to the creator remain local-only and never enter here.
     match /sharedTasks/{taskId} {
       allow get, list: if isSharedTaskMember(resource.data);
 
@@ -442,12 +441,9 @@ service cloud.firestore {
         && request.resource.data.active is bool
         && request.resource.data.updatedAt == request.time
         && hasAcceptedConnection(ownerUid, viewerUid);
-      // The viewer may remove their own access record during account deletion.
       allow delete: if isSelf(ownerUid) || isSelf(viewerUid);
     }
 
-    // Homi stores only the latest shared location/battery snapshot here.
-    // Movement history is deliberately not enabled by default.
     match /locations/{ownerUid} {
       allow create, update: if isSelf(ownerUid)
         && validLocationSnapshot(request.resource.data);

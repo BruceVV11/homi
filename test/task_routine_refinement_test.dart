@@ -113,22 +113,49 @@ void main() {
     expect(routine.durationLabel, '60+ min');
   });
 
-  test('legacy supply without icon uses the general supply icon key', () {
+  test('legacy supply without icon or quantity remains valid', () {
     final restored = SupplyItem.decode(
       '{"id":"milk","name":"Milk","category":"Fridge","status":"okay"}',
     );
     expect(restored.iconKey, 'inventory');
+    expect(restored.tracksQuantity, isFalse);
+    expect(restored.quantityLabel, isNull);
   });
 
-  test('selected supply icon survives persistence', () {
+  test('selected supply icon and amount survive persistence', () {
     const source = SupplyItem(
       id: 'bread',
       name: 'Bread',
       category: 'Pantry',
       status: SupplyStatus.okay,
       iconKey: 'bread',
+      quantity: 2,
+      unit: SupplyUnit.loaf,
     );
-    expect(SupplyItem.decode(source.encode()).iconKey, 'bread');
+    final restored = SupplyItem.decode(source.encode());
+    expect(restored.iconKey, 'bread');
+    expect(restored.quantity, 2);
+    expect(restored.unit, SupplyUnit.loaf);
+    expect(restored.quantityLabel, '2 loaves');
+  });
+
+  test('zero tracked supply becomes need to buy', () {
+    const source = SupplyItem(
+      id: 'eggs',
+      name: 'Eggs',
+      category: 'Fridge',
+      status: SupplyStatus.okay,
+      quantity: 0,
+      unit: SupplyUnit.egg,
+    );
+    expect(
+      source.effectiveStatus(DateTime(2026, 9, 10)),
+      SupplyStatus.needToBuy,
+    );
+    expect(
+      source.displayStatusLabel(DateTime(2026, 9, 10)),
+      'Need to buy',
+    );
   });
 
   test('utility unit choices stay controlled by type', () {

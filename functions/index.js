@@ -3,6 +3,7 @@ const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {
   onDocumentCreated,
   onDocumentUpdated,
+  onDocumentDeleted,
 } = require("firebase-functions/v2/firestore");
 const logger = require("firebase-functions/logger");
 const {initializeApp} = require("firebase-admin/app");
@@ -19,7 +20,6 @@ const db = getFirestore();
 const messaging = getMessaging();
 
 const HEART_COOLDOWN_MS = 60 * 1000;
-const MAX_CAMPAIGN_DEVICES = 10000;
 
 function channelForCategory(category) {
   switch (category) {
@@ -37,6 +37,17 @@ function channelForCategory(category) {
     case "service":
     case "security":
       return "homi_service";
+    default:
+      return "homi_updates";
+  }
+}
+
+function topicForCategory(category) {
+  switch (category) {
+    case "service":
+      return "homi_service";
+    case "security":
+      return "homi_security";
     default:
       return "homi_updates";
   }
@@ -73,15 +84,6 @@ async function userDeviceDocs(uid) {
       .doc(uid)
       .collection("devices")
       .where("notificationsEnabled", "==", true)
-      .get();
-  return snapshot.docs;
-}
-
-async function allEnabledDeviceDocs() {
-  const snapshot = await db
-      .collectionGroup("devices")
-      .where("notificationsEnabled", "==", true)
-      .limit(MAX_CAMPAIGN_DEVICES)
       .get();
   return snapshot.docs;
 }
@@ -141,6 +143,7 @@ async function sendToDeviceDocs({
             group[index].doc.ref.set(
                 {
                   pushToken: FieldValue.delete(),
+                  notificationsEnabled: false,
                   updatedAt: FieldValue.serverTimestamp(),
                 },
                 {merge: true},
@@ -159,6 +162,22 @@ async function sendToUser(uid, payload) {
     deviceDocs: await userDeviceDocs(uid),
     ...payload,
   });
+}
+
+async function sendBroadcast({title, body, category, route, priority}) {
+  const messageId = await messaging.send({
+    topic: topicForCategory(category),
+    notification: {title, body},
+    data: {category, route},
+    android: {
+      priority: priority === "important" ? "high" : "normal",
+      notification: {
+        channelId: channelForCategory(category),
+        icon: "homi_notification",
+      },
+    },
+  });
+  return messageId;
 }
 
 async function acceptedConnection(firstUid, secondUid) {
@@ -293,7 +312,6 @@ exports.onSharedTaskCreated = onDocumentCreated(
       const data = event.data && event.data.data();
       if (!data) return;
       const creatorUid = data.createdByUid;
-      const title = data.title || "Household task";
       const creatorName = data.createdByName || "Someone at home";
       const members = Array.isArray(data.memberUids) ? data.memberUids : [];
       const assigneeUid = data.assigneeUid;
@@ -303,7 +321,7 @@ exports.onSharedTaskCreated = onDocumentCreated(
       await Promise.all(
           [...new Set(recipients)].map((uid) => sendToUser(uid, {
             title: assigneeUid ? "A task was assigned to you" : "New household task",
-            body: `${title} · from ${creatorName}`,
+            body: `${creatorName} added a household task.`,
             category: "task",
             route: "tasks",
             priority: "important",
@@ -326,7 +344,7 @@ exports.onSharedTaskUpdated = onDocumentUpdated(
       const completedByName = after.completedByName || "Someone at home";
       await sendToUser(creatorUid, {
         title: "Household task completed",
-        body: `${completedByName} completed ${after.title || "a household task"}.`,
+        body: `${completedByName} completed a household task.`,
         category: "task",
         route: "tasks",
         priority: "normal",
@@ -377,28 +395,44 @@ exports.onNotificationCampaignCreated = onDocumentCreated(
             {merge: true},
         );
 
-        const deviceDocs = audience === "self" ?
-          await userDeviceDocs(creatorUid) : await allEnabledDeviceDocs();
-        const result = await sendToDeviceDocs({
-          deviceDocs,
-          title,
-          body,
-          category,
-          route,
-          priority,
-          extraData: {campaignId: event.params.campaignId},
-        });
-
-        await campaignRef.set(
-            {
-              status: "sent",
-              sentAt: FieldValue.serverTimestamp(),
-              eligibleCount: result.eligibleCount,
-              sentCount: result.successCount,
-              failureCount: result.failureCount,
-            },
-            {merge: true},
-        );
+        if (audience === "self") {
+          const result = await sendToUser(creatorUid, {
+            title,
+            body,
+            category,
+            route,
+            priority,
+            extraData: {campaignId: event.params.campaignId},
+          });
+          await campaignRef.set(
+              {
+                status: "sent",
+                deliveryMode: "direct",
+                sentAt: FieldValue.serverTimestamp(),
+                eligibleCount: result.eligibleCount,
+                sentCount: result.successCount,
+                failureCount: result.failureCount,
+              },
+              {merge: true},
+          );
+        } else {
+          const messageId = await sendBroadcast({
+            title,
+            body,
+            category,
+            route,
+            priority,
+          });
+          await campaignRef.set(
+              {
+                status: "sent",
+                deliveryMode: "topic",
+                sentAt: FieldValue.serverTimestamp(),
+                fcmMessageId: messageId,
+              },
+              {merge: true},
+          );
+        }
       } catch (error) {
         logger.error("Homi notification campaign failed", error);
         await campaignRef.set(
@@ -409,6 +443,39 @@ exports.onNotificationCampaignCreated = onDocumentCreated(
             },
             {merge: true},
         );
+      }
+    },
+);
+
+// Account deletion removes server-only notification metadata that the client
+// cannot read/write by design. The user's device subcollection is removed by
+// the account deletion service before the user document is deleted.
+exports.onHomiUserDocumentDeleted = onDocumentDeleted(
+    "users/{uid}",
+    async (event) => {
+      const uid = event.params.uid;
+      const [sentHearts, receivedHearts, campaigns, developerAdmin] =
+        await Promise.all([
+          db.collection("heartCooldowns").where("senderUid", "==", uid).get(),
+          db.collection("heartCooldowns").where("recipientUid", "==", uid).get(),
+          db.collection("notificationCampaigns")
+              .where("createdByUid", "==", uid).get(),
+          db.collection("developerAdmins").doc(uid).get(),
+        ]);
+
+      const refs = new Map();
+      sentHearts.docs.forEach((doc) => refs.set(doc.ref.path, doc.ref));
+      receivedHearts.docs.forEach((doc) => refs.set(doc.ref.path, doc.ref));
+      campaigns.docs.forEach((doc) => refs.set(doc.ref.path, doc.ref));
+      if (developerAdmin.exists) {
+        refs.set(developerAdmin.ref.path, developerAdmin.ref);
+      }
+
+      const documents = [...refs.values()];
+      for (let start = 0; start < documents.length; start += 450) {
+        const batch = db.batch();
+        documents.slice(start, start + 450).forEach((ref) => batch.delete(ref));
+        await batch.commit();
       }
     },
 );

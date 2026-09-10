@@ -120,8 +120,6 @@ class LocationStatusService {
 
   /// Synchronizes the local check-in feature's user-scoped enabled state into
   /// the shared location-stream coordinator without opening a permission UI.
-  /// The caller can then use resumeContinuousSharingIfEnabled() to resume only
-  /// when Android permission is already available.
   Future<void> syncArrivalMonitoringPreference(bool enabled) async {
     _arrivalMonitoringRequested = enabled;
     final prefs = await SharedPreferences.getInstance();
@@ -145,6 +143,7 @@ class LocationStatusService {
 
   Future<LocationStatusSnapshot> captureCurrentStatus({
     bool requestPermission = true,
+    bool syncCloud = true,
   }) async {
     await _ensureLocationService();
     final permission = await _permission(requestIfNeeded: requestPermission);
@@ -159,7 +158,11 @@ class LocationStatusService {
         timeLimit: Duration(seconds: 20),
       ),
     );
-    return _snapshotFromPosition(position, source: 'foreground_refresh');
+    return _snapshotFromPosition(
+      position,
+      source: 'foreground_refresh',
+      syncCloud: syncCloud,
+    );
   }
 
   Future<void> startContinuousSharing() async {
@@ -169,10 +172,21 @@ class LocationStatusService {
       permissionMessage:
           'For background sharing, set Homi location access to “Allow all the time” in Android Settings.',
     );
-    await _startPositionStream();
+
     _liveSharingRequested = true;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_continuousEnabledKey, true);
+    try {
+      await _startPositionStream();
+      final current = _latest;
+      if (current != null) {
+        await _syncIfSignedIn(current, source: 'live_updates_enabled');
+      }
+    } catch (_) {
+      _liveSharingRequested = false;
+      await prefs.setBool(_continuousEnabledKey, false);
+      rethrow;
+    }
   }
 
   Future<void> startArrivalMonitoring() async {
@@ -291,6 +305,7 @@ class LocationStatusService {
           await _snapshotFromPosition(
             position,
             source: 'continuous_foreground_service',
+            syncCloud: _liveSharingRequested,
           );
         } catch (_) {
           // A single failed battery/network sync should not stop location
@@ -313,6 +328,7 @@ class LocationStatusService {
       await _snapshotFromPosition(
         position,
         source: 'continuous_start',
+        syncCloud: _liveSharingRequested,
       );
     } catch (_) {
       // The stream remains active even if the immediate refresh times out.
@@ -322,6 +338,7 @@ class LocationStatusService {
   Future<LocationStatusSnapshot> _snapshotFromPosition(
     Position position, {
     required String source,
+    required bool syncCloud,
   }) async {
     final batteryPercent = await _battery.batteryLevel;
     final batteryState = await _battery.batteryState;
@@ -337,7 +354,9 @@ class LocationStatusService {
 
     _latest = snapshot;
     await _persist(snapshot);
-    await _syncIfSignedIn(snapshot, source: source);
+    if (syncCloud) {
+      await _syncIfSignedIn(snapshot, source: source);
+    }
     if (!_updates.isClosed) _updates.add(snapshot);
     return snapshot;
   }

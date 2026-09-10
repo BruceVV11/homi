@@ -180,7 +180,7 @@ class LocationStatusService {
       await _startPositionStream();
       final current = _latest;
       if (current != null) {
-        await _syncIfSignedIn(current, source: 'live_updates_enabled');
+        await _syncIfSignedIn(current, source: 'continuous_start');
       }
     } catch (_) {
       _liveSharingRequested = false;

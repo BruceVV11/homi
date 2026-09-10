@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
@@ -67,6 +66,7 @@ class ArrivalCheckInService extends ChangeNotifier {
 
     if (uid == null) {
       _config = const ArrivalCheckInConfig();
+      await locationService.syncArrivalMonitoringPreference(false);
       notifyListeners();
       return;
     }
@@ -85,6 +85,13 @@ class ArrivalCheckInService extends ChangeNotifier {
         _config = const ArrivalCheckInConfig();
         _lastError = 'Saved check-in settings could not be read.';
       }
+    }
+
+    await locationService.syncArrivalMonitoringPreference(_config.enabled);
+    if (_config.enabled) {
+      // This resume path never opens a permission prompt. If background access
+      // was revoked, the Safety & check-ins screen explains how to restore it.
+      await locationService.resumeContinuousSharingIfEnabled();
     }
 
     final latest = locationService.latest;
@@ -160,7 +167,7 @@ class ArrivalCheckInService extends ChangeNotifier {
     }
     _inside.remove(kind);
     await _save();
-    if (!_config.enabled) await _stopLocationIfCheckInsAreOnlyConsumer();
+    if (!_config.enabled) await locationService.stopArrivalMonitoring();
     notifyListeners();
   }
 
@@ -177,7 +184,7 @@ class ArrivalCheckInService extends ChangeNotifier {
       }
       _setBusy(true);
       try {
-        await locationService.startContinuousSharing();
+        await locationService.startArrivalMonitoring();
       } finally {
         _setBusy(false);
       }
@@ -189,31 +196,8 @@ class ArrivalCheckInService extends ChangeNotifier {
     _inside.clear();
     if (latest != null) _primeZoneState(latest);
     await _save();
-    if (!enabled) await _stopLocationIfCheckInsAreOnlyConsumer();
+    if (!enabled) await locationService.stopArrivalMonitoring();
     notifyListeners();
-  }
-
-  Future<void> _stopLocationIfCheckInsAreOnlyConsumer() async {
-    final user = firebaseReady ? FirebaseAuth.instance.currentUser : null;
-    if (user == null) {
-      await locationService.stopContinuousSharing();
-      return;
-    }
-    try {
-      final activeShares = await FirebaseFirestore.instance
-          .collection('locationShares')
-          .doc(user.uid)
-          .collection('viewers')
-          .where('active', isEqualTo: true)
-          .limit(1)
-          .get();
-      if (activeShares.docs.isEmpty) {
-        await locationService.stopContinuousSharing();
-      }
-    } catch (_) {
-      // Fail closed for existing live-location sharing: if Homi cannot confirm
-      // there are no active viewers, leave the foreground location stream on.
-    }
   }
 
   void _primeZoneState(LocationStatusSnapshot snapshot) {
@@ -314,6 +298,7 @@ class ArrivalCheckInService extends ChangeNotifier {
     if (_activeUid == uid) {
       _config = const ArrivalCheckInConfig();
       _inside.clear();
+      await locationService.stopArrivalMonitoring();
       notifyListeners();
     }
   }

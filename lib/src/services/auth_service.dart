@@ -68,7 +68,9 @@ class AuthService {
     final user = _auth.currentUser;
     if (user == null) return null;
     await user.reload();
-    return _auth.currentUser;
+    final refreshed = _auth.currentUser;
+    await refreshed?.getIdToken(true);
+    return refreshed;
   }
 
   Future<User?> updateDisplayName(String displayName) async {

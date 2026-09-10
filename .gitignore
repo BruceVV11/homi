@@ -15,6 +15,7 @@ android/local.properties
 # Firebase local configuration
 android/app/google-services.json
 firebase-debug.log
+firestore-debug.log
 .firebase/
 
 # Google Maps / local API configuration

@@ -12,6 +12,7 @@ class SuppliesPage extends StatelessWidget {
     required this.items,
     required this.onAdd,
     required this.onUpdateStatus,
+    required this.onUpdateQuantity,
     required this.onRemove,
     super.key,
   });
@@ -23,8 +24,15 @@ class SuppliesPage extends StatelessWidget {
     SupplyStatus status,
     DateTime? expiryDate,
     String iconKey,
+    double? quantity,
+    SupplyUnit? unit,
   ) onAdd;
   final Future<void> Function(String id, SupplyStatus status) onUpdateStatus;
+  final Future<void> Function(
+    String id, {
+    required double? quantity,
+    required SupplyUnit? unit,
+  }) onUpdateQuantity;
   final Future<void> Function(String id) onRemove;
 
   static const _editableStatuses = <SupplyStatus>[
@@ -34,12 +42,12 @@ class SuppliesPage extends StatelessWidget {
   ];
 
   static const _quickStarts = <_SupplyTemplate>[
-    _SupplyTemplate('Milk', 'Fridge', 'milk'),
-    _SupplyTemplate('Bread', 'Pantry', 'bread'),
-    _SupplyTemplate('Eggs', 'Fridge', 'eggs'),
-    _SupplyTemplate('Dog food', 'Pantry', 'pet_food'),
-    _SupplyTemplate('Toilet paper', 'Household', 'toilet_paper'),
-    _SupplyTemplate('Dishwashing liquid', 'Household', 'dishwasher'),
+    _SupplyTemplate('Milk', 'Fridge', 'milk', 1, SupplyUnit.bottle),
+    _SupplyTemplate('Bread', 'Pantry', 'bread', 1, SupplyUnit.loaf),
+    _SupplyTemplate('Eggs', 'Fridge', 'eggs', 12, SupplyUnit.egg),
+    _SupplyTemplate('Dog food', 'Pantry', 'pet_food', 1, SupplyUnit.bag),
+    _SupplyTemplate('Toilet paper', 'Household', 'toilet_paper', 1, SupplyUnit.pack),
+    _SupplyTemplate('Dishwashing liquid', 'Household', 'dishwasher', 1, SupplyUnit.bottle),
   ];
 
   Future<void> _addSupply(
@@ -59,16 +67,40 @@ class SuppliesPage extends StatelessWidget {
         draft.status,
         draft.expiryDate,
         draft.iconKey,
+        draft.quantity,
+        draft.unit,
       );
     }
+  }
+
+  Future<void> _editAmount(BuildContext context, SupplyItem item) async {
+    final update = await showModalBottomSheet<_SupplyAmountUpdate>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _SupplyAmountSheet(item: item),
+    );
+    if (update == null) return;
+    await onUpdateQuantity(
+      item.id,
+      quantity: update.quantity,
+      unit: update.unit,
+    );
+  }
+
+  Future<void> _adjustAmount(SupplyItem item, double delta) async {
+    if (!item.tracksQuantity) return;
+    final next = (item.quantity! + delta).clamp(0, 999999).toDouble();
+    await onUpdateQuantity(item.id, quantity: next, unit: item.unit);
   }
 
   Future<void> _showOptions(BuildContext context, SupplyItem item) async {
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -76,8 +108,25 @@ class SuppliesPage extends StatelessWidget {
             children: [
               Text(item.name, style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 5),
-              Text('Update the stock status', style: Theme.of(context).textTheme.bodyMedium),
+              Text(
+                'Keep this lightweight: change the amount after shopping, or update the stock status only when you need to.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
               const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(sheetContext);
+                    await _editAmount(context, item);
+                  },
+                  icon: const Icon(Icons.pin_outlined),
+                  label: Text(item.tracksQuantity ? 'Update amount' : 'Start tracking amount'),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text('Stock status', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 9),
               HomiChoiceGroup<SupplyStatus>(
                 values: _editableStatuses,
                 selected: item.status,
@@ -121,13 +170,19 @@ class SuppliesPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final useSoon = items.where((item) => item.effectiveStatus(now) == SupplyStatus.eatSoon).length;
-    final runningLow = items.where((item) => item.effectiveStatus(now) == SupplyStatus.runningLow).length;
-    final needToBuy = items.where((item) => item.effectiveStatus(now) == SupplyStatus.needToBuy).length;
+    final useSoon = items
+        .where((item) => item.effectiveStatus(now) == SupplyStatus.eatSoon)
+        .length;
+    final runningLow = items
+        .where((item) => item.effectiveStatus(now) == SupplyStatus.runningLow)
+        .length;
+    final needToBuy = items
+        .where((item) => item.effectiveStatus(now) == SupplyStatus.needToBuy)
+        .length;
 
     return HomiPage(
       title: 'Supplies',
-      subtitle: 'Track expiry dates and the things you are running low on.',
+      subtitle: 'Keep everyday stock simple enough to update while life is happening.',
       children: [
         Row(
           children: [
@@ -151,7 +206,7 @@ class SuppliesPage extends StatelessWidget {
         Text('Quick adds', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
         Text(
-          'Common household items, ready to adjust before you save them.',
+          'Common household items start with a sensible amount and unit. Adjust it before saving if your pack is different.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 10),
@@ -177,7 +232,8 @@ class SuppliesPage extends StatelessWidget {
                       color: HomiColors.coral,
                     ),
                     const SizedBox(width: 7),
-                    Text(template.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+                    Text(template.name,
+                        style: const TextStyle(fontWeight: FontWeight.w900)),
                     const SizedBox(width: 5),
                     const Icon(Icons.add_rounded, size: 16),
                   ],
@@ -196,6 +252,13 @@ class SuppliesPage extends StatelessWidget {
               child: _SupplyCard(
                 item: item,
                 now: now,
+                onDecrease: item.tracksQuantity
+                    ? () => _adjustAmount(item, -1)
+                    : null,
+                onIncrease: item.tracksQuantity
+                    ? () => _adjustAmount(item, 1)
+                    : null,
+                onAmountTap: () => _editAmount(context, item),
                 onOptions: () => _showOptions(context, item),
               ),
             ),
@@ -222,7 +285,8 @@ class _SummaryCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text('$count', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          Text('$count',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
           const SizedBox(height: 2),
           Text(
             label,
@@ -238,11 +302,21 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _SupplyCard extends StatelessWidget {
-  const _SupplyCard({required this.item, required this.now, required this.onOptions});
+  const _SupplyCard({
+    required this.item,
+    required this.now,
+    required this.onAmountTap,
+    required this.onOptions,
+    this.onDecrease,
+    this.onIncrease,
+  });
 
   final SupplyItem item;
   final DateTime now;
+  final VoidCallback onAmountTap;
   final VoidCallback onOptions;
+  final VoidCallback? onDecrease;
+  final VoidCallback? onIncrease;
 
   @override
   Widget build(BuildContext context) {
@@ -250,8 +324,9 @@ class _SupplyCard extends StatelessWidget {
     final displayLabel = item.displayStatusLabel(now);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+        padding: const EdgeInsets.fromLTRB(14, 13, 6, 13),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               width: 44,
@@ -265,12 +340,14 @@ class _SupplyCard extends StatelessWidget {
                 color: HomiColors.coral,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 11),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                  Text(item.name,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 3),
                   Text(
                     item.expiryDate == null
@@ -279,6 +356,34 @@ class _SupplyCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 8),
+                  if (item.tracksQuantity) ...[
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _MiniAmountButton(
+                          icon: Icons.remove_rounded,
+                          tooltip: 'Use one',
+                          onTap: onDecrease,
+                        ),
+                        GestureDetector(
+                          onTap: onAmountTap,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: Text(
+                              item.quantityLabel!,
+                              style: const TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                        ),
+                        _MiniAmountButton(
+                          icon: Icons.add_rounded,
+                          tooltip: 'Add one',
+                          onTap: onIncrease,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   _StatusLine(status: displayStatus, label: displayLabel),
                 ],
               ),
@@ -289,6 +394,39 @@ class _SupplyCard extends StatelessWidget {
               icon: const Icon(Icons.more_vert_rounded),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniAmountButton extends StatelessWidget {
+  const _MiniAmountButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 30,
+          height: 30,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: HomiColors.peach.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: HomiColors.border),
+          ),
+          child: Icon(icon, size: 17, color: HomiColors.slate),
         ),
       ),
     );
@@ -312,11 +450,16 @@ class _StatusLine extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
         const SizedBox(width: 7),
         Text(
           label,
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: color),
+          style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w900, color: color),
         ),
       ],
     );
@@ -335,12 +478,14 @@ class _EmptySupplyCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Icon(Icons.shopping_bag_outlined, size: 34, color: HomiColors.coral),
+            const Icon(Icons.shopping_bag_outlined,
+                size: 34, color: HomiColors.coral),
             const SizedBox(height: 10),
-            const Text('Nothing tracked yet', style: TextStyle(fontWeight: FontWeight.w900)),
+            const Text('Nothing tracked yet',
+                style: TextStyle(fontWeight: FontWeight.w900)),
             const SizedBox(height: 4),
             Text(
-              'Add fridge, pantry and household basics so Homi can flag what is running low or nearing its expiry date.',
+              'Add fridge, pantry and household basics. Amounts are optional, so Homi can stay quick instead of becoming admin.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
@@ -358,24 +503,49 @@ class _EmptySupplyCard extends StatelessWidget {
 }
 
 class _SupplyTemplate {
-  const _SupplyTemplate(this.name, this.category, this.iconKey);
+  const _SupplyTemplate(
+    this.name,
+    this.category,
+    this.iconKey,
+    this.quantity,
+    this.unit,
+  );
+
   final String name;
   final String category;
   final String iconKey;
+  final double quantity;
+  final SupplyUnit unit;
 }
 
 class _SupplyDraft {
-  const _SupplyDraft(this.name, this.category, this.status, this.expiryDate, this.iconKey);
+  const _SupplyDraft(
+    this.name,
+    this.category,
+    this.status,
+    this.expiryDate,
+    this.iconKey,
+    this.quantity,
+    this.unit,
+  );
+
   final String name;
   final String category;
   final SupplyStatus status;
   final DateTime? expiryDate;
   final String iconKey;
+  final double? quantity;
+  final SupplyUnit? unit;
+}
+
+class _SupplyAmountUpdate {
+  const _SupplyAmountUpdate(this.quantity, this.unit);
+  final double? quantity;
+  final SupplyUnit? unit;
 }
 
 class _SupplyEditorSheet extends StatefulWidget {
   const _SupplyEditorSheet({this.template});
-
   final _SupplyTemplate? template;
 
   @override
@@ -384,13 +554,22 @@ class _SupplyEditorSheet extends StatefulWidget {
 
 class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
   late final TextEditingController _nameController;
+  late final TextEditingController _quantityController;
   late String _category;
   SupplyStatus _status = SupplyStatus.okay;
   DateTime? _expiryDate;
   late String _iconKey;
+  late SupplyUnit _unit;
+  bool _trackAmount = true;
   String? _error;
 
-  static const _categories = <String>['Pantry', 'Fridge', 'Freezer', 'Medicine', 'Household'];
+  static const _categories = <String>[
+    'Pantry',
+    'Fridge',
+    'Freezer',
+    'Medicine',
+    'Household',
+  ];
 
   @override
   void initState() {
@@ -398,11 +577,16 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
     _nameController = TextEditingController(text: widget.template?.name ?? '');
     _category = widget.template?.category ?? 'Pantry';
     _iconKey = widget.template?.iconKey ?? SupplyIconCatalog.defaultKey;
+    _unit = widget.template?.unit ?? SupplyUnit.item;
+    _quantityController = TextEditingController(
+      text: _formatNumber(widget.template?.quantity ?? 1),
+    );
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _quantityController.dispose();
     super.dispose();
   }
 
@@ -435,10 +619,11 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Choose an icon', style: Theme.of(context).textTheme.headlineSmall),
+                    Text('Choose an icon',
+                        style: Theme.of(context).textTheme.headlineSmall),
                     const SizedBox(height: 4),
                     Text(
-                      'Pick the one that makes this item easiest to recognise. If you skip it, Homi uses the general supply icon.',
+                      'Pick the one that makes this item easiest to recognise.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
@@ -447,7 +632,8 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
               Expanded(
                 child: GridView.builder(
                   padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 4,
                     mainAxisSpacing: 10,
                     crossAxisSpacing: 10,
@@ -467,20 +653,24 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
                               : Colors.white,
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(
-                            color: active ? HomiColors.coral : HomiColors.border,
+                            color:
+                                active ? HomiColors.coral : HomiColors.border,
                           ),
                         ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(option.icon, color: HomiColors.coral, size: 26),
+                            Icon(option.icon,
+                                color: HomiColors.coral, size: 26),
                             const SizedBox(height: 6),
                             Text(
                               option.label,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
+                              style: const TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800),
                             ),
                           ],
                         ),
@@ -503,9 +693,27 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
       setState(() => _error = 'Give the item a short name.');
       return;
     }
+    double? quantity;
+    SupplyUnit? unit;
+    if (_trackAmount) {
+      quantity = double.tryParse(_quantityController.text.trim().replaceAll(',', '.'));
+      if (quantity == null || quantity < 0) {
+        setState(() => _error = 'Enter a valid amount, or switch amount tracking off.');
+        return;
+      }
+      unit = _unit;
+    }
     Navigator.pop(
       context,
-      _SupplyDraft(name, _category, _status, _expiryDate, _iconKey),
+      _SupplyDraft(
+        name,
+        _category,
+        _status,
+        _expiryDate,
+        _iconKey,
+        quantity,
+        unit,
+      ),
     );
   }
 
@@ -523,10 +731,11 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Add a supply', style: Theme.of(context).textTheme.headlineSmall),
+            Text('Add a supply',
+                style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 6),
             Text(
-              'Keep the details simple. Homi only needs enough information to help you notice stock and expiry changes.',
+              'Track only what helps. Amounts make things like bread, eggs, bags and individual items easy to update after shopping.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
@@ -542,6 +751,36 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
                 if (_error != null) setState(() => _error = null);
               },
             ),
+            const SizedBox(height: 18),
+            Text('Amount', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            HomiChoiceGroup<bool>(
+              values: const [true, false],
+              selected: _trackAmount,
+              labelFor: (value) => value ? 'Track amount' : 'Status only',
+              onSelected: (value) => setState(() => _trackAmount = value),
+              compact: true,
+            ),
+            if (_trackAmount) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _quantityController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'How much do you have?',
+                  hintText: 'e.g. 2 or 12',
+                ),
+              ),
+              const SizedBox(height: 12),
+              HomiChoiceGroup<SupplyUnit>(
+                values: SupplyUnit.values,
+                selected: _unit,
+                labelFor: (value) => value.label,
+                onSelected: (value) => setState(() => _unit = value),
+                compact: true,
+              ),
+            ],
             const SizedBox(height: 18),
             Text('Icon', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
@@ -570,8 +809,11 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(icon.label, style: const TextStyle(fontWeight: FontWeight.w900)),
-                          Text('Tap to change', style: Theme.of(context).textTheme.bodyMedium),
+                          Text(icon.label,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w900)),
+                          Text('Tap to change',
+                              style: Theme.of(context).textTheme.bodyMedium),
                         ],
                       ),
                     ),
@@ -605,16 +847,181 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
               value: _expiryDate,
               optional: true,
               onTap: _pickExpiry,
-              onClear: _expiryDate == null ? null : () => setState(() => _expiryDate = null),
+              onClear: _expiryDate == null
+                  ? null
+                  : () => setState(() => _expiryDate = null),
             ),
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
-              child: FilledButton(onPressed: _submit, child: const Text('Add supply')),
+              child: FilledButton(
+                onPressed: _submit,
+                child: const Text('Add supply'),
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _SupplyAmountSheet extends StatefulWidget {
+  const _SupplyAmountSheet({required this.item});
+  final SupplyItem item;
+
+  @override
+  State<_SupplyAmountSheet> createState() => _SupplyAmountSheetState();
+}
+
+class _SupplyAmountSheetState extends State<_SupplyAmountSheet> {
+  late final TextEditingController _controller;
+  late SupplyUnit _unit;
+  bool _tracking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tracking = widget.item.tracksQuantity;
+    _unit = widget.item.unit ?? SupplyUnit.item;
+    _controller = TextEditingController(
+      text: _formatNumber(widget.item.quantity ?? 1),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  double get _current =>
+      double.tryParse(_controller.text.trim().replaceAll(',', '.')) ?? 0;
+
+  void _add(double amount) {
+    final next = (_current + amount).clamp(0, 999999).toDouble();
+    setState(() => _controller.text = _formatNumber(next));
+  }
+
+  void _save() {
+    if (!_tracking) {
+      Navigator.pop(context, const _SupplyAmountUpdate(null, null));
+      return;
+    }
+    final amount = _current;
+    Navigator.pop(context, _SupplyAmountUpdate(amount, _unit));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          4,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Update ${widget.item.name}',
+                style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 6),
+            Text(
+              'Designed for the moment you unpack shopping: change the number, use a quick add, and you are done.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            HomiChoiceGroup<bool>(
+              values: const [true, false],
+              selected: _tracking,
+              labelFor: (value) => value ? 'Track amount' : 'Status only',
+              onSelected: (value) => setState(() => _tracking = value),
+              compact: true,
+            ),
+            if (_tracking) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  _AmountAction(icon: Icons.remove_rounded, onTap: () => _add(-1)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      textAlign: TextAlign.center,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Amount'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  _AmountAction(icon: Icons.add_rounded, onTap: () => _add(1)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <double>[1, 2, 6, 12]
+                    .map(
+                      (value) => OutlinedButton(
+                        onPressed: () => _add(value),
+                        child: Text('+${_formatNumber(value)}'),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+              const SizedBox(height: 14),
+              Text('Unit', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              HomiChoiceGroup<SupplyUnit>(
+                values: SupplyUnit.values,
+                selected: _unit,
+                labelFor: (value) => value.label,
+                onSelected: (value) => setState(() => _unit = value),
+                compact: true,
+              ),
+            ],
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(onPressed: _save, child: const Text('Save amount')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AmountAction extends StatelessWidget {
+  const _AmountAction({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: HomiColors.peach.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: HomiColors.border),
+        ),
+        child: Icon(icon, color: HomiColors.coral),
+      ),
+    );
+  }
+}
+
+String _formatNumber(double value) {
+  if (value == value.roundToDouble()) return value.toInt().toString();
+  return value
+      .toStringAsFixed(2)
+      .replaceFirst(RegExp(r'0+$'), '')
+      .replaceFirst(RegExp(r'\.$'), '');
 }

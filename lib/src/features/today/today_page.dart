@@ -49,6 +49,7 @@ class TodayPage extends StatelessWidget {
   Future<void> _quickAdd(BuildContext context) async {
     final destination = await showModalBottomSheet<QuickAddDestination>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => const _QuickAddSheet(),
     );
@@ -357,45 +358,49 @@ class _QuickAddSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.82;
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Quick add', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 6),
-            Text(
-              'Choose what you want to add and Homi will take you to the right place.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            _QuickAddOption(
-              icon: Icons.task_alt_outlined,
-              title: 'Task',
-              detail: 'A one-off job or reminder',
-              onTap: () => Navigator.pop(context, QuickAddDestination.task),
-            ),
-            _QuickAddOption(
-              icon: Icons.repeat_rounded,
-              title: 'Routine',
-              detail: 'Something that repeats',
-              onTap: () => Navigator.pop(context, QuickAddDestination.routine),
-            ),
-            _QuickAddOption(
-              icon: Icons.inventory_2_outlined,
-              title: 'Supply',
-              detail: 'Track stock or an expiry date',
-              onTap: () => Navigator.pop(context, QuickAddDestination.supply),
-            ),
-            _QuickAddOption(
-              icon: Icons.home_repair_service_outlined,
-              title: 'Home',
-              detail: 'Add an item, reading or home record',
-              onTap: () => Navigator.pop(context, QuickAddDestination.home),
-            ),
-          ],
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Quick add', style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 6),
+              Text(
+                'Choose what you want to add and Homi will take you to the right place.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              _QuickAddOption(
+                icon: Icons.task_alt_outlined,
+                title: 'Task',
+                detail: 'A one-off job or reminder',
+                onTap: () => Navigator.pop(context, QuickAddDestination.task),
+              ),
+              _QuickAddOption(
+                icon: Icons.repeat_rounded,
+                title: 'Routine',
+                detail: 'Something that repeats',
+                onTap: () => Navigator.pop(context, QuickAddDestination.routine),
+              ),
+              _QuickAddOption(
+                icon: Icons.inventory_2_outlined,
+                title: 'Supply',
+                detail: 'Track stock, amount or an expiry date',
+                onTap: () => Navigator.pop(context, QuickAddDestination.supply),
+              ),
+              _QuickAddOption(
+                icon: Icons.home_repair_service_outlined,
+                title: 'Home',
+                detail: 'Add an item, reading or home record',
+                onTap: () => Navigator.pop(context, QuickAddDestination.home),
+              ),
+            ],
+          ),
         ),
       ),
     );

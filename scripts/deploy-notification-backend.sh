@@ -20,6 +20,14 @@ fi
 npm install --prefix functions --no-audit --no-fund
 npm run lint --prefix functions
 
+if [ -f scripts/test-firestore-security.sh ]; then
+  echo "==> Running Homi Firestore security gate"
+  bash scripts/test-firestore-security.sh
+else
+  echo "Homi Firestore security test helper is missing; refusing to deploy." >&2
+  exit 1
+fi
+
 if command -v firebase >/dev/null 2>&1; then
   firebase deploy --only firestore,functions --project "${PROJECT_ID}"
 else

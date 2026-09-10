@@ -63,6 +63,7 @@ class LocationStatusService {
 
   static const _cachedStatusKey = 'homi.location.cachedStatus';
   static const _continuousEnabledKey = 'homi.location.continuousEnabled';
+  static const _minimumCloudWriteGap = Duration(seconds: 30);
 
   final bool firebaseReady;
   final Battery _battery = Battery();
@@ -71,6 +72,8 @@ class LocationStatusService {
 
   StreamSubscription<Position>? _positionSubscription;
   LocationStatusSnapshot? _latest;
+  DateTime? _lastCloudSyncAt;
+  bool _cloudSyncInFlight = false;
 
   Stream<LocationStatusSnapshot> get updates => _updates.stream;
   LocationStatusSnapshot? get latest => _latest;
@@ -177,6 +180,7 @@ class LocationStatusService {
   Future<void> clearCachedStatus() async {
     await stopContinuousSharing();
     _latest = null;
+    _lastCloudSyncAt = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_cachedStatusKey);
     await prefs.remove(_continuousEnabledKey);
@@ -193,11 +197,11 @@ class LocationStatusService {
         accuracy: LocationAccuracy.medium,
         distanceFilter: 100,
         intervalDuration: const Duration(minutes: 2),
-        foregroundNotificationConfig: const ForegroundNotificationConfig(
+        foregroundNotificationConfig: ForegroundNotificationConfig(
           notificationTitle: 'Homi live location',
           notificationText: 'Location sharing is active.',
           notificationChannelName: 'Live location',
-          notificationIcon: AndroidResource(
+          notificationIcon: const AndroidResource(
             name: 'homi_notification',
             defType: 'drawable',
           ),
@@ -281,19 +285,45 @@ class LocationStatusService {
     LocationStatusSnapshot snapshot, {
     required String source,
   }) async {
-    if (!firebaseReady) return;
+    if (!firebaseReady || _cloudSyncInFlight) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    await FirebaseFirestore.instance.collection('locations').doc(user.uid).set({
-      'latitude': snapshot.latitude,
-      'longitude': snapshot.longitude,
-      'accuracyMeters': snapshot.accuracyMeters,
-      'batteryPercent': snapshot.batteryPercent,
-      'isCharging': snapshot.isCharging,
-      'updatedAt': FieldValue.serverTimestamp(),
-      'source': source,
-    }, SetOptions(merge: true));
+    final ref = FirebaseFirestore.instance.collection('locations').doc(user.uid);
+    _cloudSyncInFlight = true;
+    try {
+      if (_lastCloudSyncAt == null) {
+        try {
+          final existing = await ref.get();
+          final remoteUpdatedAt = existing.data()?['updatedAt'];
+          if (remoteUpdatedAt is Timestamp) {
+            _lastCloudSyncAt = remoteUpdatedAt.toDate();
+          }
+        } catch (_) {
+          // A read failure does not prevent the normal Firestore write/retry
+          // path from operating when connectivity returns.
+        }
+      }
+
+      final now = DateTime.now();
+      final previous = _lastCloudSyncAt;
+      if (previous != null && now.difference(previous) < _minimumCloudWriteGap) {
+        return;
+      }
+
+      await ref.set({
+        'latitude': snapshot.latitude,
+        'longitude': snapshot.longitude,
+        'accuracyMeters': snapshot.accuracyMeters,
+        'batteryPercent': snapshot.batteryPercent,
+        'isCharging': snapshot.isCharging,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'source': source,
+      }, SetOptions(merge: true));
+      _lastCloudSyncAt = now;
+    } finally {
+      _cloudSyncInFlight = false;
+    }
   }
 
   Future<void> _ensureLocationService() async {

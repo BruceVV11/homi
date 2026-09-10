@@ -11,7 +11,7 @@ class HomiNotificationPreferences {
     this.householdAttention = true,
     this.tasksAndRoutines = true,
     this.people = true,
-    this.homiUpdates = true,
+    this.homiUpdates = false,
     this.serviceNotices = true,
   });
 
@@ -72,7 +72,7 @@ class HomiNotificationPreferences {
       householdAttention: read('householdAttention', true),
       tasksAndRoutines: read('tasksAndRoutines', true),
       people: read('people', true),
-      homiUpdates: read('homiUpdates', true),
+      homiUpdates: read('homiUpdates', false),
       serviceNotices: read('serviceNotices', true),
     );
   }

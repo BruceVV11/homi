@@ -6,10 +6,11 @@ import 'package:flutter/material.dart';
 import '../domain/household_task.dart';
 import '../features/home/home_page.dart';
 import '../features/people/people_page.dart';
-import '../features/profile/profile_settings_page.dart';
+import '../features/profile/account_hub_page.dart';
 import '../features/routines/routines_page.dart';
 import '../features/supplies/supplies_page.dart';
 import '../features/today/today_page.dart';
+import '../services/account_data_service.dart';
 import '../services/auth_service.dart';
 import '../services/household_people_service.dart';
 import '../services/location_status_service.dart';
@@ -17,7 +18,6 @@ import '../services/shared_task_service.dart';
 import '../services/trusted_people_service.dart';
 import '../state/homi_app_controller.dart';
 import '../theme/homi_theme.dart';
-import '../widgets/google_provider_mark.dart';
 import '../widgets/homi_bottom_nav.dart';
 import '../widgets/homi_brand.dart';
 
@@ -48,6 +48,7 @@ class _HomiShellState extends State<HomiShell> {
   late final TrustedPeopleService _trustedPeopleService;
   late final HouseholdPeopleService _householdPeopleService;
   late final SharedTaskService _sharedTaskService;
+  late final AccountDataService _accountDataService;
 
   @override
   void initState() {
@@ -63,6 +64,9 @@ class _HomiShellState extends State<HomiShell> {
       firebaseReady: widget.firebaseReady,
     );
     _sharedTaskService = SharedTaskService(
+      firebaseReady: widget.firebaseReady,
+    );
+    _accountDataService = AccountDataService(
       firebaseReady: widget.firebaseReady,
     );
     unawaited(widget.controller.pruneExpiredTasks());
@@ -96,129 +100,23 @@ class _HomiShellState extends State<HomiShell> {
   String _actorName(User? user) => user == null ? 'You' : _displayName(user);
 
   Future<void> _openAccount() async {
-    final user = widget.authService.currentUser;
-    if (user == null) {
-      widget.onOpenAuth();
-      return;
-    }
-
-    final google = widget.authService.signedInWithGoogle(user);
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  _AccountAvatar(user: user, size: 54),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                _displayName(user),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ),
-                            if (google) ...[
-                              const SizedBox(width: 8),
-                              const GoogleProviderMark(size: 18),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          user.email ?? 'Signed in',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        const SizedBox(height: 5),
-                        Row(
-                          children: [
-                            Icon(
-                              user.emailVerified
-                                  ? Icons.verified_rounded
-                                  : Icons.info_outline_rounded,
-                              size: 16,
-                              color: user.emailVerified
-                                  ? const Color(0xFF6F8B65)
-                                  : HomiColors.coral,
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              user.emailVerified
-                                  ? 'Verified email'
-                                  : 'Email not verified',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w900,
-                                color: user.emailVerified
-                                    ? const Color(0xFF6F8B65)
-                                    : HomiColors.coral,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () async {
-                    Navigator.pop(sheetContext);
-                    await Future<void>.delayed(
-                      const Duration(milliseconds: 120),
-                    );
-                    if (!mounted) return;
-                    await Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) => ProfileSettingsPage(
-                          authService: widget.authService,
-                        ),
-                      ),
-                    );
-                    if (mounted) setState(() {});
-                  },
-                  icon: const Icon(Icons.manage_accounts_outlined),
-                  label: const Text('Profile settings'),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    await _locationService.stopContinuousSharing();
-                    await widget.authService.signOut();
-                    if (sheetContext.mounted) Navigator.pop(sheetContext);
-                    if (mounted) setState(() {});
-                  },
-                  icon: const Icon(Icons.logout_rounded),
-                  label: const Text('Sign out'),
-                ),
-              ),
-            ],
-          ),
+    final deleted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => AccountHubPage(
+          authService: widget.authService,
+          accountDataService: _accountDataService,
+          controller: widget.controller,
+          locationService: _locationService,
+          onSignIn: widget.onOpenAuth,
         ),
       ),
     );
+    if (!mounted) return;
+    if (deleted == true && _index != 0) {
+      _selectPage(0);
+    } else {
+      setState(() {});
+    }
   }
 
   void _selectPage(int index) {
@@ -343,15 +241,26 @@ class _HomiShellState extends State<HomiShell> {
       ),
       SuppliesPage(
         items: widget.controller.supplies,
-        onAdd: (name, category, status, expiryDate, iconKey) =>
+        onAdd: (
+          name,
+          category,
+          status,
+          expiryDate,
+          iconKey,
+          quantity,
+          unit,
+        ) =>
             widget.controller.addSupply(
           name,
           category,
           status,
           expiryDate,
           iconKey: iconKey,
+          quantity: quantity,
+          unit: unit,
         ),
         onUpdateStatus: widget.controller.updateSupplyStatus,
+        onUpdateQuantity: widget.controller.updateSupplyQuantity,
         onRemove: widget.controller.removeSupply,
       ),
       PeoplePage(
@@ -426,7 +335,7 @@ class _PersistentHeader extends StatelessWidget {
           const HomiLogo(width: 94),
           const Spacer(),
           Tooltip(
-            message: user == null ? 'Sign in' : 'Account',
+            message: user == null ? 'Homi & account' : 'Account',
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: onAccountTap,

@@ -5,14 +5,14 @@ import 'package:homi/src/domain/supply_item.dart';
 
 void main() {
   group('Homi notification preferences', () {
-    test('defaults keep categories ready but master delivery off', () {
+    test('defaults keep useful categories ready but master delivery off', () {
       const preferences = HomiNotificationPreferences();
 
       expect(preferences.enabled, isFalse);
       expect(preferences.householdAttention, isTrue);
       expect(preferences.tasksAndRoutines, isTrue);
       expect(preferences.people, isTrue);
-      expect(preferences.homiUpdates, isTrue);
+      expect(preferences.homiUpdates, isFalse);
       expect(preferences.serviceNotices, isTrue);
       expect(preferences.allowsCategory('supply'), isFalse);
     });
@@ -53,6 +53,21 @@ void main() {
       expect(restored.people, source.people);
       expect(restored.homiUpdates, source.homiUpdates);
       expect(restored.serviceNotices, source.serviceNotices);
+    });
+
+    test('legacy preferences without Homi updates keep that category off', () {
+      final restored = HomiNotificationPreferences.fromJson(
+        const <String, dynamic>{
+          'enabled': true,
+          'householdAttention': true,
+          'tasksAndRoutines': true,
+          'people': true,
+          'serviceNotices': true,
+        },
+      );
+
+      expect(restored.homiUpdates, isFalse);
+      expect(restored.allowsCategory('update'), isFalse);
     });
   });
 

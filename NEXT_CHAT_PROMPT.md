@@ -1,39 +1,42 @@
 # Homi — Next Chat Prompt
 
-Continue development of **Homi** from the current GitHub `main` branch. GitHub is the source of truth for tracked source/docs. Before changing anything, inspect:
+Continue development of **Homi** from the current GitHub `main` branch. GitHub is the source of truth for tracked source/docs.
 
-- `documentation/releases/0.8.0.md`
+Before changing anything, inspect:
+
+- `documentation/releases/0.8.1.md`
+- `documentation/RELEASE_READINESS.md`
 - `documentation/NOTIFICATIONS.md`
 - `documentation/ARCHITECTURE.md`
 - `documentation/LOCATION_SAFETY.md`
 - `documentation/legal/PRIVACY_AND_COMPLIANCE.md`
 - `documentation/legal/ACCOUNT_DELETION.md`
 - `documentation/business/PRICING_AND_UNIT_ECONOMICS.md`
-- latest affected source files
+- the latest affected source files
 
-Use the **mobile-app-development** workflow first. Preserve approved behaviour/design, exact brand assets and existing user data. Never claim a new pass compiled or worked on-device until Bruce's local Flutter/Android toolchain proves it.
+Use the **mobile-app-development** workflow first. Preserve approved behaviour/design, exact brand assets and existing user data. Never claim a new pass compiled/worked on-device until Bruce's real Flutter/Android toolchain proves it.
 
 ## Permanent project context
 
-- Local project root: `C:\ConceptLab\Projects\homi`
+- Local root: `C:\ConceptLab\Projects\homi`
 - GitHub: `BruceVV11/homi`
 - Android application ID: `za.co.theconceptlab.homi`
 - Firebase / Google Cloud project: `homi-ee80a`
 - Firebase project number: `883068189841`
-- Firestore region: `africa-south1` (Johannesburg)
+- Firestore region: `africa-south1`
 - Flutter baseline: 3.41.5 stable
 - Dart baseline: 3.11.3
 - Development device: Samsung S25 Ultra
 - JDK 21 / Gradle 8.14
-- Android host under `android/` is intentionally local/untracked.
-- Preserve existing local Firebase/Maps/signing files. Never ask Bruce to paste Maps keys or App Check debug tokens into chat.
+- `android/` is intentionally local/untracked.
+- Preserve local Firebase/Maps/signing files. Never ask Bruce to paste Maps keys or App Check debug tokens into chat.
 - Deleted project `homi-508000` must never be used.
 
-Bruce has a safety stash:
+Bruce still has this safety stash:
 
 `stash@{0}: On main: Homi pre-0.5.0 local tracked changes`
 
-Do **not** automatically pop or delete it.
+Do not automatically pop or delete it.
 
 ## Approved brand
 
@@ -43,131 +46,41 @@ Do **not** automatically pop or delete it.
 - Cream `#FFF8F2`
 - Slate `#2E2E2E`
 - Nunito
-- exact Homi logo/mark assets in `assets/brand/`; never redraw them.
+- exact Homi logo/mark assets are under `assets/brand/`; never redraw them.
 
 ## Standing user-facing copy rule
 
-Bruce explicitly requires all **user-visible** Homi wording to read as if Homi is a complete product. Do not show “being built”, “pre-release”, “future feature”, “not yet implemented”, roadmap language or wording addressed to Bruce/developers.
+All **user-visible** Homi wording must read as though Homi is a complete product. Never show “being built”, “pre-release”, “future feature”, “not yet implemented”, roadmap language or wording addressed to Bruce/developers.
 
-Do not lie about capabilities that do not exist. Describe the current product boundary directly and positively, for example “This record stays on this phone unless it is shared” rather than “cloud sync is not built yet”.
-
-Internal engineering/release docs may and should still state verification blockers or unimplemented architecture truth.
+Do not misrepresent unavailable capability. Describe current boundaries naturally, e.g. “This record stays on this phone unless it is shared.” Internal engineering docs should still state real blockers.
 
 ## Current source version
 
-**`0.8.0+8`**
+**`0.8.1+9`**
 
-Primary navigation:
+Primary navigation remains:
 
 **Overview · Tasks · Home · Supplies · People**
 
 Home remains centred with the exact Homi mark.
 
-## 0.7 baseline accepted by user
+## Confirmed product/device baseline
 
-Bruce reported the 0.7 runtime experience was working well overall before asking for 0.8 refinements. The previous People full-map, Quick Add, Supply amount, People sync and account/legal work are therefore the baseline to preserve unless new device evidence contradicts it.
+Bruce has reported the 0.8 product experience is where he wants it overall. On the S25 Ultra:
 
-The App Check **debug token has now been registered privately**. App Check enforcement remains OFF until valid traffic is confirmed and release Play Integrity traffic is proven.
+- normal Homi notifications are delivering;
+- developer self-test notifications are delivering;
+- the notification status icon is using the Homi mark;
+- Developer notifications access is enabled for the intended account;
+- Android Studio runtime is otherwise behaving correctly.
 
-## 0.8 — Overview / Supplies attention
+The **All enabled Homi devices** developer audience is implemented through FCM topics. It was intentionally withheld during the first proof to avoid an accidental broad send before self-test worked. It is not disabled. Perform one controlled broad test before public users exist.
 
-New `SupplyAttention` helper ranks actionable supplies:
+## 0.8 notification system
 
-1. Need to buy / zero tracked amount
-2. Expired
-3. Use soon
-4. Running low
+Path: **Profile avatar → Homi & account → Notifications**.
 
-Overview now shows the three most critical Supply items with their concise status, plus `+ N more need attention` when necessary. The whole card opens Supplies.
-
-Supplies now groups cards into:
-
-- Need to buy
-- Use soon
-- Running low
-- In stock
-
-Each card still keeps its existing status line. Quantity, unit, +/- adjustment, Quick Adds, expiry and custom icon behaviour remain intact.
-
-## Tasks / Routines / Home baseline
-
-Tasks:
-
-- one-off jobs;
-- optional due date/time or No due time;
-- optional Household assignee;
-- completion attribution;
-- Recently completed retention for 48 hours;
-- Me-only Tasks remain private/local;
-- household-visible shared Tasks use `sharedTasks`.
-
-Routines:
-
-- Daily / Weekdays / Weekly / Bi-weekly / Monthly;
-- exact due time;
-- actor/time completion history;
-- reversible complete → undo → complete-again for the same occurrence;
-- 60+ min duration option.
-
-Home:
-
-- Things/appliances/equipment;
-- service and warranty dates;
-- maintenance/repair history;
-- utility readings with controlled units.
-
-## People / location baseline
-
-People supports partners, family, roommates and friends. Connection, relationship scope and location sharing remain separate permissions.
-
-Scopes:
-
-- Household
-- Friend · location only
-
-Current People features include:
-
-- persistent embedded map;
-- full-screen pannable/zoomable map;
-- person focus chips;
-- profile-photo/initial markers;
-- battery/charging/freshness;
-- address/coordinates with individual copy, Copy all and external Google Maps;
-- Homi code connection requests;
-- private relationship labels;
-- per-person location sharing;
-- explicit live background location with Android foreground-service notification;
-- latest-state location rather than default route history.
-
-Connection reads use two deterministic queries (`aUid == me` and `bUid == me`) merged client-side. Do not reintroduce the old `memberUids array_contains` query that produced a Firestore `PERMISSION_DENIED` on-device.
-
-## 0.8 — People hearts
-
-The full-screen People map now exposes a small heart action for the selected non-self trusted person.
-
-`sendHeart` callable Cloud Function:
-
-- region `africa-south1`;
-- auth required;
-- recipient must be an accepted trusted connection;
-- one-minute sender→recipient cooldown in server-only `heartCooldowns`;
-- sends **“{sender} is thinking about you!”**;
-- People route on tap;
-- does not change location share, Household/Friend scope or any other permission.
-
-Do not turn this into chat/messaging unless Bruce explicitly asks. The charm is that it is deliberately tiny.
-
-## 0.8 — Notification system
-
-Read `documentation/NOTIFICATIONS.md` before modifying notification logic.
-
-### User settings
-
-Path:
-
-**Profile avatar → Homi & account → Notifications**
-
-Master notifications default OFF and are user enabled. Categories:
+Categories:
 
 - Household attention
 - Tasks & routines
@@ -175,189 +88,116 @@ Master notifications default OFF and are user enabled. Categories:
 - Homi updates
 - Service & security
 
-Normal notification permission is not requested automatically at first launch.
+Fresh/default **Homi updates are now OFF** until explicitly enabled. Unknown remote categories fail closed.
 
-### Local notifications
+Local notifications cover due Tasks/Routines, Supply expiry warning/date, Home service warning/date and grouped new household attention.
 
-`HomiNotificationService` uses `flutter_local_notifications` for:
+Cloud notifications cover connection requests/acceptance, People hearts, shared Task creation/assignment/completion and developer broadcasts.
 
-- Task due time;
-- Routine next due time;
-- Supply expiry warning (3 days before, 09:00 when schedulable);
-- Supply expiry date (09:00);
-- Home service warning (7 days before, 09:00 when schedulable);
-- Home service due date (09:00);
-- one grouped immediate household-attention notification when a Supply/Home record enters a new critical/warning state.
+Developer access remains server-provisioned through `developerAdmins/{uid}`. Normal users cannot self-grant it.
 
-Immediate attention includes out/Need to buy, expired/use-soon and service-soon/due. It is de-duplicated while the condition remains active and groups up to three reasons plus a remaining count rather than firing many notifications.
+## People hearts
 
-Scheduled notifications use `AndroidScheduleMode.inexactAllowWhileIdle`; do not add exact-alarm permission unless product requirements change.
+`sendHeart` is a callable Function in `africa-south1`.
 
-### Remote FCM
+0.8.1 hardening adds:
 
-- top-level FCM background handler registered in `lib/main.dart`;
-- foreground FCM is surfaced through Homi local notification channels;
-- remote taps use `getInitialMessage` / `onMessageOpenedApp`;
-- local notification taps use plugin launch/response callbacks;
-- shell routes to Overview, Tasks, Routines, Home, Supplies, People or Homi & account.
+- Firebase Authentication required;
+- valid accepted trusted connection required;
+- **App Check enforcement** at the callable Function;
+- 1-minute sender→recipient cooldown;
+- 40 hearts per sender per fixed 24-hour window;
+- max 3 `sendHeart` instances.
 
-Signed-in enabled devices register FCM token/preferences at:
+The feature remains intentionally tiny: `{name} is thinking about you!`; do not turn it into chat unless Bruce asks.
 
-`users/{uid}/devices/{deviceId}`
+## 0.8.1 security/cost hardening
 
-`deviceId` is random per Homi installation. Sign-out removes the direct account-specific token. Invalid FCM tokens are disabled server-side during direct delivery.
+Cloud Functions global `maxInstances` was reduced from 10 to **5**.
 
-### Cloud event notifications
+Direct notification fan-out reads at most **12 enabled device records per user** to bound pathological Firestore/FCM fan-out.
 
-Cloud Functions send direct preference-aware notifications for:
+Server-only `serverRateLimits` now suppresses excessive notification generation:
 
-- connection request;
-- connection accepted;
-- People heart;
-- shared Task created/assigned;
-- shared Task completed by another household member.
+- connection request pushes: 20/hour per initiator;
+- shared Task creation pushes: 60/hour per creator;
+- shared Task completion pushes: 120/hour per completing user;
+- developer self tests: 30/hour;
+- developer broad sends: 6/hour and 20/24h.
 
-Shared Task lock-screen pushes deliberately omit Task title/content.
+`serverRateLimits` is client-inaccessible and account-deletion cleanup removes rate-limit records belonging to the deleted UID.
 
-### General Homi developer broadcasts
+Firestore rules were tightened for:
 
-Local-only installations can receive Homi product/service/security notices without an account through user-controlled FCM topics:
+- notification device schema/lengths;
+- developer campaign fields/lengths/enum values/server timestamp;
+- Homi code length/schema;
+- deterministic connection document ID/schema and restricted pending→accepted transition;
+- People preferences only for accepted connections;
+- Shared Task field/text bounds, completion attribution and deletion rules;
+- location-share schema;
+- latest-location field allow-list, coordinate/accuracy/battery bounds, server timestamp and capture-source allow-list;
+- server-only rate-limit records.
 
-- `homi_updates`
-- `homi_service`
-- `homi_security`
+The stricter rules require a fresh backend deployment after local tests.
 
-Topic membership follows the local Homi Updates and Service & security switches.
+## App Check
 
-## Developer notification centre
+Bruce registered the debug App Check token privately. Do not request it.
 
-Developer notification access is server-provisioned only through:
+`sendHeart` now enforces App Check in source. **Firestore service enforcement is still a pre-release gate**, not something to switch on blindly. First verify legitimate debug traffic is valid, then configure/verify Play Integrity for the Play-signed release build, then enable Firestore enforcement before public release.
 
-`developerAdmins/{uid}`
+## Current cloud-sync truth
 
-Normal users cannot self-grant it.
+Trusted People/location and explicitly shared one-off Tasks use Firebase. Most household operational data is still device-local:
 
-An active developer gets **Developer notifications** under Homi & account, with:
+- Routines
+- Supplies
+- Home Things/history/readings
+- private Tasks
 
-- title ≤80 characters;
-- body ≤280 characters;
-- Homi update / Service or maintenance / Security category;
-- Just this account test / All enabled Homi devices audience;
-- deep-link destination;
-- Normal / Important priority;
-- recent campaign status/history;
-- confirmation before broad sends.
+This is the largest product-contract decision before release. If Homi launches as a genuinely shared Household app, build a real Household identity/membership model plus safe local↔cloud merge/sync before store deployment. Do not upload SharedPreferences and overwrite another device.
 
-Self-test uses developer account device tokens and can report direct sends/failures. Broad send uses FCM topic delivery and records FCM acceptance/message ID; do not claim topic acceptance is a per-device delivery/read count.
+If the first launch stays local-first for those areas, store/in-app copy must state that boundary clearly.
 
-Client Firestore rules only allow active developer admin to create a tightly validated `queued` campaign. Client cannot update delivery status. Cloud Functions re-check developer access before delivery.
+## Release readiness
 
-## Firestore additions
+Read `documentation/RELEASE_READINESS.md` before deciding the app is ready for Play.
 
-0.8 adds:
+Major remaining gates include:
 
-```text
-developerAdmins/{uid}
-notificationCampaigns/{campaignId}
-heartCooldowns/{senderUid_recipientUid}  # server-only
-```
+- 0.8.1 analyzer/tests/rules/functions verification;
+- one controlled broad developer broadcast test;
+- full Shared Household sync OR a deliberate local-first launch contract;
+- background-location multi-hour/reboot/battery-optimiser testing;
+- Google Play background-location declaration/review;
+- release signing + Play App Signing SHA registration;
+- production Google Sign-In from Play-installed build;
+- production Maps key fingerprint restriction;
+- Play Integrity App Check and Firestore App Check enforcement;
+- least-privilege Cloud Functions runtime identity rather than broad default Compute Editor identity;
+- Cloud billing alerts/spend controls and monitoring;
+- public Privacy Policy, Terms and external account-deletion URL;
+- Google Play Data Safety/content-rating/target-audience/app-access/store assets;
+- decide whether first public release is free-only or includes Homi+ billing.
 
-Existing collections remain:
-
-```text
-users/{uid}
-users/{uid}/devices/{deviceId}
-homiCodes/{code}
-connections/{connectionId}
-peoplePreferences/{ownerUid}/people/{otherUid}
-sharedTasks/{taskId}
-locationShares/{ownerUid}/viewers/{viewerUid}
-locations/{ownerUid}
-```
-
-Cloud Functions Admin SDK bypasses client Firestore rules; every server function must perform its own authorization/validation where applicable.
-
-## Account deletion / privacy
-
-Keep Sign out, Erase this phone and Delete account distinct.
-
-Notification lifecycle additions:
-
-- signed-in push token is removed on sign-out;
-- account deletion removes the device push registration before cloud/Auth deletion;
-- existing user device subcollection deletion covers push-token docs;
-- deleting `users/{uid}` triggers server cleanup for heart cooldowns involving the UID, `developerAdmins/{uid}` and developer notification campaigns created by that UID.
-
-Do not include precise location/addresses in notification payloads. Do not put shared Task title/content on the lock screen. Hearts may show sender name by design.
-
-External Google Play account-deletion web page is still a production-release requirement; do not put a URL into Play Console until the real page exists.
-
-## Android notification host integration
-
-`android/` is untracked, so 0.8 adds:
-
-`scripts/enable-notifications-android.ps1`
-
-It idempotently adds/verifies:
-
-- `POST_NOTIFICATIONS`;
-- `RECEIVE_BOOT_COMPLETED`;
-- flutter_local_notifications scheduled/boot receivers;
-- `drawable/homi_notification.png` from approved Homi monochrome artwork;
-- multidex;
-- core-library desugaring with `desugar_jdk_libs:2.1.4`.
-
-It does not print/change Firebase, Maps, signing or secret values.
-
-## Cloud Functions deployment
-
-Functions source:
-
-`functions/index.js`
-
-Node runtime: 22
-Region: `africa-south1`
-
-Deploy helper:
-
-```bash
-bash scripts/deploy-notification-backend.sh
-```
-
-The helper locks the permanent project/project-number, runs npm install + `node --check`, then deploys Firestore and Functions.
-
-Developer access helper:
-
-```bash
-bash scripts/manage-developer-admin.sh '<FIREBASE_AUTH_UID>' enable
-```
-
-Obtain the UID privately from **Firebase Console → Authentication → Users** and enter it directly in Cloud Shell. Do not ask Bruce to paste it into chat. Use `disable` to revoke.
-
-## Pricing direction
-
-Still planning only:
+Current pricing direction remains planning only:
 
 - Homi Free — R0
 - Homi+ — R49.99/month or R499.99/year
 - one household around six Household members
 - location-only friends do not consume paid Household seats
 - privacy/stop-sharing/account deletion never paywalled
-- Google Play Billing is the intended Android subscription mechanism
 
-Do not implement a paywall until premium shared-cloud value is working.
+Do not add a paywall before premium shared-cloud value exists.
 
-## Immediate verification checkpoint
-
-0.7 had 19 tests passing before 0.8. 0.8 changes dependencies, Android host requirements, notification source, Cloud Functions and tests, so it is **not yet analyzer/test/backend/device verified**.
+## Immediate verification checkpoint for 0.8.1
 
 Windows:
 
 ```powershell
 cd C:\ConceptLab\Projects\homi
 git pull
-flutter pub get
-powershell -ExecutionPolicy Bypass -File .\scripts\enable-notifications-android.ps1
 flutter analyze
 flutter test
 ```
@@ -367,34 +207,24 @@ If clean, Cloud Shell:
 ```bash
 cd ~/homi
 git pull
+npm run lint --prefix functions
 bash scripts/deploy-notification-backend.sh
 ```
 
-Then grant the intended developer account access privately:
+The deployment must compile/release the stricter Firestore rules and update the Functions. Then re-test on the S25 Ultra:
 
-```bash
-bash scripts/manage-developer-admin.sh '<FIREBASE_AUTH_UID>' enable
-```
+- notifications still register and deliver;
+- a People heart still works with the registered debug App Check token;
+- repeated heart is rate-limited cleanly;
+- shared Task creation/completion still works under stricter rules;
+- connection request/acceptance still works;
+- live location still writes and reads under stricter rules;
+- developer self test still works;
+- one controlled **All enabled Homi devices** test works for the enabled category;
+- no raw permission errors appear.
 
-Then Android Studio → Samsung S25 Ultra → Run.
-
-Device/backend verification priorities:
-
-- Overview shows 3 critical Supplies + remaining count;
-- Supplies grouped by status while status remains on cards;
-- Notifications settings requests permission only after user action and category switches persist;
-- due local Task/Routine notification + tap route;
-- new out-of-stock/expiry/service attention appears once and does not nag on every app refresh;
-- People heart reaches another enabled trusted account with `{name} is thinking about you!` and respects cooldown;
-- connection request/acceptance notifications;
-- shared Task assignment/completion notifications;
-- developer self-test notification first;
-- one controlled broad developer notification only after self-test succeeds;
-- foreground/background/terminated notification tap routing;
-- App Check traffic after debug-token registration while enforcement remains OFF.
-
-If Flutter analysis/build, Android host script or Cloud Functions deployment reports an error, fix the exact failing layer. Do not reset Firebase, JDK, Gradle, signing, Maps or Android setup unless the error points there.
+If any rule returns `PERMISSION_DENIED`, capture the exact operation/log and fix the rule/data contract rather than weakening the whole collection.
 
 ## Documentation rule
 
-At the end of every pass update relevant documentation, add/update the release note under `documentation/releases/`, and refresh this file.
+At the end of every pass update relevant docs, add/update the release note under `documentation/releases/`, and refresh this file.

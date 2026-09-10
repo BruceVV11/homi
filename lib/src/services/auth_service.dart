@@ -85,6 +85,63 @@ class AuthService {
     await user.sendEmailVerification();
   }
 
+  /// Firebase requires a recent authentication before destructive account
+  /// operations. Google accounts re-use the provider picker; password accounts
+  /// require the user's current password and never store it.
+  Future<void> reauthenticateCurrentUser({String? password}) async {
+    _requireFirebase();
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('Sign in before deleting your account.');
+
+    if (signedInWithGoogle(user)) {
+      final account = await _googleSignIn.signIn();
+      if (account == null) {
+        throw StateError('Google confirmation was cancelled.');
+      }
+      final authentication = await account.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: authentication.accessToken,
+        idToken: authentication.idToken,
+      );
+      await user.reauthenticateWithCredential(credential);
+      return;
+    }
+
+    if (signedInWithPassword(user)) {
+      final email = user.email;
+      final currentPassword = password ?? '';
+      if (email == null || email.isEmpty) {
+        throw StateError('This account does not have an email address.');
+      }
+      if (currentPassword.isEmpty) {
+        throw StateError('Enter your current password to continue.');
+      }
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+      return;
+    }
+
+    throw StateError(
+      'Homi cannot confirm this sign-in method yet. Contact support before deleting the account.',
+    );
+  }
+
+  Future<void> deleteReauthenticatedCurrentUser() async {
+    _requireFirebase();
+    final user = _auth.currentUser;
+    if (user == null) return;
+    await user.delete();
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {
+      // Firebase identity deletion already succeeded; a provider sign-out
+      // failure must not recreate or block the deleted account.
+    }
+  }
+
   Future<void> signOut() async {
     if (!firebaseReady) return;
     await _auth.signOut();

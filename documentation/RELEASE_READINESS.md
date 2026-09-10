@@ -2,15 +2,17 @@
 
 This is the source-of-truth checklist for moving Homi from a working development build to a public Google Play release. A visually complete app is not release-ready until the security, shared-data, policy, device and production-signing gates below are satisfied.
 
-Current source version: **`0.9.0+11`**
+Current source version: **`0.9.1+12`**
 
 Status markers: **DONE**, **VERIFY**, **OPEN**, **BLOCKER**.
 
 ## Gate 1 — Source and device stability
 
-- **DONE (Bruce-confirmed, 2026-09-10)** `flutter analyze` is clean on the validated 0.9.0+11 candidate.
-- **DONE (Bruce-confirmed, 2026-09-10)** all Flutter tests pass on the validated 0.9.0+11 candidate.
-- **OPEN** 0.9.0+11 launches and behaves correctly on the Samsung S25 Ultra.
+- **DONE (Bruce-confirmed, 2026-09-10)** `flutter analyze` was clean on the validated/deployed 0.9.0+11 candidate.
+- **DONE (Bruce-confirmed, 2026-09-10)** all Flutter tests passed on the validated/deployed 0.9.0+11 candidate.
+- **VERIFY** `flutter analyze` clean after the 0.9.1 People/check-in client refinement.
+- **VERIFY** all Flutter tests pass after the 0.9.1 client refinement.
+- **OPEN** 0.9.1+12 launches and behaves correctly on the Samsung S25 Ultra.
 - **OPEN** fresh-install and returning-user paths tested.
 - **OPEN** local-only and signed-in paths tested.
 - **OPEN** app background/resume, swipe-away/reopen and network-loss/recovery tested.
@@ -21,11 +23,11 @@ Status markers: **DONE**, **VERIFY**, **OPEN**, **BLOCKER**.
 - **OPEN** notification taps tested from foreground, background and terminated app state.
 - **OPEN** one controlled **All enabled Homi devices** broadcast before public users exist.
 
-Validated application/backend candidate:
+Validated/deployed 0.9.0 application/backend candidate:
 
 `c7e7b86656bc650ce1c8f0aabbb5a3129319db3c`
 
-Documentation-only commits may advance `main` after this SHA without changing the validated 0.9 application/backend source.
+0.9.1 is a client-only UX/local-data refinement on top of that backend. It requires a new Flutter validation/device pass but **does not require another Functions/Firestore deployment** unless later source changes touch a backend runtime surface.
 
 ## Gate 2 — Shared Household product contract
 
@@ -45,15 +47,23 @@ If Shared Household is implemented, use stable record IDs, timestamps/versioning
 - **DONE** latest-state-only cloud model; no default hidden route history.
 - **DONE** Android foreground-service notification uses the Homi icon and remains visible while the shared background location stream is active.
 - **DONE in source** Home and Work check-in places are stored locally, not as cloud location-history records.
+- **DONE in source** Home/Work can be resolved from a typed address or set from the phone's current location; the readable address remains local with the saved coordinates.
 - **DONE in source** arrival events send only Home/Work label + selected trusted recipients; no saved coordinates/address are included in the callable/push payload.
 - **DONE in source** initial inside-zone state does not send; only outside → inside transition sends.
 - **DONE in source** 100 m exit hysteresis plus one-hour local place cooldown reduces GPS-edge duplicates.
 - **DONE in source** Live updates and Arrival check-ins have independent local ownership flags while sharing one foreground location stream.
 - **DONE in source** emergency call shortcuts use phone-app handoff rather than silent direct-call permission.
+- **DONE in source** People is map-first again; connection grouping is additive underneath the approved map/location experience.
 
 ### Must be verified on devices
 
-- **VERIFY** two-device live location after 0.9.0 client install.
+- **VERIFY** People opens directly to the embedded map with the normal Homi top bar and bottom navigation intact.
+- **VERIFY** Household and Friends & trusted people groups appear underneath the existing map/location content.
+- **VERIFY** explicit Edit relationship control is discoverable and usable.
+- **VERIFY** typed Home/Work address resolves to the intended place and readable address.
+- **VERIFY** Set from here stores/displays the intended current address.
+- **VERIFY** check-in enable/disable behaves like the Notifications settings pattern and handles Android background-location handoff cleanly.
+- **VERIFY** two-device live location after the 0.9.1 client install.
 - **VERIFY** Home check-in real outside → inside transition sends exactly once.
 - **VERIFY** Work check-in independently sends to selected people.
 - **VERIFY** opening/restarting while already inside Home/Work does not send a false arrival.
@@ -97,7 +107,7 @@ Force-stopping an Android app can prevent background work until the user opens i
 - **DONE (2026-09-10)** stale `onConnectionDeleted` trigger migration completed; `onTrustedConnectionDeleted` is the active replacement.
 - **DONE (Bruce-confirmed, 2026-09-10)** corrected batched 0.8.2 backend deployment completed successfully.
 
-### 0.9 additions
+### 0.9 backend additions
 
 - **DONE in source** `sendArrivalCheckIn` enforces App Check/authentication.
 - **DONE in source** verified-email requirement for password-provider sender.
@@ -108,11 +118,13 @@ Force-stopping an Android app can prevent background work until the user opens i
 - **DONE in source** sender rate limits: 20/hour and 60/day.
 - **DONE in source** no more than 12 enabled device registrations read per valid recipient.
 - **DONE in source** recipient People-notification preference respected.
-- **DONE in source** saved Home/Work coordinates are never passed to the arrival callable.
+- **DONE in source** saved Home/Work coordinates/addresses are never passed to the arrival callable.
 - **DONE (Bruce-reported, 2026-09-10)** governed 0.9 backend helper completed without an observed failure, publishing the validated backend candidate including `sendArrivalCheckIn`.
 - **VERIFY** `sendArrivalCheckIn` succeeds from a registered App Check debug client on-device and rejects invalid/unattested calls.
 
 Full deployment record: `documentation/releases/0.9.0-backend-deployment-complete.md`.
+
+The 0.9.1 refinement changes no Functions/Firestore contract and must not trigger an unnecessary backend deployment.
 
 ### Remaining production security/configuration
 
@@ -136,9 +148,9 @@ Full deployment record: `documentation/releases/0.9.0-backend-deployment-complet
 - **DONE** provider-appropriate recent reauthentication exists for destructive deletion.
 - **DONE** local erasure, sign-out and account deletion are distinct actions.
 - **DONE** stronger create-account password baseline implemented.
-- **DONE in source** successful account deletion clears user-scoped local arrival-check-in settings from the current device.
+- **DONE in source** successful account deletion clears user-scoped local arrival-check-in settings, including readable saved addresses, from the current device.
 - **VERIFY** Authentication server security helper has been applied.
-- **VERIFY** Google sign-in from the 0.9.0 debug build.
+- **VERIFY** Google sign-in from the 0.9.1 debug build.
 - **VERIFY** verified email/password check-in/sharing works and unverified password accounts are blocked cleanly.
 - **VERIFY** password reset remains non-enumerating after improved email privacy is enabled.
 - **VERIFY** full account deletion on disposable Google and email/password accounts, including arrival settings.
@@ -161,7 +173,7 @@ Full deployment record: `documentation/releases/0.9.0-backend-deployment-complet
 
 - **DONE in-app draft** Why Homi exists, Privacy & your data, Location & safety, Terms of use and account controls exist.
 - **DONE in source** Safety & check-ins states Homi does not dispatch emergency responders or automatically send location to them.
-- **DONE in source** Home/Work coordinates are local in the current check-in architecture and not inserted into arrival push payloads.
+- **DONE in source** Home/Work coordinates and readable addresses are local in the current check-in architecture and are not inserted into arrival push payloads.
 - **BLOCKER** final public Privacy Policy hosted on stable HTTPS URL.
 - **BLOCKER** final Terms of Use hosted on stable HTTPS URL.
 - **BLOCKER** external account-deletion page available without requiring the app.
@@ -225,10 +237,21 @@ Recommended before broad rollout:
 
 ## Current release position
 
-The **0.9.0+11 source gate is complete**: Bruce confirmed the final post-cleanup analyzer was clean and all tests passed on the validated candidate `c7e7b86656bc650ce1c8f0aabbb5a3129319db3c`.
+The **0.9.0+11 source/backend gate is complete**: Bruce confirmed a clean analyzer, all tests passing, and the governed Cloud Shell backend deployment completed without an observed failure for candidate `c7e7b86656bc650ce1c8f0aabbb5a3129319db3c`.
 
-Bruce subsequently reported that the governed Cloud Shell backend deployment completed without an observed failure. The backend publication gate is therefore recorded as user-confirmed complete; exact callable behaviour still requires physical-device acceptance.
+The first S25 Ultra UI review then rejected the lightweight People hub because it displaced the already-approved map-first People experience and made the normal shell/navigation feel absent inside the separate manager flow.
 
-**Immediate next gate: install/run the 0.9 client on the Samsung S25 Ultra and execute the structured device regression.** Do not return to backend deployment unless device evidence points to a backend defect.
+`0.9.1+12` corrects that product regression in source:
 
-The largest product blocker after device acceptance remains the Shared Household contract if Homi is to be marketed as a true household-wide source of truth. Production signing, Play Integrity/App Check enforcement, public legal URLs and Play policy declarations form the later deployment phase.
+- primary People is map-first again inside the existing Homi shell;
+- connection grouping is underneath the approved map/location content;
+- the redundant Manage connections & live location detour is removed from the primary flow;
+- trusted-person editing has an explicit labelled Edit action;
+- Safety & check-ins is positioned after connections;
+- arrival enable/disable follows the Notifications-page interaction pattern;
+- oversized passive help boxes are replaced by How it works bottom-sheet education;
+- Home/Work supports typed address resolution plus Set from here and stores a readable local address.
+
+**Immediate next gate: run `flutter analyze` + `flutter test` for the new 0.9.1 client candidate.** If clean, reinstall/run it on the S25 Ultra. Do not redeploy Firebase for this client-only refinement.
+
+The largest later product blocker remains the Shared Household contract if Homi is to be marketed as a true household-wide source of truth. Production signing, Play Integrity/App Check enforcement, public legal URLs and Play policy declarations form the later deployment phase.

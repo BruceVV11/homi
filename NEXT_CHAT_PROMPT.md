@@ -4,11 +4,10 @@ Continue development of **Homi** from the current GitHub `main` branch. GitHub i
 
 Before changing anything, inspect:
 
-- `documentation/releases/0.8.1.md`
-- `documentation/releases/0.8.1-cloud-shell-storage-fix.md`
 - `documentation/releases/0.8.2.md`
 - `documentation/releases/0.8.2-functions-batching-fix.md`
-- `documentation/SECURITY.md`
+- `documentation/releases/0.8.2-backend-deployment-complete.md`
+- `documentation/releases/0.9.0.md`
 - `documentation/RELEASE_READINESS.md`
 - `documentation/NOTIFICATIONS.md`
 - `documentation/ARCHITECTURE.md`
@@ -18,7 +17,7 @@ Before changing anything, inspect:
 - `documentation/business/PRICING_AND_UNIT_ECONOMICS.md`
 - the latest affected source files
 
-Use the **mobile-app-development** workflow first. For Cloud Shell/Firebase release work, also use the Concept Lab release-integrity workflow. A user rerun is not a diagnostic tool: inspect the full failing phase and all discoverable stale contracts before asking Bruce for another deployment attempt.
+Use the **mobile-app-development** workflow first. For Firebase/Cloud Shell release work also use Concept Lab release integrity. Do not use Bruce's reruns as a diagnostic mechanism; inspect all discoverable source/tests/deployment contracts first.
 
 Preserve approved behaviour/design, exact brand assets and existing user data. Never claim a source pass compiled, deployed or worked on-device until Bruce's real Flutter/Android/Firebase toolchain proves it.
 
@@ -29,7 +28,7 @@ Preserve approved behaviour/design, exact brand assets and existing user data. N
 - Android application ID: `za.co.theconceptlab.homi`
 - Firebase / Google Cloud project: `homi-ee80a`
 - Firebase project number: `883068189841`
-- Firestore region: `africa-south1`
+- Firestore / Functions region: `africa-south1`
 - Flutter baseline: 3.41.5 stable
 - Dart baseline: 3.11.3
 - Development device: Samsung S25 Ultra
@@ -57,13 +56,13 @@ Do not automatically pop or delete it.
 
 ## Standing user-facing copy rule
 
-All **user-visible** Homi wording must read as though Homi is a complete product. Never show “being built”, “pre-release”, “future feature”, “not yet implemented”, roadmap language or wording addressed to Bruce/developers.
+All user-visible Homi wording must read as a complete product. Never expose “being built”, “pre-release”, “future feature”, “not yet implemented”, roadmap/developer language.
 
-Do not misrepresent unavailable capability. Describe current boundaries naturally, e.g. “This record stays on this phone unless it is shared.” Internal engineering docs should still state real blockers.
+Do not misrepresent unavailable capability. Internal docs must still state real blockers.
 
 ## Current source version
 
-**`0.8.2+10`**
+**`0.9.0+11`**
 
 Primary navigation remains:
 
@@ -71,235 +70,229 @@ Primary navigation remains:
 
 Home remains centred with the exact Homi mark.
 
-## Confirmed product/device baseline
+## 0.8.2 backend — COMPLETED
 
-Bruce reported the 0.8 product experience is where he wants it overall. Before the 0.8.2 security-closure pass, the Samsung S25 Ultra proved:
+Bruce confirmed on 10 September 2026 that the corrected 0.8.2 backend deployment completed successfully.
 
-- normal Homi notifications deliver;
-- developer self-test notifications deliver;
-- the notification status icon uses the Homi mark;
-- Developer notifications access is enabled for the intended account;
-- Android Studio runtime otherwise behaves correctly.
+The proven path includes:
 
-The **All enabled Homi devices** developer audience exists through FCM topics. It was intentionally withheld during the first proof to avoid an accidental broad send. Perform one controlled broad test before public users exist.
+- Node 22 guard;
+- temporary/disposable Functions dependency workspace;
+- synchronized generated package lock;
+- local `npm ci`;
+- Function syntax gate;
+- Firestore Emulator security suite **12/12**;
+- Firestore rules/index deployment;
+- safe migration from stale HTTPS `onConnectionDeleted` to active Firestore trigger `onTrustedConnectionDeleted`;
+- dedicated runtime identity `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`;
+- Function deployment in batches of five.
 
-## 0.8 notification system
+Do not reopen the old dependency/lock/trigger/broad-deployment incidents unless new evidence specifically points there.
 
-Path: **Profile avatar → Homi & account → Notifications**.
-
-Categories:
-
-- Household attention
-- Tasks & routines
-- People
-- Homi updates
-- Service & security
-
-Fresh/default **Homi updates are OFF** until explicitly enabled. Unknown remote categories fail closed.
-
-Local notifications cover due Tasks/Routines, Supply expiry warning/date, Home service warning/date and grouped household attention.
-
-Cloud notifications cover connection requests/acceptance, People hearts, shared Task creation/assignment/completion and developer broadcasts.
-
-Developer access remains server-provisioned through `developerAdmins/{uid}`. Normal users cannot self-grant it.
-
-## People hearts
-
-`sendHeart` is a callable Function in `africa-south1`.
-
-Hardening includes:
-
-- Firebase Authentication required;
-- accepted trusted connection required;
-- App Check enforcement;
-- 1-minute sender→recipient cooldown;
-- 40 hearts per sender per fixed 24-hour window;
-- max 3 `sendHeart` instances.
-
-The feature remains intentionally tiny: `{name} is thinking about you!`; do not turn it into chat unless Bruce asks.
-
-## 0.8.2 security closure
-
-Sensitive collaboration writes now go through App-Check-protected callable Functions instead of broad cross-user client Firestore writes.
-
-Server-controlled operations include:
-
-- Homi identity/code issuance;
-- exact Homi-code lookup and connection creation;
-- connection acceptance/removal;
-- trusted-person relationship/scope changes;
-- location-sharing authorization;
-- shared Task creation/toggle/removal;
-- developer notification campaign queueing;
-- cloud account-data deletion;
-- push notification device registration/removal.
-
-Password-provider sharing operations require verified email. Connection/code/share/task/deletion/developer actions are rate-limited. Shared Task membership is derived server-side from accepted Household relationships.
-
-Cloud Functions are configured to run as:
-
-`homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`
-
-Global defaults remain bounded (`maxInstances: 5`, `minInstances: 0`, `256MiB`) with lower caps on selected high-risk callables. Direct notification fan-out reads at most 12 enabled device records per user.
-
-Latest location remains the high-frequency record written directly by the device. It is owner-only, schema bounded and limited by Firestore rules to one update of an existing document per 30 seconds. Normal live updates remain approximately two minutes / 100 m.
-
-## Automated Firestore security gate
-
-`security-tests/server.boundary.test.js` is run through:
+The deployment helper remains:
 
 ```bash
-bash scripts/test-firestore-security.sh
+bash scripts/deploy-notification-backend.sh
 ```
 
-The deployment helper runs it automatically and blocks deployment on failure.
+and owns dependency preparation, syntax checks, the Firestore security gate, Firestore deployment and batched Function deployment.
 
-### Confirmed 10 September 2026 result
+## Current 0.9 source pass
 
-Latest Cloud Shell runs proved:
+Bruce requested four additions before running the new app build:
 
-- **12 tests**
-- **12 passed**
-- **0 failed**
+1. South African emergency-service speed-dial style shortcuts;
+2. automatic Home/Work arrival check-ins to selected trusted people;
+3. profile pictures in Task assignment plus clear Household vs non-Household grouping on People;
+4. app operational notifications on by default for fresh installs.
 
-The `PERMISSION_DENIED` messages inside negative tests are expected; the final test summary is authoritative.
+These are implemented in GitHub source and documented, but **have not yet been proven by Bruce's Flutter/Android toolchain**.
 
-The stricter 0.8.2 Firestore rules compile successfully and are live in the default database in `homi-ee80a`.
+### Safety & emergency calls
 
-## Current Cloud Functions deployment state — important
+New People → **Safety & check-ins** surface.
 
-The 0.8.2 backend deployment is **partially deployed and pending final batched verification**.
+Current South African call shortcuts:
 
-### Already proven healthy
+- `112` — emergency from a mobile phone;
+- `10111` — police emergency;
+- `10177` — ambulance emergency.
 
-- disposable Functions dependency-lock preparation;
-- local `npm ci` using the same lock Cloud Build receives;
-- Function syntax checks;
-- Firestore security suite: **12/12**;
-- Firestore indexes/rules deployment;
-- Functions source packaging/upload;
-- dedicated project identity guards.
+Implementation uses `url_launcher` with a `tel:` URI and opens the device phone app with the number ready. Homi deliberately does not request direct-call permission or silently place calls.
 
-### One-time trigger migration — COMPLETED
+User-facing copy must continue to state that Homi does not dispatch responders and does not automatically send location to emergency services.
 
-A stale deployed HTTPS Function previously occupied the name `onConnectionDeleted`, while 0.8.2 required a Firestore deletion backstop. Firebase cannot mutate an HTTPS trigger into a background trigger in place.
+Emergency shortcuts work without a Homi account.
 
-The repository migrated safely:
+### Arrival check-ins
 
-- replacement background Function is `onTrustedConnectionDeleted`;
-- replacement was deployed successfully in `africa-south1`;
-- Google Cloud reported the replacement `ACTIVE`;
-- only then was stale HTTPS `onConnectionDeleted` deleted successfully;
-- future helper runs automatically skip this completed migration.
+New source:
 
-Do not recreate the old `onConnectionDeleted` export.
+- `lib/src/domain/arrival_check_in.dart`
+- `lib/src/services/arrival_check_in_service.dart`
+- `lib/src/features/people/safety_check_in_page.dart`
+- `functions/check_in.js`
 
-### Latest remaining deployment failure
+The user explicitly configures check-ins:
 
-After the successful trigger migration, the broad Functions deploy attempted roughly twenty 2nd-gen Function updates together.
+1. sign in;
+2. save Home and/or Work while physically there;
+3. choose radius (current UI: 150/250/500 m; bounded model: 75 m–1 km);
+4. choose accepted trusted recipients per place;
+5. turn Arrival check-ins on.
 
-**13 updates completed successfully.** The following seven failed at the Cloud Functions v2 API request/update stage without a per-function build/source/runtime error being reported:
+Privacy architecture:
 
-- `onConnectionAccepted`
-- `onHomiUserDocumentDeleted`
-- `onNotificationCampaignCreated`
-- `onSharedTaskCreated`
-- `onSharedTaskUpdated`
-- `registerNotificationDevice`
-- `removeNotificationDevice`
+- Home/Work coordinates remain local and user-scoped in SharedPreferences;
+- no Home/Work coordinates are sent to the callable or FCM payload;
+- cloud receives only `home`/`work` plus selected recipient UIDs;
+- no route history is created;
+- initial position primes state and never sends an arrival merely because Homi starts inside a zone;
+- outside → inside is the arrival transition;
+- user must move beyond radius + 100 m before the place is considered left again;
+- one-hour local place cooldown limits duplicate edge sends.
 
-The Firebase CLI printed generic `Failed to make request` messages while the other Functions in the same deployment succeeded. Do not interpret this as seven separate source bugs.
+### Shared background location stream
 
-Firebase's current guidance recommends named Function deployments when a project contains more than five Functions and groups of ten or fewer for larger deployments to avoid deployment-rate/control-plane failures. The exact HTTP response code was not printed in Bruce's log, so record this as a provider request/concurrency pattern rather than claiming a specific quota code.
+Do not build a second hidden tracker.
 
-### Batching repair now on `main`
+`LocationStatusService` now coordinates one Android foreground location stream with two independent explicit requirements:
 
-`scripts/deploy-notification-backend.sh` now:
+- Live updates;
+- Arrival check-ins.
 
-1. verifies local Node.js major version 22;
-2. prepares the synchronized disposable Functions lock;
-3. proves it with local `npm ci`;
-4. runs Function syntax checks;
-5. runs the mandatory 12/12 Firestore security gate;
-6. skips the completed stale-trigger migration when no legacy resource exists;
-7. deploys Firestore rules/indexes as their own surface;
-8. derives current Function names directly from `functions/entrypoint.js`;
-9. deploys Functions in deterministic batches of **5** instead of one broad burst;
-10. stops on a failed batch and leaves already-successful deployments intact/resumable.
+Each has its own persisted requirement flag. Turning one off does not stop the stream while the other still needs it. When neither needs background location, the stream stops.
 
-See `documentation/releases/0.8.2-functions-batching-fix.md`.
+Startup resume does not prompt for permissions; it resumes only if an explicit feature flag exists and Android `always` location permission is already available.
 
-This batching repair is **fixed in source and pending Cloud Shell proof**.
+Foreground notification wording is neutral because the stream may serve either/both features.
 
-## Cloud Shell storage rules
+Force-stopping Android can interrupt background operation until the user opens Homi again. Never represent arrival notifications as emergency-grade or guaranteed.
 
-Functions npm cache and Firestore security-test dependencies use `${TMPDIR:-/tmp}` instead of persistent `$HOME`. Generated `node_modules` trees and the untracked generated Functions lock are removed automatically.
+### `sendArrivalCheckIn`
 
-If persistent storage is unexpectedly low, inspect before deleting anything. Do not delete the Homi repository.
+New App-Check-protected callable in `africa-south1`.
 
-Safe cleanup helper:
+It:
 
-```bash
-bash scripts/cleanup-cloud-shell.sh
-```
+- requires Firebase Authentication;
+- requires verified email for password-provider users;
+- accepts only Home/Work event labels;
+- accepts at most 10 selected recipient UIDs;
+- revalidates accepted trusted connections at send time;
+- skips stale/disconnected selections rather than notifying them or letting one stale selection block other valid recipients;
+- rate-limits sender to 20/hour and 60/day;
+- reads at most 12 enabled device registrations per valid recipient;
+- respects recipient People-notification settings;
+- includes no coordinates/address in the push;
+- routes notifications to People.
 
-## App Check
+The existing batched deployment helper discovers this new export automatically from `functions/entrypoint.js`.
 
-Bruce registered the development debug App Check token privately. Do not request it.
+### People hub
 
-Protected callables enforce App Check in source. Firestore service enforcement remains a release gate: verify legitimate debug traffic, configure/verify Play Integrity for the Play-signed build, then deliberately enable Firestore enforcement before public release.
+New `lib/src/features/people/people_hub_page.dart` is now the primary People destination.
+
+It separates accepted connections into:
+
+- **Household** — preference scope `household`;
+- **Friends & trusted people** — accepted non-Household connections.
+
+Both sections use existing connection profile photos with fallbacks. Pending requests remain visible.
+
+The approved existing detailed `PeoplePage` map/location/relationship implementation is preserved behind **Manage connections & live location**; do not delete or rewrite it merely because the hub exists.
+
+Safety & check-ins also opens from this hub.
+
+### Task assignee photos
+
+`RoutinesPage` Task assignment now receives `actorPhotoUrl` and renders:
+
+- signed-in user's profile photo where available;
+- each Household assignee's trusted-connection profile photo;
+- initials/person/group fallback when unavailable;
+- existing Anyone at home option.
+
+Task membership/authorization is unchanged. `HouseholdPeopleService` remains the assignee source, so non-Household friends are not exposed as Task assignees.
+
+### Notification defaults
+
+Fresh-install `HomiNotificationPreferences` now defaults:
+
+- master operational notifications ON;
+- Household attention ON;
+- Tasks & routines ON;
+- People ON;
+- Service & security ON;
+- Homi Updates/product announcements OFF.
+
+The last category remains separately opt-in because it is product/update messaging rather than operational household/safety delivery.
+
+Android still controls actual runtime notification permission. On a fresh install Homi asks once when operational notifications are enabled but OS permission is absent. If denied/dismissed, Homi does not repeatedly interrupt on every launch; the user can enable later from Homi & account → Notifications/Android Settings.
+
+Existing persisted user preferences remain authoritative. An explicit existing OFF is not silently overwritten.
+
+## Existing 0.8 protected collaboration contract
+
+Continue preserving:
+
+- server-side Homi identity/code issuance and lookup;
+- protected connection create/accept/remove;
+- protected relationship/scope changes;
+- protected location-share authorization;
+- protected shared Task create/toggle/remove;
+- protected developer notification queue;
+- protected cloud account-data deletion;
+- protected push registration/removal;
+- verified-email requirement for password-provider sharing operations;
+- App Check on protected callables;
+- server-side rate limits;
+- Shared Task membership derived from accepted Household relationships;
+- latest-location direct write as the bounded high-frequency path;
+- no stealth tracking;
+- no automatic location sharing merely because people connect.
+
+## Notifications baseline
+
+Previously proven on Samsung S25 Ultra before the 0.9 pass:
+
+- normal Homi notifications delivered;
+- developer self-test notifications delivered;
+- Homi status icon displayed correctly;
+- Developer notifications access worked for intended account.
+
+The **All enabled Homi devices** FCM-topic path still needs one controlled broad test before public users exist.
 
 ## Current cloud-sync truth
 
-Trusted People/location and explicitly shared one-off Tasks use Firebase. Most household operational data remains device-local:
+Firebase currently covers trusted People/location, arrival event delivery and explicitly shared one-off Tasks.
 
-- Routines
-- Supplies
-- Home Things/history/readings
-- private Tasks
+Most household operational data remains local-first:
 
-This remains the largest product-contract decision before release. If Homi launches as a genuinely shared Household app, build a real Household identity/membership model plus conflict-safe local↔cloud merge/sync before store deployment. Never upload SharedPreferences wholesale or blindly let one device overwrite another.
+- Routines;
+- Supplies;
+- Home Things/history/readings;
+- private Tasks.
 
-If the first launch stays local-first for those areas, store/in-app copy must state that boundary clearly.
+If Homi launches publicly as a genuinely shared Household system, build a real Household identity/membership model plus conflict-safe sync for those areas. Never upload SharedPreferences wholesale or blindly overwrite another device.
 
-## Release readiness
+## Immediate verification checkpoint for 0.9
 
-Read `documentation/RELEASE_READINESS.md` before deciding Homi is ready for Play.
+### 1. Windows / real Flutter toolchain first
 
-Major remaining gates include:
+```powershell
+cd C:\ConceptLab\Projects\homi
+git pull
+flutter pub get
+flutter analyze
+flutter test
+```
 
-- complete the 0.8.2 batched Functions deployment using the dedicated runtime identity;
-- run/verify `configure-auth-security.sh`;
-- Flutter analyzer/tests and 0.8.2 physical-device regression;
-- one controlled broad developer broadcast test;
-- full Shared Household sync OR a deliberate local-first launch contract;
-- background-location multi-hour/reboot/battery-optimiser testing;
-- Google Play background-location declaration/review;
-- release signing + Play App Signing SHA registration;
-- production Google Sign-In from Play-installed build;
-- production Maps key fingerprint restriction;
-- Play Integrity App Check and Firestore App Check enforcement;
-- safely review old default Compute Editor access only after every Function is proven on the dedicated runtime identity;
-- Cloud billing alerts/spend controls and monitoring;
-- public Privacy Policy, Terms and external account-deletion URL;
-- Google Play Data Safety/content-rating/target-audience/app-access/store assets;
-- decide whether first public release is free-only or includes Homi+ billing.
+Do not deploy the new callable until this source pass is clean locally.
 
-Current pricing direction remains planning only:
+If analyzer/tests expose an issue, capture exact output and fix the full stale contract before another run.
 
-- Homi Free — R0
-- Homi+ — R49.99/month or R499.99/year
-- one household around six Household members
-- location-only friends do not consume paid Household seats
-- privacy/stop-sharing/account deletion never paywalled
-
-Do not add a paywall before premium shared-cloud value exists.
-
-## Immediate continuation checkpoint
-
-Do **not** manually delete Functions, run manual npm repair commands, weaken Firestore rules, or use broad deployment force flags.
-
-The normal helper now owns the recovery. From Cloud Shell:
+### 2. Cloud Shell after Flutter is clean
 
 ```bash
 cd ~/homi
@@ -307,37 +300,54 @@ git pull
 bash scripts/deploy-notification-backend.sh
 ```
 
-Expected high-level sequence:
+Expected: existing 0.8.2 Functions mostly skip as unchanged; new/changed 0.9 Functions deploy through the already-proven batches of five. Do not manually run npm repair, delete Functions, or weaken security rules.
 
-1. Node 22 guard passes;
-2. dependency lock preparation passes;
-3. local `npm ci` and Function syntax checks pass;
-4. Firestore security gate reports **12/12**;
-5. completed stale-trigger migration is skipped;
-6. Firestore deploy succeeds;
-7. helper discovers the current Function export set;
-8. Functions deploy in batches of **5**;
-9. already-current Functions may report `Skipped (No changes detected)`;
-10. remaining Function updates complete;
-11. helper prints `Homi backend deployment completed.`
+### 3. Physical-device regression
 
-If a batch fails, capture that batch's exact output. Do not immediately rerun the whole command until the failure has been classified.
+At minimum verify on Samsung S25 Ultra, then a second Android device for background/check-in behaviour:
 
-After Functions deploy succeeds, apply/verify the Authentication security helper and then retest on the S25 Ultra:
+- fresh-install notification permission prompt and default settings;
+- existing explicit notification OFF remains OFF after update;
+- 112 / 10111 / 10177 each open the phone app with the correct number;
+- People shows Household separately from Friends & trusted people;
+- profile photos/fallbacks render correctly;
+- Task assignment shows only Household identities and their photos;
+- save Home current location + recipients;
+- save Work independently;
+- enable check-ins with Android background permission;
+- app start while already inside Home does not send a false arrival;
+- real outside → inside Home arrival sends exactly once;
+- Work arrival sends independently;
+- People notification OFF suppresses recipient arrival push;
+- a disconnected stale recipient is skipped while still-valid recipients can receive;
+- Live updates OFF does not stop active Arrival check-ins;
+- Arrival check-ins OFF does not stop explicit Live updates;
+- both OFF stops the foreground location stream;
+- existing hearts, connections, shared Tasks, live location, developer notifications and account deletion still work;
+- no raw permission errors appear.
 
-- notification registration/delivery;
-- People heart with registered App Check debug token;
-- repeated heart rate limiting;
-- Homi code identity/load/connect/accept/remove;
-- Household ↔ Friend scope changes;
-- shared Task create/complete/reopen/remove;
-- live location share on/off and viewer reads;
-- developer self test;
-- one controlled **All enabled Homi devices** test;
-- account deletion on disposable accounts;
-- no raw permission errors.
+## Production gates still open
 
-Old 0.8.1 debug APKs must not be used to judge protected collaboration after the stricter 0.8.2 Firestore rules; the 0.8.2 client uses the new server-authorized paths.
+Read `documentation/RELEASE_READINESS.md`. Major gates still include:
+
+- `configure-auth-security.sh` proof if not already recorded;
+- Play Integrity App Check / Firestore enforcement after valid-client metrics;
+- full background-location multi-hour/reboot/battery tests;
+- Google Play background-location declaration/review;
+- Shared Household sync decision/implementation;
+- release signing + Play App Signing SHA;
+- production Google Sign-In/Maps restrictions;
+- cloud billing alerts/monitoring;
+- public Privacy Policy, Terms and external account-deletion URL;
+- Play Data Safety/content rating/target audience/app access/assets;
+- one controlled broad developer notification;
+- Homi+ decision only after premium shared-cloud value exists.
+
+Pricing remains planning only:
+
+- Homi Free — R0
+- Homi+ — R49.99/month or R499.99/year
+- privacy, stop-sharing, arrival-check-in disable and account deletion are never paywalled.
 
 ## Documentation rule
 

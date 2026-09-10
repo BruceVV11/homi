@@ -227,18 +227,6 @@ class ArrivalCheckInService extends ChangeNotifier {
     return config.configuredPlaces.any((place) => place.recipientUids.isNotEmpty);
   }
 
-  void _primePlace(ArrivalPlaceKind kind, LocationStatusSnapshot snapshot) {
-    final place = _config.place(kind);
-    if (place == null) return;
-    final distance = Geolocator.distanceBetween(
-      snapshot.latitude,
-      snapshot.longitude,
-      place.latitude,
-      place.longitude,
-    );
-    _inside[kind] = distance <= place.radiusMeters;
-  }
-
   Future<void> _evaluate(LocationStatusSnapshot snapshot) async {
     if (!_config.enabled || _activeUid == null) return;
 

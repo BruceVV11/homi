@@ -12,14 +12,46 @@ const {getMessaging} = require("firebase-admin/messaging");
 
 setGlobalOptions({
   region: "africa-south1",
-  maxInstances: 10,
+  maxInstances: 5,
 });
 
 initializeApp();
 const db = getFirestore();
 const messaging = getMessaging();
 
-const HEART_COOLDOWN_MS = 60 * 1000;
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+const HEART_COOLDOWN_MS = MINUTE_MS;
+const MAX_NOTIFICATION_DEVICES_PER_USER = 12;
+
+async function consumeFixedWindowLimit({scope, actorUid, limit, windowMs}) {
+  if (!actorUid) return false;
+  const ref = db.collection("serverRateLimits").doc(`${scope}_${actorUid}`);
+  const now = Date.now();
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const data = snapshot.exists ? snapshot.data() : {};
+    const storedStart = Number(data.windowStartMs || 0);
+    const storedCount = Number(data.count || 0);
+    const expired = !storedStart || now - storedStart >= windowMs;
+    const windowStartMs = expired ? now : storedStart;
+    const count = expired ? 0 : storedCount;
+    if (count >= limit) return false;
+    transaction.set(
+        ref,
+        {
+          scope,
+          actorUid,
+          windowStartMs,
+          count: count + 1,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        {merge: true},
+    );
+    return true;
+  });
+}
 
 function channelForCategory(category) {
   switch (category) {
@@ -72,9 +104,9 @@ function deviceAllowsCategory(data, category) {
       return data.serviceNotices !== false;
     case "update":
     case "product":
-      return data.homiUpdates !== false;
+      return data.homiUpdates === true;
     default:
-      return true;
+      return false;
   }
 }
 
@@ -84,6 +116,7 @@ async function userDeviceDocs(uid) {
       .doc(uid)
       .collection("devices")
       .where("notificationsEnabled", "==", true)
+      .limit(MAX_NOTIFICATION_DEVICES_PER_USER)
       .get();
   return snapshot.docs;
 }
@@ -204,67 +237,86 @@ async function displayNameFor(uid) {
   return typeof name === "string" && name.trim() ? name.trim() : "Someone";
 }
 
-exports.sendHeart = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Sign in to send a heart.");
-  }
-  const senderUid = request.auth.uid;
-  const recipientUid = String(
-      request.data && request.data.recipientUid || "",
-  ).trim();
-  if (!recipientUid || recipientUid === senderUid) {
-    throw new HttpsError("invalid-argument", "Choose a connected person.");
-  }
+exports.sendHeart = onCall(
+    {
+      enforceAppCheck: true,
+      maxInstances: 3,
+    },
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Sign in to send a heart.");
+      }
+      const senderUid = request.auth.uid;
+      const recipientUid = String(
+          request.data && request.data.recipientUid || "",
+      ).trim();
+      if (!recipientUid || recipientUid === senderUid) {
+        throw new HttpsError("invalid-argument", "Choose a connected person.");
+      }
 
-  const connection = await acceptedConnection(senderUid, recipientUid);
-  if (!connection) {
-    throw new HttpsError(
-        "permission-denied",
-        "Hearts can only be sent to an accepted trusted person.",
-    );
-  }
+      const connection = await acceptedConnection(senderUid, recipientUid);
+      if (!connection) {
+        throw new HttpsError(
+            "permission-denied",
+            "Hearts can only be sent to an accepted trusted person.",
+        );
+      }
 
-  const cooldownRef = db
-      .collection("heartCooldowns")
-      .doc(`${senderUid}_${recipientUid}`);
-  const now = Date.now();
-  await db.runTransaction(async (transaction) => {
-    const snapshot = await transaction.get(cooldownRef);
-    const last = snapshot.data() && snapshot.data().sentAt;
-    const lastMillis = last && typeof last.toMillis === "function" ?
-      last.toMillis() : 0;
-    if (lastMillis && now - lastMillis < HEART_COOLDOWN_MS) {
-      throw new HttpsError(
-          "resource-exhausted",
-          "Give it a moment before sending another heart.",
-      );
-    }
-    transaction.set(
-        cooldownRef,
-        {
-          senderUid,
-          recipientUid,
-          sentAt: FieldValue.serverTimestamp(),
-        },
-        {merge: true},
-    );
-  });
+      const cooldownRef = db
+          .collection("heartCooldowns")
+          .doc(`${senderUid}_${recipientUid}`);
+      const now = Date.now();
+      await db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(cooldownRef);
+        const last = snapshot.data() && snapshot.data().sentAt;
+        const lastMillis = last && typeof last.toMillis === "function" ?
+          last.toMillis() : 0;
+        if (lastMillis && now - lastMillis < HEART_COOLDOWN_MS) {
+          throw new HttpsError(
+              "resource-exhausted",
+              "Give it a moment before sending another heart.",
+          );
+        }
+        transaction.set(
+            cooldownRef,
+            {
+              senderUid,
+              recipientUid,
+              sentAt: FieldValue.serverTimestamp(),
+            },
+            {merge: true},
+        );
+      });
 
-  const senderName = await displayNameFor(senderUid);
-  const result = await sendToUser(recipientUid, {
-    title: `${senderName} is thinking about you!`,
-    body: "A little check-in from someone you trust on Homi.",
-    category: "heart",
-    route: "people",
-    priority: "important",
-    extraData: {senderUid},
-  });
+      const withinDailyLimit = await consumeFixedWindowLimit({
+        scope: "heart_day",
+        actorUid: senderUid,
+        limit: 40,
+        windowMs: DAY_MS,
+      });
+      if (!withinDailyLimit) {
+        throw new HttpsError(
+            "resource-exhausted",
+            "You have sent plenty of hearts today. Try again later.",
+        );
+      }
 
-  return {
-    accepted: true,
-    deliveredDevices: result.successCount,
-  };
-});
+      const senderName = await displayNameFor(senderUid);
+      const result = await sendToUser(recipientUid, {
+        title: `${senderName} is thinking about you!`,
+        body: "A little check-in from someone you trust on Homi.",
+        category: "heart",
+        route: "people",
+        priority: "important",
+        extraData: {senderUid},
+      });
+
+      return {
+        accepted: true,
+        deliveredDevices: result.successCount,
+      };
+    },
+);
 
 exports.onConnectionRequestCreated = onDocumentCreated(
     "connections/{connectionId}",
@@ -274,6 +326,18 @@ exports.onConnectionRequestCreated = onDocumentCreated(
       const initiatorUid = data.initiatorUid;
       const recipientUid = data.recipientUid;
       if (!initiatorUid || !recipientUid) return;
+      const allowed = await consumeFixedWindowLimit({
+        scope: "connection_push_hour",
+        actorUid: initiatorUid,
+        limit: 20,
+        windowMs: HOUR_MS,
+      });
+      if (!allowed) {
+        logger.warn("Suppressed excessive connection-request notification", {
+          initiatorUid,
+        });
+        return;
+      }
       const initiatorName = data.aUid === initiatorUid ? data.aName : data.bName;
       await sendToUser(recipientUid, {
         title: "New Homi connection request",
@@ -315,6 +379,19 @@ exports.onSharedTaskCreated = onDocumentCreated(
       const creatorName = data.createdByName || "Someone at home";
       const members = Array.isArray(data.memberUids) ? data.memberUids : [];
       const assigneeUid = data.assigneeUid;
+      if (!creatorUid) return;
+      const allowed = await consumeFixedWindowLimit({
+        scope: "task_create_push_hour",
+        actorUid: creatorUid,
+        limit: 60,
+        windowMs: HOUR_MS,
+      });
+      if (!allowed) {
+        logger.warn("Suppressed excessive shared-task creation notifications", {
+          creatorUid,
+        });
+        return;
+      }
       const recipients = assigneeUid && assigneeUid !== creatorUid ?
         [assigneeUid] : members.filter((uid) => uid !== creatorUid);
 
@@ -341,6 +418,18 @@ exports.onSharedTaskUpdated = onDocumentUpdated(
       const creatorUid = after.createdByUid;
       const completedByUid = after.completedByUid;
       if (!creatorUid || !completedByUid || creatorUid === completedByUid) return;
+      const allowed = await consumeFixedWindowLimit({
+        scope: "task_complete_push_hour",
+        actorUid: completedByUid,
+        limit: 120,
+        windowMs: HOUR_MS,
+      });
+      if (!allowed) {
+        logger.warn("Suppressed excessive shared-task completion notifications", {
+          completedByUid,
+        });
+        return;
+      }
       const completedByName = after.completedByName || "Someone at home";
       await sendToUser(creatorUid, {
         title: "Household task completed",
@@ -388,6 +477,27 @@ exports.onNotificationCampaignCreated = onDocumentCreated(
         const body = String(data.body || "").trim();
         if (!title || !body || title.length > 80 || body.length > 280) {
           throw new Error("Campaign title/body did not pass validation.");
+        }
+
+        const withinHourlyLimit = await consumeFixedWindowLimit({
+          scope: audience === "all" ? "developer_broadcast_hour" : "developer_self_hour",
+          actorUid: creatorUid,
+          limit: audience === "all" ? 6 : 30,
+          windowMs: HOUR_MS,
+        });
+        if (!withinHourlyLimit) {
+          throw new Error("Developer notification hourly rate limit reached.");
+        }
+        if (audience === "all") {
+          const withinDailyLimit = await consumeFixedWindowLimit({
+            scope: "developer_broadcast_day",
+            actorUid: creatorUid,
+            limit: 20,
+            windowMs: DAY_MS,
+          });
+          if (!withinDailyLimit) {
+            throw new Error("Developer broadcast daily rate limit reached.");
+          }
         }
 
         await campaignRef.set(
@@ -454,12 +564,13 @@ exports.onHomiUserDocumentDeleted = onDocumentDeleted(
     "users/{uid}",
     async (event) => {
       const uid = event.params.uid;
-      const [sentHearts, receivedHearts, campaigns, developerAdmin] =
+      const [sentHearts, receivedHearts, campaigns, rateLimits, developerAdmin] =
         await Promise.all([
           db.collection("heartCooldowns").where("senderUid", "==", uid).get(),
           db.collection("heartCooldowns").where("recipientUid", "==", uid).get(),
           db.collection("notificationCampaigns")
               .where("createdByUid", "==", uid).get(),
+          db.collection("serverRateLimits").where("actorUid", "==", uid).get(),
           db.collection("developerAdmins").doc(uid).get(),
         ]);
 
@@ -467,6 +578,7 @@ exports.onHomiUserDocumentDeleted = onDocumentDeleted(
       sentHearts.docs.forEach((doc) => refs.set(doc.ref.path, doc.ref));
       receivedHearts.docs.forEach((doc) => refs.set(doc.ref.path, doc.ref));
       campaigns.docs.forEach((doc) => refs.set(doc.ref.path, doc.ref));
+      rateLimits.docs.forEach((doc) => refs.set(doc.ref.path, doc.ref));
       if (developerAdmin.exists) {
         refs.set(developerAdmin.ref.path, developerAdmin.ref);
       }

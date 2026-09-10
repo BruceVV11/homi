@@ -22,14 +22,18 @@ service cloud.firestore {
     }
 
     function hasAcceptedConnection(firstUid, secondUid) {
-      let ids = firstUid < secondUid
-        ? [firstUid, secondUid]
-        : [secondUid, firstUid];
-      let path = /databases/$(database)/documents/connections/$(ids[0] + '_' + ids[1]);
-      return exists(path)
-        && get(path).data.status == 'accepted'
-        && get(path).data.aUid == ids[0]
-        && get(path).data.bUid == ids[1];
+      let forwardId = firstUid + '_' + secondUid;
+      let reverseId = secondUid + '_' + firstUid;
+      let forwardPath = /databases/$(database)/documents/connections/$(forwardId);
+      let reversePath = /databases/$(database)/documents/connections/$(reverseId);
+      return (exists(forwardPath)
+          && get(forwardPath).data.status == 'accepted'
+          && get(forwardPath).data.aUid == firstUid
+          && get(forwardPath).data.bUid == secondUid)
+        || (exists(reversePath)
+          && get(reversePath).data.status == 'accepted'
+          && get(reversePath).data.aUid == secondUid
+          && get(reversePath).data.bUid == firstUid);
     }
 
     function hasActiveLocationShare(ownerUid, viewerUid) {

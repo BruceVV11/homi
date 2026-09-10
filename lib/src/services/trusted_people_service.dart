@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+import 'homi_cloud_actions.dart';
 
 class TrustedConnection {
   const TrustedConnection({
@@ -147,127 +148,42 @@ class HomiIdentity {
 }
 
 class TrustedPeopleService {
-  TrustedPeopleService({required this.firebaseReady});
+  TrustedPeopleService({required this.firebaseReady})
+      : _cloudActions = HomiCloudActions(firebaseReady: firebaseReady);
 
   final bool firebaseReady;
+  final HomiCloudActions _cloudActions;
+
   FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
   User? get currentUser =>
       firebaseReady ? FirebaseAuth.instance.currentUser : null;
 
-  String _displayName(User user) {
-    final name = user.displayName?.trim();
-    if (name != null && name.isNotEmpty) return name;
-    final email = user.email?.trim();
-    if (email != null && email.contains('@')) return email.split('@').first;
-    return 'Homi user';
-  }
-
   Future<HomiIdentity> ensureIdentity() async {
     final user = _requireUser();
-    final userRef = _firestore.collection('users').doc(user.uid);
-    final userDoc = await userRef.get();
-    final currentCode = (userDoc.data()?['homiCode'] as String?)?.trim();
-    final name = _displayName(user);
-
-    if (currentCode != null && currentCode.isNotEmpty) {
-      final code = currentCode.toUpperCase();
-      await _firestore.collection('homiCodes').doc(code).set({
-        'uid': user.uid,
-        'displayName': name,
-        'photoUrl': user.photoURL,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      return HomiIdentity(
-        code: code,
-        uid: user.uid,
-        displayName: name,
-        photoUrl: user.photoURL,
-      );
+    final data = await _cloudActions.call('ensureHomiIdentity');
+    final code = (data['code'] as String?)?.trim().toUpperCase();
+    final displayName = (data['displayName'] as String?)?.trim();
+    if (code == null || code.length != 6 || displayName == null || displayName.isEmpty) {
+      throw StateError('Homi could not load your connection code. Try again.');
     }
-
-    for (var attempt = 0; attempt < 8; attempt++) {
-      final code = _generateCode();
-      final codeRef = _firestore.collection('homiCodes').doc(code);
-      try {
-        await codeRef.set({
-          'uid': user.uid,
-          'displayName': name,
-          'photoUrl': user.photoURL,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        await userRef.set({
-          'homiCode': code,
-          'displayName': name,
-          'photoUrl': user.photoURL,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-        return HomiIdentity(
-          code: code,
-          uid: user.uid,
-          displayName: name,
-          photoUrl: user.photoURL,
-        );
-      } on FirebaseException catch (error) {
-        if (error.code == 'permission-denied') rethrow;
-      }
-    }
-    throw StateError('Homi could not create a connection code. Try again.');
+    return HomiIdentity(
+      code: code,
+      uid: user.uid,
+      displayName: displayName,
+      photoUrl: data['photoUrl'] as String?,
+    );
   }
 
   Future<void> connectWithCode(String rawCode) async {
-    final user = _requireUser();
-    final own = await ensureIdentity();
+    _requireUser();
     final code = rawCode.trim().toUpperCase().replaceAll(' ', '');
-    if (code.length != 6) {
+    if (!RegExp(r'^[A-HJ-NP-Z2-9]{6}$').hasMatch(code)) {
       throw StateError('Enter the 6-character Homi code.');
     }
-
-    final targetDoc = await _firestore.collection('homiCodes').doc(code).get();
-    final target = targetDoc.data();
-    if (target == null) {
-      throw StateError('That Homi code could not be found.');
-    }
-    final targetUid = target['uid'] as String?;
-    if (targetUid == null || targetUid.isEmpty) {
-      throw StateError('That Homi code is not available.');
-    }
-    if (targetUid == user.uid) {
-      throw StateError('That is your own Homi code.');
-    }
-
-    final targetName = (target['displayName'] as String?)?.trim();
-    final targetPhoto = target['photoUrl'] as String?;
-    final ids = <String>[user.uid, targetUid]..sort();
-    final connectionId = '${ids[0]}_${ids[1]}';
-    final aIsCurrent = ids[0] == user.uid;
-    final connectionRef = _firestore.collection('connections').doc(connectionId);
-
-    try {
-      await connectionRef.set({
-        'memberUids': ids,
-        'initiatorUid': user.uid,
-        'recipientUid': targetUid,
-        'status': 'pending',
-        'aUid': ids[0],
-        'aName': aIsCurrent
-            ? own.displayName
-            : (targetName?.isNotEmpty == true ? targetName : 'Homi user'),
-        'aPhotoUrl': aIsCurrent ? own.photoUrl : targetPhoto,
-        'bUid': ids[1],
-        'bName': aIsCurrent
-            ? (targetName?.isNotEmpty == true ? targetName : 'Homi user')
-            : own.displayName,
-        'bPhotoUrl': aIsCurrent ? targetPhoto : own.photoUrl,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } on FirebaseException catch (error) {
-      if (error.code == 'already-exists') {
-        throw StateError('There is already a connection request for this person.');
-      }
-      rethrow;
-    }
+    await _cloudActions.call('connectWithHomiCode', <String, dynamic>{
+      'code': code,
+    });
   }
 
   /// Watches both deterministic participant fields rather than relying on an
@@ -393,19 +309,18 @@ class TrustedPeopleService {
     required String relationship,
     required String scope,
   }) async {
-    final user = _requireUser();
-    await _firestore
-        .collection('peoplePreferences')
-        .doc(user.uid)
-        .collection('people')
-        .doc(otherUid)
-        .set({
-      'relationship': relationship.trim().isEmpty
-          ? 'Trusted person'
-          : relationship.trim(),
+    _requireUser();
+    final cleanRelationship = relationship.trim().isEmpty
+        ? 'Trusted person'
+        : relationship.trim();
+    if (cleanRelationship.length > 40) {
+      throw StateError('Keep the relationship label under 40 characters.');
+    }
+    await _cloudActions.call('setTrustedPersonPreference', <String, dynamic>{
+      'otherUid': otherUid,
+      'relationship': cleanRelationship,
       'scope': scope == 'household' ? 'household' : 'friend',
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    });
   }
 
   Future<void> acceptConnection(TrustedConnection connection) async {
@@ -413,10 +328,8 @@ class TrustedPeopleService {
     if (!connection.isIncomingFor(user.uid)) {
       throw StateError('Only the invited person can accept this request.');
     }
-    await _firestore.collection('connections').doc(connection.id).update({
-      'status': 'accepted',
-      'acceptedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
+    await _cloudActions.call('acceptTrustedConnection', <String, dynamic>{
+      'connectionId': connection.id,
     });
   }
 
@@ -425,29 +338,9 @@ class TrustedPeopleService {
     if (!connection.memberUids.contains(user.uid)) {
       throw StateError('This connection is not available to your account.');
     }
-    final otherUid = connection.otherUid(user.uid);
-    await _firestore.collection('connections').doc(connection.id).delete();
-    try {
-      await _firestore
-          .collection('locationShares')
-          .doc(user.uid)
-          .collection('viewers')
-          .doc(otherUid)
-          .delete();
-    } on FirebaseException {
-      // Removing an absent share should not turn a successful disconnect into
-      // an error.
-    }
-    try {
-      await _firestore
-          .collection('peoplePreferences')
-          .doc(user.uid)
-          .collection('people')
-          .doc(otherUid)
-          .delete();
-    } on FirebaseException {
-      // The preference is private convenience metadata and may not exist.
-    }
+    await _cloudActions.call('removeTrustedConnection', <String, dynamic>{
+      'connectionId': connection.id,
+    });
   }
 
   Stream<bool> watchMyShareTo(String viewerUid) {
@@ -475,18 +368,11 @@ class TrustedPeopleService {
   }
 
   Future<void> setMyLocationShare(String viewerUid, bool active) async {
-    final user = _requireUser();
-    await _firestore
-        .collection('locationShares')
-        .doc(user.uid)
-        .collection('viewers')
-        .doc(viewerUid)
-        .set({
-      'active': active,
-      'ownerUid': user.uid,
+    _requireUser();
+    await _cloudActions.call('setLocationShare', <String, dynamic>{
       'viewerUid': viewerUid,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'active': active,
+    });
   }
 
   Stream<TrustedPersonLocation?> watchLocation(String ownerUid) {
@@ -511,14 +397,5 @@ class TrustedPeopleService {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw StateError('Sign in to use trusted people.');
     return user;
-  }
-
-  String _generateCode() {
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final random = Random.secure();
-    return List<String>.generate(
-      6,
-      (_) => alphabet[random.nextInt(alphabet.length)],
-    ).join();
   }
 }

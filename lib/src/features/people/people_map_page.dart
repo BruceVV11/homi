@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -48,6 +49,7 @@ class PeopleMapPage extends StatefulWidget {
 class _PeopleMapPageState extends State<PeopleMapPage> {
   GoogleMapController? _controller;
   String? _selectedId;
+  String? _sendingHeartTo;
 
   @override
   void initState() {
@@ -78,6 +80,89 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
     );
   }
 
+  Future<void> _sendHeart(HomiMapPerson person) async {
+    if (person.isSelf || _sendingHeartTo != null) return;
+    setState(() => _sendingHeartTo = person.id);
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'africa-south1')
+          .httpsCallable('sendHeart');
+      await callable.call(<String, dynamic>{'recipientUid': person.id});
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheetContext) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: HomiColors.peach.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: const Icon(
+                        Icons.favorite_rounded,
+                        color: HomiColors.coral,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Heart sent to ${person.name}',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '${person.name} will see that you are thinking about them. Nothing else about your connection or location changes.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } on FirebaseFunctionsException catch (error) {
+      if (!mounted) return;
+      final message = switch (error.code) {
+        'resource-exhausted' =>
+          'Give it a moment before sending another heart.',
+        'permission-denied' =>
+          'Hearts can only be sent to an accepted trusted person.',
+        'unauthenticated' => 'Sign in to send a heart.',
+        _ => 'Homi could not send that heart right now. Try again shortly.',
+      };
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Homi could not send that heart right now.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sendingHeartTo = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final selected = _selected;
@@ -96,9 +181,6 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Give the Android platform view an explicit full-route size.
-                // This avoids the partial-height surface seen on the S25 Ultra
-                // when the fullscreen map was first opened.
                 SizedBox(
                   width: constraints.maxWidth,
                   height: constraints.maxHeight,
@@ -268,7 +350,13 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
                                         ],
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
+                                    const SizedBox(width: 6),
+                                    if (!selected.isSelf)
+                                      _HeartButton(
+                                        busy: _sendingHeartTo == selected.id,
+                                        onTap: () => _sendHeart(selected),
+                                      ),
+                                    const SizedBox(width: 6),
                                     FilledButton(
                                       onPressed: () =>
                                           widget.onShowDetails(selected),
@@ -287,6 +375,38 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _HeartButton extends StatelessWidget {
+  const _HeartButton({required this.busy, required this.onTap});
+
+  final bool busy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Send a heart',
+      child: Material(
+        color: HomiColors.peach.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(15),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(15),
+          onTap: busy ? null : onTap,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: busy
+                ? const Padding(
+                    padding: EdgeInsets.all(13),
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.favorite_rounded, color: HomiColors.coral),
+          ),
+        ),
       ),
     );
   }

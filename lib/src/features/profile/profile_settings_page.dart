@@ -48,6 +48,12 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   Future<void> _saveName() async {
     final name = _nameController.text.trim();
     if (name.isEmpty || _busy) return;
+    if (name.length > 80) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keep your display name under 80 characters.')),
+      );
+      return;
+    }
     setState(() => _busy = true);
     try {
       final user = await widget.authService.updateDisplayName(name);
@@ -60,6 +66,11 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error.message ?? 'Could not update your name.')),
+      );
+    } on StateError catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -203,6 +214,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
             const SizedBox(height: 10),
             TextField(
               controller: _nameController,
+              maxLength: 80,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _saveName(),
               decoration: const InputDecoration(

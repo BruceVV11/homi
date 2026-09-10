@@ -55,9 +55,9 @@ A separate action exists:
 
 **Profile avatar → Homi & account → Your data → Erase data from this phone**
 
-This clears local household records and Homi cached location from that phone without deleting the cloud account. The local-data inventory must include Home/Work arrival-check-in data before public release so an erase action does not leave locally saved sensitive place coordinates behind.
+This clears local household records and Homi cached location from that phone without deleting the cloud account. In `0.9.0+11`, the location-data reset also signals `ArrivalCheckInService` to remove the signed-in user's local Home/Work arrival configuration, including coordinates, radii, selected recipients and last-send timestamps, and the shared foreground location stream is stopped as part of the location reset. Android's permission itself is not silently changed.
 
-Signing out does not silently delete local household records. It removes the signed-in user's push token from that device record. Arrival check-in settings are user-scoped locally; background arrival monitoring must not continue for a signed-out account.
+Signing out does not silently delete local household records. It removes the signed-in user's push token from that device record. Arrival check-in settings are user-scoped locally; background arrival monitoring does not continue for a signed-out account.
 
 General Homi product/service topic subscriptions are installation preferences and are managed separately by Notifications settings.
 
@@ -107,8 +107,9 @@ Test at minimum:
 - user who is only assignee/viewer of another person's shared Task;
 - current live location active during deletion;
 - arrival check-ins enabled during deletion;
-- locally saved Home and Work check-in data removed after successful deletion;
-- background arrival monitoring stopped after deletion;
+- locally saved Home and Work check-in data removed after successful account deletion;
+- **Erase data from this phone** removes locally saved Home/Work check-in data without deleting the cloud account;
+- background arrival monitoring stops after local erase/account deletion;
 - notifications enabled with an active FCM device record;
 - account that has sent/received People hearts and arrival check-ins;
 - developer-admin test account and notification campaign cleanup;

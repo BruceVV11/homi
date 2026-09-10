@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/arrival_check_in.dart';
+import 'google_places_service.dart';
 import 'homi_cloud_actions.dart';
 import 'location_status_service.dart';
 
@@ -18,6 +19,8 @@ class ArrivalCheckInService extends ChangeNotifier {
   }) : _cloudActions = HomiCloudActions(firebaseReady: firebaseReady);
 
   static const _storagePrefix = 'homi.arrivalCheckIns.v1';
+  static const _pendingCloudClearPrefix =
+      'homi.arrivalCheckIns.pendingPlaceClear.v1';
   static const _defaultRadiusMeters = 250.0;
   static const _notificationCooldown = Duration(minutes: 60);
 
@@ -77,6 +80,8 @@ class ArrivalCheckInService extends ChangeNotifier {
       return;
     }
 
+    await _flushPendingSharedPlaceClear(uid);
+
     final raw = _preferences?.getString(_storageKey(uid));
     if (raw == null || raw.isEmpty) {
       _config = const ArrivalCheckInConfig();
@@ -112,8 +117,6 @@ class ArrivalCheckInService extends ChangeNotifier {
     _requireSignedIn();
     _setBusy(true);
     try {
-      // Home/Work setup is local-only. It must not refresh the cloud latest
-      // location document unless Live updates is independently on.
       final snapshot = await locationService.captureCurrentStatus(
         syncCloud: false,
       );
@@ -121,22 +124,53 @@ class ArrivalCheckInService extends ChangeNotifier {
         snapshot.latitude,
         snapshot.longitude,
       );
-      final place = _replacePlace(
+      final candidate = _replacementCandidate(
         kind: kind,
         latitude: snapshot.latitude,
         longitude: snapshot.longitude,
         address: address,
+        placeId: null,
       );
+      await _syncCandidateIfShared(candidate);
+      _config = _config.withPlace(candidate);
       _inside[kind] = true;
       _lastError = null;
       await _save();
       notifyListeners();
-      return place;
+      return candidate;
     } finally {
       _setBusy(false);
     }
   }
 
+  Future<ArrivalCheckInPlace> saveGooglePlaceAs(
+    ArrivalPlaceKind kind,
+    HomiResolvedPlace resolved,
+  ) async {
+    _requireSignedIn();
+    _setBusy(true);
+    try {
+      final candidate = _replacementCandidate(
+        kind: kind,
+        latitude: resolved.latitude,
+        longitude: resolved.longitude,
+        address: resolved.address,
+        placeId: resolved.placeId,
+      );
+      await _syncCandidateIfShared(candidate);
+      _config = _config.withPlace(candidate);
+      _inside.remove(kind);
+      _lastError = null;
+      await _save();
+      notifyListeners();
+      return candidate;
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  /// Retained as a non-Google fallback for older flows/tests. The primary 0.9.2
+  /// address picker uses Google Places Autocomplete and saveGooglePlaceAs.
   Future<ArrivalCheckInPlace> saveAddressAs(
     ArrivalPlaceKind kind,
     String address,
@@ -159,19 +193,20 @@ class ArrivalCheckInService extends ChangeNotifier {
         match.longitude,
         fallback: query,
       );
-      final place = _replacePlace(
+      final candidate = _replacementCandidate(
         kind: kind,
         latitude: match.latitude,
         longitude: match.longitude,
         address: resolvedAddress,
+        placeId: null,
       );
-      // An entered address may be somewhere other than the phone's current
-      // position, so let the next fresh sample establish inside/outside state.
+      await _syncCandidateIfShared(candidate);
+      _config = _config.withPlace(candidate);
       _inside.remove(kind);
       _lastError = null;
       await _save();
       notifyListeners();
-      return place;
+      return candidate;
     } catch (error) {
       if (error is StateError) rethrow;
       throw StateError(
@@ -182,26 +217,28 @@ class ArrivalCheckInService extends ChangeNotifier {
     }
   }
 
-  ArrivalCheckInPlace _replacePlace({
+  ArrivalCheckInPlace _replacementCandidate({
     required ArrivalPlaceKind kind,
     required double latitude,
     required double longitude,
     required String address,
+    required String? placeId,
   }) {
     final existing = _config.place(kind);
-    final place = ArrivalCheckInPlace(
+    return ArrivalCheckInPlace(
       kind: kind,
       latitude: latitude,
       longitude: longitude,
       radiusMeters: existing?.radiusMeters ?? _defaultRadiusMeters,
       recipientUids: existing?.recipientUids ?? const <String>[],
       address: address,
-      // Moving Home/Work creates a new arrival boundary. Do not let the old
-      // place's cooldown suppress the first legitimate arrival at the new one.
+      placeId: placeId,
+      shareAddressWithRecipients:
+          existing?.shareAddressWithRecipients ?? false,
+      // A moved place is a new arrival boundary. The old place cooldown must
+      // not suppress the first legitimate arrival at the new location.
       lastNotifiedAt: null,
     );
-    _config = _config.withPlace(place);
-    return place;
   }
 
   Future<String> _readableAddress(
@@ -232,8 +269,7 @@ class ArrivalCheckInService extends ChangeNotifier {
         if (parts.isNotEmpty) return parts.join(', ');
       }
     } catch (_) {
-      // The coordinates remain valid even when the platform geocoder cannot
-      // provide a friendly label at that moment.
+      // Coordinates remain valid even when reverse geocoding is unavailable.
     }
     final safeFallback = fallback?.trim();
     if (safeFallback != null && safeFallback.isNotEmpty) return safeFallback;
@@ -266,7 +302,21 @@ class ArrivalCheckInService extends ChangeNotifier {
         .toSet()
         .take(10)
         .toList(growable: false);
-    _config = _config.withPlace(place.copyWith(recipientUids: recipients));
+
+    final candidate = place.copyWith(
+      recipientUids: recipients,
+      shareAddressWithRecipients:
+          recipients.isEmpty ? false : place.shareAddressWithRecipients,
+    );
+
+    // If precise-place visibility is already on, update the cloud ACL before
+    // changing local truth so removing a viewer cannot leave stale access.
+    if (place.shareAddressWithRecipients ||
+        candidate.shareAddressWithRecipients) {
+      await _syncSharedPlace(candidate);
+    }
+
+    _config = _config.withPlace(candidate);
     if (_config.enabled && !_hasUsablePlace(_config)) {
       _config = _config.copyWith(enabled: false);
       await locationService.stopArrivalMonitoring();
@@ -275,8 +325,32 @@ class ArrivalCheckInService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setShareAddressWithRecipients(
+    ArrivalPlaceKind kind,
+    bool enabled,
+  ) async {
+    final place = _requirePlace(kind);
+    if (enabled && place.recipientUids.isEmpty) {
+      throw StateError(
+        'Choose at least one trusted person for ${kind.label} first.',
+      );
+    }
+    final candidate = place.copyWith(shareAddressWithRecipients: enabled);
+
+    // Cloud first for both grant and revoke so the switch always reflects the
+    // actual privacy boundary, not only a local preference.
+    await _syncSharedPlace(candidate);
+    _config = _config.withPlace(candidate);
+    await _save();
+    notifyListeners();
+  }
+
   Future<void> removePlace(ArrivalPlaceKind kind) async {
     _requireSignedIn();
+    final place = _requirePlace(kind);
+    if (place.shareAddressWithRecipients) {
+      await _clearSharedPlace(kind);
+    }
     _config = _config.removePlace(kind);
     if (!_hasUsablePlace(_config)) {
       _config = _config.copyWith(enabled: false);
@@ -304,9 +378,6 @@ class ArrivalCheckInService extends ChangeNotifier {
       _setBusy(true);
       try {
         await locationService.startArrivalMonitoring();
-        // Force a fresh local-only point so enabling never relies on a cached
-        // position. A timeout is harmless; the stream will prime on its next
-        // fresh update.
         try {
           await locationService.captureCurrentStatus(syncCloud: false);
         } catch (_) {}
@@ -323,6 +394,48 @@ class ArrivalCheckInService extends ChangeNotifier {
 
     await _save();
     notifyListeners();
+  }
+
+  Future<void> _syncCandidateIfShared(ArrivalCheckInPlace candidate) async {
+    if (!candidate.shareAddressWithRecipients) return;
+    await _syncSharedPlace(candidate);
+  }
+
+  Future<void> _syncSharedPlace(ArrivalCheckInPlace place) async {
+    if (!place.shareAddressWithRecipients || place.recipientUids.isEmpty) {
+      await _clearSharedPlace(place.kind);
+      return;
+    }
+    final address = place.address?.trim();
+    if (address == null || address.isEmpty) {
+      throw StateError('Set a readable ${place.kind.label} address first.');
+    }
+    await _cloudActions.call('setSharedArrivalPlace', <String, dynamic>{
+      'kind': place.kind.storageKey,
+      'latitude': place.latitude,
+      'longitude': place.longitude,
+      'address': address,
+      'viewerUids': place.recipientUids,
+    });
+  }
+
+  Future<void> _clearSharedPlace(ArrivalPlaceKind kind) async {
+    await _cloudActions.call('setSharedArrivalPlace', <String, dynamic>{
+      'kind': kind.storageKey,
+      'clear': true,
+    });
+  }
+
+  Future<void> _flushPendingSharedPlaceClear(String uid) async {
+    if (_preferences?.getBool(_pendingCloudClearKey(uid)) != true) return;
+    try {
+      await _clearSharedPlace(ArrivalPlaceKind.home);
+      await _clearSharedPlace(ArrivalPlaceKind.work);
+      await _preferences?.remove(_pendingCloudClearKey(uid));
+    } catch (_) {
+      // Keep the non-sensitive pending-revocation marker for the next signed-in
+      // session. Firestore still independently enforces active location share.
+    }
   }
 
   bool _hasUsablePlace(ArrivalCheckInConfig config) {
@@ -400,6 +513,17 @@ class ArrivalCheckInService extends ChangeNotifier {
   Future<void> _clearCurrentLocalCheckInData() async {
     final uid = _activeUid;
     if (uid != null && uid.isNotEmpty) {
+      var cloudCleared = false;
+      try {
+        await _clearSharedPlace(ArrivalPlaceKind.home);
+        await _clearSharedPlace(ArrivalPlaceKind.work);
+        cloudCleared = true;
+      } catch (_) {
+        await _preferences?.setBool(_pendingCloudClearKey(uid), true);
+      }
+      if (cloudCleared) {
+        await _preferences?.remove(_pendingCloudClearKey(uid));
+      }
       await _preferences?.remove(_storageKey(uid));
     }
     _config = const ArrivalCheckInConfig();
@@ -417,6 +541,7 @@ class ArrivalCheckInService extends ChangeNotifier {
   Future<void> clearStoredForUid(String uid) async {
     if (uid.trim().isEmpty) return;
     await _preferences?.remove(_storageKey(uid));
+    await _preferences?.remove(_pendingCloudClearKey(uid));
     if (_activeUid == uid) {
       _config = const ArrivalCheckInConfig();
       _inside.clear();
@@ -426,6 +551,7 @@ class ArrivalCheckInService extends ChangeNotifier {
   }
 
   String _storageKey(String uid) => '$_storagePrefix.$uid';
+  String _pendingCloudClearKey(String uid) => '$_pendingCloudClearPrefix.$uid';
 
   String _requireSignedIn() {
     if (!firebaseReady) throw StateError('Sign in to use arrival check-ins.');

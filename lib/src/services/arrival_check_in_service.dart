@@ -87,6 +87,10 @@ class ArrivalCheckInService extends ChangeNotifier {
       }
     }
 
+    if (_config.enabled && !_hasUsablePlace(_config)) {
+      _config = _config.copyWith(enabled: false);
+      await _save();
+    }
     await locationService.syncArrivalMonitoringPreference(_config.enabled);
     if (_config.enabled) {
       // This resume path never opens a permission prompt. If background access
@@ -105,7 +109,11 @@ class ArrivalCheckInService extends ChangeNotifier {
     _requireSignedIn();
     _setBusy(true);
     try {
-      final snapshot = await locationService.captureCurrentStatus();
+      // Saving Home/Work is deliberately local-only. It must not refresh the
+      // cloud latest-location document unless Live updates is independently on.
+      final snapshot = await locationService.captureCurrentStatus(
+        syncCloud: false,
+      );
       final existing = _config.place(kind);
       final place = ArrivalCheckInPlace(
         kind: kind,
@@ -155,6 +163,10 @@ class ArrivalCheckInService extends ChangeNotifier {
         .take(10)
         .toList(growable: false);
     _config = _config.withPlace(place.copyWith(recipientUids: recipients));
+    if (_config.enabled && !_hasUsablePlace(_config)) {
+      _config = _config.copyWith(enabled: false);
+      await locationService.stopArrivalMonitoring();
+    }
     await _save();
     notifyListeners();
   }
@@ -162,7 +174,7 @@ class ArrivalCheckInService extends ChangeNotifier {
   Future<void> removePlace(ArrivalPlaceKind kind) async {
     _requireSignedIn();
     _config = _config.removePlace(kind);
-    if (_config.configuredPlaces.every((place) => place.recipientUids.isEmpty)) {
+    if (!_hasUsablePlace(_config)) {
       _config = _config.copyWith(enabled: false);
     }
     _inside.remove(kind);
@@ -173,15 +185,13 @@ class ArrivalCheckInService extends ChangeNotifier {
 
   Future<void> setEnabled(bool enabled) async {
     _requireSignedIn();
+    if (enabled && !_hasUsablePlace(_config)) {
+      throw StateError(
+        'Set Home or Work and choose who should receive the check-in first.',
+      );
+    }
+
     if (enabled) {
-      final usable = _config.configuredPlaces
-          .where((place) => place.recipientUids.isNotEmpty)
-          .toList(growable: false);
-      if (usable.isEmpty) {
-        throw StateError(
-          'Set Home or Work and choose who should receive the check-in first.',
-        );
-      }
       _setBusy(true);
       try {
         await locationService.startArrivalMonitoring();
@@ -198,6 +208,10 @@ class ArrivalCheckInService extends ChangeNotifier {
     await _save();
     if (!enabled) await locationService.stopArrivalMonitoring();
     notifyListeners();
+  }
+
+  bool _hasUsablePlace(ArrivalCheckInConfig config) {
+    return config.configuredPlaces.any((place) => place.recipientUids.isNotEmpty);
   }
 
   void _primeZoneState(LocationStatusSnapshot snapshot) {

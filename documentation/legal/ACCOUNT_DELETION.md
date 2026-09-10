@@ -5,7 +5,7 @@ Status: implementation/release specification
 
 ## In-app deletion
 
-Homi 0.7 adds a discoverable path under:
+The discoverable in-app path is:
 
 **Profile avatar → Homi & account → Your data → Delete Homi account**
 
@@ -14,9 +14,10 @@ The flow:
 1. explains that deletion is permanent;
 2. requires an additional final confirmation;
 3. reauthenticates the current user because Firebase requires recent authentication for destructive identity actions;
-4. deletes Homi-managed cloud data associated with the account;
-5. deletes the Firebase Authentication account;
-6. erases Homi household data and cached Homi location from the current phone.
+4. removes the current device push registration;
+5. deletes Homi-managed cloud data associated with the account;
+6. deletes the Firebase Authentication account;
+7. erases Homi household data and cached Homi location from the current phone.
 
 For email/password accounts, the current password is used only for Firebase reauthentication and is never stored.
 
@@ -24,12 +25,12 @@ For Google accounts, the Google account confirmation flow is used again before d
 
 If cloud cleanup fails, Homi does not intentionally delete the Firebase Authentication identity and pretend cleanup succeeded. The user remains able to retry.
 
-## Cloud records included in the current deletion pipeline
+## Cloud records included in the deletion pipeline
 
-Current `AccountDataService` covers the active cloud schema:
+Current `AccountDataService` covers client-visible active cloud schema:
 
 - `users/{uid}`;
-- `users/{uid}/devices/*`;
+- `users/{uid}/devices/*`, including FCM push registration and notification preferences;
 - the user's `homiCodes/{code}` record;
 - trusted `connections` where the user is either participant;
 - the user's private `peoplePreferences` records;
@@ -39,6 +40,14 @@ Current `AccountDataService` covers the active cloud schema:
 - `locations/{uid}` latest location/battery state;
 - shared Tasks created by the deleting account;
 - references to the deleting account inside another person's shared Task are detached/anonymised rather than deleting the other person's task.
+
+When `users/{uid}` is deleted, the server-side `onHomiUserDocumentDeleted` Cloud Function additionally removes notification metadata that is deliberately inaccessible to clients:
+
+- heart anti-spam/cooldown documents where the deleted UID is sender or recipient;
+- `developerAdmins/{uid}` if the deleted account had developer access;
+- developer notification campaign records created by that UID.
+
+FCM topic membership belongs to an app installation/token rather than a Firestore account record. The Homi client synchronises update/service/security topic membership from the installation's notification preferences. Removing/reinstalling the app invalidates or replaces the FCM registration token; invalid direct-delivery tokens are also disabled when detected by the Homi notification backend.
 
 Whenever a new cloud collection containing account-linked data is added, the deletion pipeline and this document must be updated in the same development pass.
 
@@ -50,7 +59,7 @@ A separate action exists:
 
 This clears local household records and Homi's cached location from that phone without deleting the cloud account. It is intentionally separate from Sign out.
 
-Signing out must not silently delete local household records.
+Signing out does not silently delete local household records. It does remove the signed-in user's push token from that device record so the signed-out installation no longer receives direct account-specific Homi pushes for that user. User-enabled general Homi product/service topic subscriptions are installation preferences and are managed separately by the Notifications settings.
 
 ## External web deletion requirement
 
@@ -79,7 +88,7 @@ The page must:
 
 ## Subscription interaction
 
-Deleting a Homi account and cancelling a Google Play subscription are separate actions. Once Homi+ launches, the deletion UI must:
+Deleting a Homi account and cancelling a Google Play subscription are separate actions. Once Homi+ is monetised, the deletion UI must:
 
 - surface active subscription state;
 - explain whether deleting the account cancels the subscription (do not assume it does);
@@ -102,5 +111,8 @@ Test at minimum:
 - user who created shared Tasks;
 - user who is only assignee/viewer of another person's shared Task;
 - current live location active during deletion;
+- notifications enabled with an active FCM device record;
+- account that has sent/received People hearts;
+- developer-admin test account and notification campaign cleanup;
 - app restarted after deletion;
 - external web deletion request process.

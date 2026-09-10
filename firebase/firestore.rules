@@ -10,6 +10,14 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function shortString(value, maxLength) {
+      return value is string && value.size() > 0 && value.size() <= maxLength;
+    }
+
+    function optionalString(value, maxLength) {
+      return value == null || (value is string && value.size() <= maxLength);
+    }
+
     function isDeveloperAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/developerAdmins/$(request.auth.uid))
@@ -30,7 +38,8 @@ service cloud.firestore {
         && request.resource.data.aName == resource.data.aName
         && request.resource.data.bName == resource.data.bName
         && request.resource.data.aPhotoUrl == resource.data.aPhotoUrl
-        && request.resource.data.bPhotoUrl == resource.data.bPhotoUrl;
+        && request.resource.data.bPhotoUrl == resource.data.bPhotoUrl
+        && request.resource.data.createdAt == resource.data.createdAt;
     }
 
     function hasAcceptedConnection(firstUid, secondUid) {
@@ -75,6 +84,33 @@ service cloud.firestore {
         && request.resource.data.dueAt == resource.data.dueAt;
     }
 
+    function validSharedTaskCompletionUpdate() {
+      return isSharedTaskMember(resource.data)
+        && sharedTaskCoreUnchanged()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'completedAt',
+          'completedByName',
+          'completedByUid',
+          'purgeAt',
+          'updatedAt'
+        ])
+        && (
+          (
+            request.resource.data.completedAt == null
+            && request.resource.data.completedByUid == null
+            && request.resource.data.completedByName == null
+            && request.resource.data.purgeAt == null
+          )
+          || (
+            request.resource.data.completedAt is timestamp
+            && request.resource.data.completedByUid == request.auth.uid
+            && shortString(request.resource.data.completedByName, 80)
+            && request.resource.data.purgeAt is timestamp
+            && request.resource.data.purgeAt > request.resource.data.completedAt
+          )
+        );
+    }
+
     function removesSelfFromSharedTask() {
       return signedIn()
         && request.auth.uid in resource.data.memberUids
@@ -112,11 +148,75 @@ service cloud.firestore {
         ]);
     }
 
+    function validDeviceRegistration(data) {
+      return data.keys().hasOnly([
+          'pushToken',
+          'platform',
+          'notificationsEnabled',
+          'householdAttention',
+          'tasksAndRoutines',
+          'peopleNotifications',
+          'homiUpdates',
+          'serviceNotices',
+          'updatedAt'
+        ])
+        && data.notificationsEnabled is bool
+        && (!('pushToken' in data)
+          || (data.pushToken is string && data.pushToken.size() <= 4096))
+        && (!('platform' in data)
+          || (data.platform is string && data.platform.size() <= 32))
+        && (!('householdAttention' in data) || data.householdAttention is bool)
+        && (!('tasksAndRoutines' in data) || data.tasksAndRoutines is bool)
+        && (!('peopleNotifications' in data) || data.peopleNotifications is bool)
+        && (!('homiUpdates' in data) || data.homiUpdates is bool)
+        && (!('serviceNotices' in data) || data.serviceNotices is bool);
+    }
+
+    function validLocationSnapshot(data) {
+      return data.keys().hasOnly([
+          'latitude',
+          'longitude',
+          'accuracyMeters',
+          'batteryPercent',
+          'isCharging',
+          'updatedAt',
+          'source'
+        ])
+        && data.keys().hasAll([
+          'latitude',
+          'longitude',
+          'accuracyMeters',
+          'batteryPercent',
+          'isCharging',
+          'updatedAt',
+          'source'
+        ])
+        && data.latitude >= -90
+        && data.latitude <= 90
+        && data.longitude >= -180
+        && data.longitude <= 180
+        && data.accuracyMeters >= 0
+        && data.accuracyMeters <= 100000
+        && data.batteryPercent is int
+        && data.batteryPercent >= 0
+        && data.batteryPercent <= 100
+        && data.isCharging is bool
+        && data.updatedAt == request.time
+        && data.source in [
+          'foreground_refresh',
+          'continuous_foreground_service',
+          'continuous_start'
+        ];
+    }
+
     match /users/{uid} {
       allow read, create, update, delete: if isSelf(uid);
 
       match /devices/{deviceId} {
-        allow read, create, update, delete: if isSelf(uid);
+        allow read, delete: if isSelf(uid);
+        allow create, update: if isSelf(uid)
+          && deviceId.size() <= 128
+          && validDeviceRegistration(request.resource.data);
       }
     }
 
@@ -134,75 +234,135 @@ service cloud.firestore {
     match /notificationCampaigns/{campaignId} {
       allow read: if isDeveloperAdmin();
       allow create: if isDeveloperAdmin()
+        && request.resource.data.keys().hasOnly([
+          'title',
+          'body',
+          'category',
+          'route',
+          'audience',
+          'priority',
+          'createdByUid',
+          'status',
+          'createdAt'
+        ])
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.status == 'queued'
-        && request.resource.data.title is string
-        && request.resource.data.title.size() > 0
-        && request.resource.data.title.size() <= 80
-        && request.resource.data.body is string
-        && request.resource.data.body.size() > 0
-        && request.resource.data.body.size() <= 280
+        && shortString(request.resource.data.title, 80)
+        && shortString(request.resource.data.body, 280)
         && request.resource.data.category in ['update', 'service', 'security']
         && request.resource.data.route in [
           'overview', 'tasks', 'routines', 'home', 'supplies', 'people', 'account'
         ]
         && request.resource.data.audience in ['self', 'all']
-        && request.resource.data.priority in ['normal', 'important'];
+        && request.resource.data.priority in ['normal', 'important']
+        && request.resource.data.createdAt == request.time;
       allow update, delete: if false;
     }
 
-    // Server-only anti-spam state for People hearts.
+    // Server-only anti-spam/rate-limit state.
     match /heartCooldowns/{documentId} {
+      allow read, write: if false;
+    }
+    match /serverRateLimits/{documentId} {
       allow read, write: if false;
     }
 
     // Homi codes are authenticated exact-lookups only. They are not a
-    // browseable people directory.
+    // browseable people directory. Writes are limited to the owner's own
+    // compact identity record.
     match /homiCodes/{code} {
       allow get: if signedIn();
       allow list: if false;
       allow create: if signedIn()
-        && request.resource.data.uid == request.auth.uid;
+        && code.size() == 6
+        && request.resource.data.keys().hasOnly([
+          'uid', 'displayName', 'photoUrl', 'updatedAt'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && shortString(request.resource.data.displayName, 80)
+        && optionalString(request.resource.data.photoUrl, 1000)
+        && request.resource.data.updatedAt == request.time;
       allow update: if signedIn()
         && resource.data.uid == request.auth.uid
-        && request.resource.data.uid == request.auth.uid;
+        && request.resource.data.uid == request.auth.uid
+        && code.size() == 6
+        && request.resource.data.keys().hasOnly([
+          'uid', 'displayName', 'photoUrl', 'updatedAt'
+        ])
+        && shortString(request.resource.data.displayName, 80)
+        && optionalString(request.resource.data.photoUrl, 1000)
+        && request.resource.data.updatedAt == request.time;
       allow delete: if signedIn()
         && resource.data.uid == request.auth.uid;
     }
 
     // aUid/bUid are deterministic participant fields. The client uses one
-    // equality query for each field and merges the results. This gives the
-    // rules engine a query shape it can prove without exposing other users'
-    // connection documents.
+    // equality query for each field and merges the results. The document ID
+    // must match those participant fields so callers cannot create unlimited
+    // duplicate request documents for the same ordered pair.
     match /connections/{connectionId} {
       allow get, list: if isConnectionMember(resource.data);
 
       allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'memberUids',
+          'initiatorUid',
+          'recipientUid',
+          'status',
+          'aUid',
+          'aName',
+          'aPhotoUrl',
+          'bUid',
+          'bName',
+          'bPhotoUrl',
+          'createdAt',
+          'updatedAt'
+        ])
         && request.resource.data.status == 'pending'
         && request.resource.data.initiatorUid == request.auth.uid
         && request.resource.data.recipientUid != request.auth.uid
         && request.resource.data.memberUids is list
         && request.resource.data.memberUids.size() == 2
+        && request.resource.data.memberUids[0] == request.resource.data.aUid
+        && request.resource.data.memberUids[1] == request.resource.data.bUid
         && request.resource.data.initiatorUid in request.resource.data.memberUids
         && request.resource.data.recipientUid in request.resource.data.memberUids
-        && request.resource.data.aUid in request.resource.data.memberUids
-        && request.resource.data.bUid in request.resource.data.memberUids
-        && request.resource.data.aUid != request.resource.data.bUid;
+        && request.resource.data.aUid != request.resource.data.bUid
+        && connectionId == request.resource.data.aUid + '_' + request.resource.data.bUid
+        && shortString(request.resource.data.aName, 80)
+        && shortString(request.resource.data.bName, 80)
+        && optionalString(request.resource.data.aPhotoUrl, 1000)
+        && optionalString(request.resource.data.bPhotoUrl, 1000)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
 
       allow update: if signedIn()
         && resource.data.status == 'pending'
         && resource.data.recipientUid == request.auth.uid
         && request.resource.data.status == 'accepted'
-        && connectionCoreUnchanged();
+        && connectionCoreUnchanged()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'acceptedAt', 'updatedAt'
+        ])
+        && request.resource.data.acceptedAt == request.time
+        && request.resource.data.updatedAt == request.time;
 
       allow delete: if isConnectionMember(resource.data);
     }
 
     // Relationship labels and household-vs-friend scope are private to the
-    // owner. A person may delete a preference document whose subject is their
-    // own account during account deletion, but cannot read or edit its label.
+    // owner and may only exist for an accepted trusted connection.
     match /peoplePreferences/{ownerUid}/people/{otherUid} {
-      allow read, create, update: if isSelf(ownerUid);
+      allow read: if isSelf(ownerUid);
+      allow create, update: if isSelf(ownerUid)
+        && ownerUid != otherUid
+        && hasAcceptedConnection(ownerUid, otherUid)
+        && request.resource.data.keys().hasOnly([
+          'relationship', 'scope', 'updatedAt'
+        ])
+        && shortString(request.resource.data.relationship, 40)
+        && request.resource.data.scope in ['household', 'friend']
+        && request.resource.data.updatedAt == request.time;
       allow delete: if isSelf(ownerUid) || isSelf(otherUid);
     }
 
@@ -212,11 +372,35 @@ service cloud.firestore {
       allow get, list: if isSharedTaskMember(resource.data);
 
       allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'title',
+          'notes',
+          'assigneeUid',
+          'assigneeName',
+          'createdByUid',
+          'createdByName',
+          'memberUids',
+          'createdAt',
+          'dueAt',
+          'completedAt',
+          'completedByName',
+          'completedByUid',
+          'purgeAt'
+        ])
+        && shortString(request.resource.data.title, 120)
+        && optionalString(request.resource.data.notes, 1000)
+        && shortString(request.resource.data.createdByName, 80)
+        && optionalString(request.resource.data.assigneeName, 80)
         && request.resource.data.memberUids is list
         && request.resource.data.memberUids.size() >= 2
         && request.resource.data.memberUids.size() <= 20
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.createdByUid in request.resource.data.memberUids
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.completedAt == null
+        && request.resource.data.completedByName == null
+        && request.resource.data.completedByUid == null
+        && request.resource.data.purgeAt == null
         && (
           request.resource.data.assigneeUid == null
           || (
@@ -233,18 +417,30 @@ service cloud.firestore {
           )
         );
 
-      allow update: if (isSharedTaskMember(resource.data)
-          && sharedTaskCoreUnchanged())
+      allow update: if validSharedTaskCompletionUpdate()
         || removesSelfFromSharedTask();
 
-      allow delete: if isSharedTaskMember(resource.data);
+      allow delete: if isSharedTaskMember(resource.data)
+        && (
+          resource.data.createdByUid == request.auth.uid
+          || (
+            resource.data.purgeAt is timestamp
+            && resource.data.purgeAt <= request.time
+          )
+        );
     }
 
     match /locationShares/{ownerUid}/viewers/{viewerUid} {
       allow read: if isSelf(ownerUid) || isSelf(viewerUid);
       allow create, update: if isSelf(ownerUid)
+        && ownerUid != viewerUid
+        && request.resource.data.keys().hasOnly([
+          'ownerUid', 'viewerUid', 'active', 'updatedAt'
+        ])
         && request.resource.data.ownerUid == ownerUid
         && request.resource.data.viewerUid == viewerUid
+        && request.resource.data.active is bool
+        && request.resource.data.updatedAt == request.time
         && hasAcceptedConnection(ownerUid, viewerUid);
       // The viewer may remove their own access record during account deletion.
       allow delete: if isSelf(ownerUid) || isSelf(viewerUid);
@@ -253,7 +449,9 @@ service cloud.firestore {
     // Homi stores only the latest shared location/battery snapshot here.
     // Movement history is deliberately not enabled by default.
     match /locations/{ownerUid} {
-      allow create, update, delete: if isSelf(ownerUid);
+      allow create, update: if isSelf(ownerUid)
+        && validLocationSnapshot(request.resource.data);
+      allow delete: if isSelf(ownerUid);
       allow read: if isSelf(ownerUid)
         || (signedIn() && hasActiveLocationShare(ownerUid, request.auth.uid));
     }

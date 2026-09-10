@@ -171,6 +171,17 @@ class LocationStatusService {
     await prefs.setBool(_continuousEnabledKey, false);
   }
 
+  /// Clears location state stored by Homi on this device. Android's permission
+  /// itself remains under the user's system settings and is never changed
+  /// silently by an in-app data reset.
+  Future<void> clearCachedStatus() async {
+    await stopContinuousSharing();
+    _latest = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_cachedStatusKey);
+    await prefs.remove(_continuousEnabledKey);
+  }
+
   Future<bool> openAppSettings() => Geolocator.openAppSettings();
 
   Future<void> _startPositionStream() async {

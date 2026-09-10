@@ -44,8 +44,7 @@ service cloud.firestore {
 
     function isSharedTaskMember(data) {
       return signedIn()
-        && data.memberUids is list
-        && request.auth.uid in data.memberUids;
+        && data.memberUids.hasAny([request.auth.uid]);
     }
 
     function validLocationSnapshot(data) {

@@ -200,6 +200,49 @@ test("preference and location-share mutations are server-only", async () => {
   }));
 });
 
+test("shared places require selection, accepted connection and active location share", async () => {
+  await seed("sharedPlaces/alice/places/home", {
+    ownerUid: "alice",
+    kind: "home",
+    latitude: -29.86,
+    longitude: 31.02,
+    address: "12 Example Road, Durban",
+    viewerUids: ["bob"],
+    updatedAt: Timestamp.now(),
+  });
+
+  const alice = env.authenticatedContext("alice").firestore();
+  const bob = env.authenticatedContext("bob").firestore();
+  const mallory = env.authenticatedContext("mallory").firestore();
+
+  await assertSucceeds(getDoc(doc(alice, "sharedPlaces/alice/places/home")));
+  await assertFails(getDoc(doc(bob, "sharedPlaces/alice/places/home")));
+  await acceptedConnection();
+  await assertFails(getDoc(doc(bob, "sharedPlaces/alice/places/home")));
+  await seed("locationShares/alice/viewers/bob", {
+    ownerUid: "alice",
+    viewerUid: "bob",
+    active: true,
+    updatedAt: Timestamp.now(),
+  });
+  await assertSucceeds(getDoc(doc(bob, "sharedPlaces/alice/places/home")));
+  await assertFails(getDoc(doc(mallory, "sharedPlaces/alice/places/home")));
+  await assertFails(setDoc(doc(bob, "sharedPlaces/bob/places/home"), {
+    ownerUid: "bob",
+    kind: "home",
+    latitude: -29.9,
+    longitude: 31.1,
+    address: "Forged",
+    viewerUids: ["alice"],
+    updatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(doc(alice, "sharedPlaces/alice/places/home"), {
+    address: "Changed directly",
+    updatedAt: serverTimestamp(),
+  }));
+  await assertFails(deleteDoc(doc(alice, "sharedPlaces/alice/places/home")));
+});
+
 test("shared tasks are member-readable but client mutations are blocked", async () => {
   await seed("sharedTasks/task1", {
     title: "Feed the dogs",

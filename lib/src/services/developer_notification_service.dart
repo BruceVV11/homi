@@ -12,6 +12,7 @@ class HomiNotificationCampaign {
     required this.priority,
     required this.status,
     required this.createdAt,
+    this.deliveryMode,
     this.sentCount = 0,
     this.failureCount = 0,
   });
@@ -25,8 +26,11 @@ class HomiNotificationCampaign {
   final String priority;
   final String status;
   final DateTime? createdAt;
+  final String? deliveryMode;
   final int sentCount;
   final int failureCount;
+
+  bool get isBroadcast => audience == 'all' || deliveryMode == 'topic';
 
   factory HomiNotificationCampaign.fromDocument(
     QueryDocumentSnapshot<Map<String, dynamic>> document,
@@ -43,6 +47,7 @@ class HomiNotificationCampaign {
       priority: data['priority'] as String? ?? 'normal',
       status: data['status'] as String? ?? 'queued',
       createdAt: timestamp is Timestamp ? timestamp.toDate() : null,
+      deliveryMode: data['deliveryMode'] as String?,
       sentCount: (data['sentCount'] as num?)?.toInt() ?? 0,
       failureCount: (data['failureCount'] as num?)?.toInt() ?? 0,
     );

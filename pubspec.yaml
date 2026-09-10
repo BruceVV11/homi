@@ -1,7 +1,7 @@
 name: homi
 description: Homi - happy homes, easier days.
 publish_to: "none"
-version: 0.8.1+9
+version: 0.8.2+10
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

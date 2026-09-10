@@ -118,6 +118,19 @@ class LocationStatusService {
     return _arrivalMonitoringRequested;
   }
 
+  /// Synchronizes the local check-in feature's user-scoped enabled state into
+  /// the shared location-stream coordinator without opening a permission UI.
+  /// The caller can then use resumeContinuousSharingIfEnabled() to resume only
+  /// when Android permission is already available.
+  Future<void> syncArrivalMonitoringPreference(bool enabled) async {
+    _arrivalMonitoringRequested = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_arrivalMonitoringEnabledKey, enabled);
+    if (!enabled && !await continuousSharingEnabled()) {
+      await _stopPositionStream();
+    }
+  }
+
   Future<LocationStatusSnapshot?> refreshIfAlreadyAllowed() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       return loadCachedStatus();
@@ -169,9 +182,7 @@ class LocationStatusService {
           'For background check-ins, set Homi location access to “Allow all the time” in Android Settings.',
     );
     await _startPositionStream();
-    _arrivalMonitoringRequested = true;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_arrivalMonitoringEnabledKey, true);
+    await syncArrivalMonitoringPreference(true);
   }
 
   Future<bool> resumeContinuousSharingIfEnabled() async {
@@ -201,12 +212,7 @@ class LocationStatusService {
   }
 
   Future<void> stopArrivalMonitoring() async {
-    _arrivalMonitoringRequested = false;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_arrivalMonitoringEnabledKey, false);
-    if (!await continuousSharingEnabled()) {
-      await _stopPositionStream();
-    }
+    await syncArrivalMonitoringPreference(false);
   }
 
   Future<void> _stopPositionStream() async {

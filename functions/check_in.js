@@ -156,16 +156,35 @@ exports.sendArrivalCheckIn = onCall(
       if (!Array.isArray(requested)) {
         throw new HttpsError("invalid-argument", "Choose who receives the check-in.");
       }
-      const recipients = [...new Set(
+      const requestedRecipients = [...new Set(
           requested
               .filter((uid) => typeof uid === "string")
               .map((uid) => uid.trim())
               .filter((uid) => uid && uid !== auth.uid),
       )];
-      if (recipients.length === 0 || recipients.length > MAX_RECIPIENTS) {
+      if (
+        requestedRecipients.length === 0 ||
+        requestedRecipients.length > MAX_RECIPIENTS
+      ) {
         throw new HttpsError(
             "invalid-argument",
             `Choose between 1 and ${MAX_RECIPIENTS} trusted people.`,
+        );
+      }
+
+      const connectionChecks = await Promise.all(
+          requestedRecipients.map(async (uid) => ({
+            uid,
+            accepted: await acceptedConnection(auth.uid, uid),
+          })),
+      );
+      const recipients = connectionChecks
+          .filter((item) => item.accepted)
+          .map((item) => item.uid);
+      if (recipients.length === 0) {
+        throw new HttpsError(
+            "failed-precondition",
+            "None of the selected people are still connected to you on Homi.",
         );
       }
 
@@ -182,20 +201,6 @@ exports.sendArrivalCheckIn = onCall(
         windowMs: DAY_MS,
       }, "Today's arrival check-in limit has been reached.");
 
-      const connectionChecks = await Promise.all(
-          recipients.map(async (uid) => ({
-            uid,
-            accepted: await acceptedConnection(auth.uid, uid),
-          })),
-      );
-      const invalid = connectionChecks.find((item) => !item.accepted);
-      if (invalid) {
-        throw new HttpsError(
-            "permission-denied",
-            "Arrival check-ins can only be sent to accepted trusted people.",
-        );
-      }
-
       const senderName = await displayNameFor(auth.uid, auth);
       const locationText = place === "home" ? "home" : "at work";
       const title = `${senderName} arrived ${locationText}`;
@@ -210,7 +215,10 @@ exports.sendArrivalCheckIn = onCall(
 
       return {
         accepted: true,
+        requestedRecipientCount: requestedRecipients.length,
         recipientCount: recipients.length,
+        skippedDisconnectedRecipients:
+          requestedRecipients.length - recipients.length,
         deliveredDevices: results.reduce(
             (sum, result) => sum + result.successCount,
             0,

@@ -12,8 +12,7 @@ service cloud.firestore {
 
     function isConnectionMember(data) {
       return signedIn()
-        && data.memberUids is list
-        && request.auth.uid in data.memberUids;
+        && (data.aUid == request.auth.uid || data.bUid == request.auth.uid);
     }
 
     function connectionCoreUnchanged() {
@@ -55,9 +54,56 @@ service cloud.firestore {
     }
 
     function isSharedTaskMember(data) {
+      return signedIn() && request.auth.uid in data.memberUids;
+    }
+
+    function sharedTaskCoreUnchanged() {
+      return request.resource.data.memberUids == resource.data.memberUids
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.assigneeUid == resource.data.assigneeUid
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.notes == resource.data.notes
+        && request.resource.data.createdByName == resource.data.createdByName
+        && request.resource.data.assigneeName == resource.data.assigneeName
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.dueAt == resource.data.dueAt;
+    }
+
+    function removesSelfFromSharedTask() {
       return signedIn()
-        && data.memberUids is list
-        && request.auth.uid in data.memberUids;
+        && request.auth.uid in resource.data.memberUids
+        && resource.data.createdByUid != request.auth.uid
+        && !(request.auth.uid in request.resource.data.memberUids)
+        && request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1
+        && request.resource.data.memberUids.hasOnly(resource.data.memberUids)
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.notes == resource.data.notes
+        && request.resource.data.createdByName == resource.data.createdByName
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.dueAt == resource.data.dueAt
+        && (
+          resource.data.assigneeUid == request.auth.uid
+            ? request.resource.data.assigneeUid == null
+              && request.resource.data.assigneeName == 'Unassigned'
+            : request.resource.data.assigneeUid == resource.data.assigneeUid
+              && request.resource.data.assigneeName == resource.data.assigneeName
+        )
+        && (
+          resource.data.completedByUid == request.auth.uid
+            ? request.resource.data.completedByUid == null
+              && request.resource.data.completedByName == 'Former Homi user'
+            : request.resource.data.completedByUid == resource.data.completedByUid
+              && request.resource.data.completedByName == resource.data.completedByName
+        )
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'memberUids',
+          'assigneeUid',
+          'assigneeName',
+          'completedByUid',
+          'completedByName',
+          'updatedAt'
+        ]);
     }
 
     match /users/{uid} {
@@ -82,8 +128,10 @@ service cloud.firestore {
         && resource.data.uid == request.auth.uid;
     }
 
-    // A connection establishes a trusted-person relationship only. It does
-    // not grant location or household-data access by itself.
+    // aUid/bUid are deterministic participant fields. The client uses one
+    // equality query for each field and merges the results. This gives the
+    // rules engine a query shape it can prove without exposing other users'
+    // connection documents.
     match /connections/{connectionId} {
       allow get, list: if isConnectionMember(resource.data);
 
@@ -109,15 +157,15 @@ service cloud.firestore {
     }
 
     // Relationship labels and household-vs-friend scope are private to the
-    // person who created them. The other connected person cannot read them.
+    // owner. A person may delete a preference document whose subject is their
+    // own account during account deletion, but cannot read or edit its label.
     match /peoplePreferences/{ownerUid}/people/{otherUid} {
-      allow read, create, update, delete: if isSelf(ownerUid);
+      allow read, create, update: if isSelf(ownerUid);
+      allow delete: if isSelf(ownerUid) || isSelf(otherUid);
     }
 
-    // Household tasks carry an explicit memberUids visibility list. A task
-    // assigned to another person may be visible to the creator's other chosen
-    // household members as well. Personal tasks assigned to the creator remain
-    // local-only and never enter this collection.
+    // Household tasks carry an explicit memberUids visibility list. Personal
+    // tasks assigned to the creator remain local-only and never enter here.
     match /sharedTasks/{taskId} {
       allow get, list: if isSharedTaskMember(resource.data);
 
@@ -143,16 +191,9 @@ service cloud.firestore {
           )
         );
 
-      allow update: if isSharedTaskMember(resource.data)
-        && request.resource.data.memberUids == resource.data.memberUids
-        && request.resource.data.createdByUid == resource.data.createdByUid
-        && request.resource.data.assigneeUid == resource.data.assigneeUid
-        && request.resource.data.title == resource.data.title
-        && request.resource.data.notes == resource.data.notes
-        && request.resource.data.createdByName == resource.data.createdByName
-        && request.resource.data.assigneeName == resource.data.assigneeName
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.dueAt == resource.data.dueAt;
+      allow update: if (isSharedTaskMember(resource.data)
+          && sharedTaskCoreUnchanged())
+        || removesSelfFromSharedTask();
 
       allow delete: if isSharedTaskMember(resource.data);
     }
@@ -163,7 +204,8 @@ service cloud.firestore {
         && request.resource.data.ownerUid == ownerUid
         && request.resource.data.viewerUid == viewerUid
         && hasAcceptedConnection(ownerUid, viewerUid);
-      allow delete: if isSelf(ownerUid);
+      // The viewer may remove their own access record during account deletion.
+      allow delete: if isSelf(ownerUid) || isSelf(viewerUid);
     }
 
     // Homi stores only the latest shared location/battery snapshot here.

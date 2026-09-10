@@ -193,11 +193,17 @@ class LocationStatusService {
         accuracy: LocationAccuracy.medium,
         distanceFilter: 100,
         intervalDuration: const Duration(minutes: 2),
-        foregroundNotificationConfig: ForegroundNotificationConfig(
-          notificationTitle: 'Homi location sharing is on',
-          notificationText:
-              'Sharing your latest location with the people you chose.',
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'Homi live location',
+          notificationText: 'Location sharing is active.',
+          notificationChannelName: 'Live location',
+          notificationIcon: AndroidResource(
+            name: 'homi_notification',
+            defType: 'drawable',
+          ),
+          enableWifiLock: false,
           enableWakeLock: false,
+          setOngoing: true,
         ),
       );
     } else {

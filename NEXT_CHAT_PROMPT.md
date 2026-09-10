@@ -106,7 +106,32 @@ Bruce requested four additions before running the new app build:
 3. profile pictures in Task assignment plus clear Household vs non-Household grouping on People;
 4. app operational notifications on by default for fresh installs.
 
-These are implemented in GitHub source and documented, but **have not yet been proven by Bruce's Flutter/Android toolchain**.
+These are implemented in GitHub source and documented.
+
+### 10 September 2026 first Flutter validation
+
+Bruce pulled source through `679bc649602f6a681208e64e92d7f11b62b87231` and ran:
+
+```powershell
+flutter pub get
+flutter analyze
+flutter test
+```
+
+Results:
+
+- dependency resolution completed successfully;
+- **30 Flutter tests passed**;
+- analyzer found **no compile errors**;
+- analyzer found two deprecation infos in `safety_check_in_page.dart` for the old `RadioListTile` group API;
+- analyzer found one unused `_primePlace` warning in `arrival_check_in_service.dart`.
+
+Those three analyzer findings were then fixed on `main`:
+
+- `_primePlace` was removed;
+- the radius selector now uses Homi's existing `HomiChoiceGroup<double>` instead of the deprecated radio group API.
+
+The current head therefore needs only one short **post-fix** `flutter analyze` + `flutter test` rerun before Cloud Shell deployment. Do not claim the current head is analyzer-clean until Bruce proves that rerun.
 
 ### Safety & emergency calls
 
@@ -146,17 +171,19 @@ Privacy architecture:
 - Home/Work coordinates remain local and user-scoped in SharedPreferences;
 - no Home/Work coordinates are sent to the callable or FCM payload;
 - cloud receives only `home`/`work` plus selected recipient UIDs;
+- check-in-only background sampling does not refresh `locations/{uid}` unless Live updates is independently on;
 - no route history is created;
 - initial position primes state and never sends an arrival merely because Homi starts inside a zone;
 - outside → inside is the arrival transition;
 - user must move beyond radius + 100 m before the place is considered left again;
-- one-hour local place cooldown limits duplicate edge sends.
+- one-hour local place cooldown limits duplicate edge sends;
+- local erase/account deletion clears the user-scoped saved Home/Work check-in coordinates.
 
 ### Shared background location stream
 
 Do not build a second hidden tracker.
 
-`LocationStatusService` now coordinates one Android foreground location stream with two independent explicit requirements:
+`LocationStatusService` coordinates one Android foreground location stream with two independent explicit requirements:
 
 - Live updates;
 - Arrival check-ins.
@@ -181,6 +208,7 @@ It:
 - accepts at most 10 selected recipient UIDs;
 - revalidates accepted trusted connections at send time;
 - skips stale/disconnected selections rather than notifying them or letting one stale selection block other valid recipients;
+- fails cleanly if none remain valid;
 - rate-limits sender to 20/hour and 60/day;
 - reads at most 12 enabled device registrations per valid recipient;
 - respects recipient People-notification settings;
@@ -206,7 +234,7 @@ Safety & check-ins also opens from this hub.
 
 ### Task assignee photos
 
-`RoutinesPage` Task assignment now receives `actorPhotoUrl` and renders:
+`RoutinesPage` Task assignment receives `actorPhotoUrl` and renders:
 
 - signed-in user's profile photo where available;
 - each Household assignee's trusted-connection profile photo;
@@ -217,7 +245,7 @@ Task membership/authorization is unchanged. `HouseholdPeopleService` remains the
 
 ### Notification defaults
 
-Fresh-install `HomiNotificationPreferences` now defaults:
+Fresh-install `HomiNotificationPreferences` defaults:
 
 - master operational notifications ON;
 - Household attention ON;
@@ -265,7 +293,7 @@ The **All enabled Homi devices** FCM-topic path still needs one controlled broad
 
 ## Current cloud-sync truth
 
-Firebase currently covers trusted People/location, arrival event delivery and explicitly shared one-off Tasks.
+Firebase currently covers trusted People/location, arrival event delivery after the new callable is deployed, and explicitly shared one-off Tasks.
 
 Most household operational data remains local-first:
 
@@ -278,19 +306,23 @@ If Homi launches publicly as a genuinely shared Household system, build a real H
 
 ## Immediate verification checkpoint for 0.9
 
-### 1. Windows / real Flutter toolchain first
+### 1. Windows — post-fix Flutter gate
+
+From the existing project checkout:
 
 ```powershell
 cd C:\ConceptLab\Projects\homi
 git pull
-flutter pub get
 flutter analyze
 flutter test
 ```
 
-Do not deploy the new callable until this source pass is clean locally.
+`flutter pub get` already succeeded in the immediately preceding validation and does not need to be repeated unless `git pull` changes dependencies.
 
-If analyzer/tests expose an issue, capture exact output and fix the full stale contract before another run.
+Success condition:
+
+- analyzer: **No issues found!**
+- tests: **All tests passed!**
 
 ### 2. Cloud Shell after Flutter is clean
 

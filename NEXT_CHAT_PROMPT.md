@@ -180,7 +180,12 @@ Do not add a paywall until real premium value such as household cloud sync exist
 
 ## Immediate verification checkpoint
 
-0.6 analyzer/tests previously passed. 0.7 has new source changes and is **not yet analyzer/test/device verified**.
+Bruce ran the first 0.7 local checkpoint on **2026-09-10**:
+
+- `flutter test` passed all **19 tests**.
+- `flutter analyze` found one null-safety error in `lib/src/features/profile/account_hub_page.dart` at the account hero email line.
+
+That exact source error has now been fixed on GitHub by changing the nullable `User?` field access from `user.email` to `user?.email` while keeping the same user-facing copy. The fix still needs Bruce's local analyzer to confirm it is clean; do not call 0.7 analyzer-verified until that rerun passes.
 
 Windows:
 

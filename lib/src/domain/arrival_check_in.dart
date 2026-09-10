@@ -22,6 +22,8 @@ class ArrivalCheckInPlace {
     required this.radiusMeters,
     required this.recipientUids,
     this.address,
+    this.placeId,
+    this.shareAddressWithRecipients = false,
     this.lastNotifiedAt,
   });
 
@@ -31,6 +33,12 @@ class ArrivalCheckInPlace {
   final double radiusMeters;
   final List<String> recipientUids;
   final String? address;
+  final String? placeId;
+
+  /// Precise Home/Work visibility is deliberately separate from arrival
+  /// delivery. When enabled, the backend exposes this place only to selected
+  /// recipients who also currently have an active location share from owner.
+  final bool shareAddressWithRecipients;
   final DateTime? lastNotifiedAt;
 
   ArrivalCheckInPlace copyWith({
@@ -39,8 +47,11 @@ class ArrivalCheckInPlace {
     double? radiusMeters,
     List<String>? recipientUids,
     String? address,
+    String? placeId,
+    bool? shareAddressWithRecipients,
     DateTime? lastNotifiedAt,
     bool clearAddress = false,
+    bool clearPlaceId = false,
     bool clearLastNotifiedAt = false,
   }) {
     return ArrivalCheckInPlace(
@@ -50,6 +61,9 @@ class ArrivalCheckInPlace {
       radiusMeters: radiusMeters ?? this.radiusMeters,
       recipientUids: recipientUids ?? this.recipientUids,
       address: clearAddress ? null : (address ?? this.address),
+      placeId: clearPlaceId ? null : (placeId ?? this.placeId),
+      shareAddressWithRecipients:
+          shareAddressWithRecipients ?? this.shareAddressWithRecipients,
       lastNotifiedAt:
           clearLastNotifiedAt ? null : (lastNotifiedAt ?? this.lastNotifiedAt),
     );
@@ -63,6 +77,9 @@ class ArrivalCheckInPlace {
         'recipientUids': recipientUids,
         if (address != null && address!.trim().isNotEmpty)
           'address': address!.trim(),
+        if (placeId != null && placeId!.trim().isNotEmpty)
+          'placeId': placeId!.trim(),
+        'shareAddressWithRecipients': shareAddressWithRecipients,
         if (lastNotifiedAt != null)
           'lastNotifiedAt': lastNotifiedAt!.toIso8601String(),
       };
@@ -97,6 +114,10 @@ class ArrivalCheckInPlace {
     final address = rawAddress is String && rawAddress.trim().isNotEmpty
         ? rawAddress.trim()
         : null;
+    final rawPlaceId = json['placeId'];
+    final placeId = rawPlaceId is String && rawPlaceId.trim().isNotEmpty
+        ? rawPlaceId.trim()
+        : null;
     return ArrivalCheckInPlace(
       kind: kind,
       latitude: latitude.toDouble(),
@@ -104,6 +125,9 @@ class ArrivalCheckInPlace {
       radiusMeters: radius.toDouble(),
       recipientUids: recipients,
       address: address,
+      placeId: placeId,
+      shareAddressWithRecipients:
+          json['shareAddressWithRecipients'] == true,
       lastNotifiedAt: DateTime.tryParse(
         json['lastNotifiedAt'] as String? ?? '',
       ),

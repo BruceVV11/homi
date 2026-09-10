@@ -48,31 +48,6 @@ service cloud.firestore {
         && request.auth.uid in data.memberUids;
     }
 
-    function validDeviceRegistration(data) {
-      return data.keys().hasOnly([
-          'pushToken',
-          'platform',
-          'notificationsEnabled',
-          'householdAttention',
-          'tasksAndRoutines',
-          'peopleNotifications',
-          'homiUpdates',
-          'serviceNotices',
-          'updatedAt'
-        ])
-        && data.notificationsEnabled is bool
-        && (!('pushToken' in data)
-          || (data.pushToken is string && data.pushToken.size() <= 4096))
-        && (!('platform' in data)
-          || (data.platform is string && data.platform.size() <= 32))
-        && (!('householdAttention' in data) || data.householdAttention is bool)
-        && (!('tasksAndRoutines' in data) || data.tasksAndRoutines is bool)
-        && (!('peopleNotifications' in data) || data.peopleNotifications is bool)
-        && (!('homiUpdates' in data) || data.homiUpdates is bool)
-        && (!('serviceNotices' in data) || data.serviceNotices is bool)
-        && data.updatedAt == request.time;
-    }
-
     function validLocationSnapshot(data) {
       return data.keys().hasOnly([
           'latitude',
@@ -113,16 +88,16 @@ service cloud.firestore {
         ];
     }
 
+    // Homi profile identity and push registrations are provisioned by
+    // App-Check-protected Functions. The mobile client can read only its own
+    // profile/device records and cannot manufacture arbitrary registrations.
     match /users/{uid} {
       allow read: if isSelf(uid);
       allow create, update, delete: if false;
 
       match /devices/{deviceId} {
-        allow read, delete: if isSelf(uid);
-        allow create, update: if isSelf(uid)
-          && deviceId.size() > 0
-          && deviceId.size() <= 128
-          && validDeviceRegistration(request.resource.data);
+        allow read: if isSelf(uid);
+        allow create, update, delete: if false;
       }
     }
 

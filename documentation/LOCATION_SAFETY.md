@@ -45,7 +45,23 @@ A connected person may be privately marked **Household** when they genuinely par
 
 A household Task may be visible to the creator's chosen Household people so everybody can see who it is assigned to and whether it was completed. A Task explicitly assigned to **Me** remains private/local. Household Task visibility does not grant Home, Routine, Supply or location access.
 
-Household status still does not automatically share location, and it is not yet full Home/Routine/Supply membership.
+Household status still does not automatically share location, and it is not full Home/Routine/Supply membership by itself.
+
+## People hearts
+
+A heart is a lightweight check-in action on the full People map.
+
+- sender must be authenticated;
+- recipient must be an accepted trusted connection;
+- the action never enables or changes location sharing;
+- the action never changes Household/Friend scope;
+- it does not create a chat thread or persistent social feed;
+- a server-side one-minute sender→recipient cooldown limits repetition;
+- the recipient can receive **“{sender} is thinking about you!”** when their People notifications are enabled;
+- tapping the notification opens People;
+- the heart is not an emergency, acknowledgement or proof that the recipient saw it.
+
+This feature is intentionally small: it adds a human check-in without turning location sharing into messaging or gamifying surveillance.
 
 ## Current cloud authorization
 
@@ -103,6 +119,7 @@ Selecting a person or marker may show:
 - individual copy controls for address and coordinates
 - **Copy all**
 - open coordinates in Google Maps
+- a heart action for an accepted non-self trusted person on the full map
 
 The UI must always show freshness so stale location/battery data is not presented as live.
 
@@ -138,13 +155,13 @@ Default architecture favours current state, not indefinite route history.
 
 ## Places and arrival/departure alerts
 
-Places remain a planned capability rather than a completed one. Potential examples include Home, Work, School, Gym or a partner's home.
+Places remain an architectural capability for later product implementation rather than an active current screen. Potential examples include Home, Work, School, Gym or a partner's home.
 
 Any arrival/departure alert must be transparent, tied to an authorized location share and easy to disable. Homi must not add a hidden surveillance mode through Places.
 
 ## Safety boundaries
 
-Homi is not currently:
+Homi is not:
 
 - emergency-service dispatch;
 - crash detection;
@@ -152,7 +169,15 @@ Homi is not currently:
 - a covert tracker;
 - proof that a person is safe merely because a recent location exists.
 
-User-facing copy should avoid implying any of those capabilities.
+User-facing copy must avoid implying any of those capabilities.
+
+## Notifications and sensitive data
+
+People notifications can include connection activity and the sender name for a heart. They must not include precise coordinates, addresses or hidden household information in lock-screen text.
+
+Notification delivery is not guaranteed emergency communication. Android power management, connectivity, notification permissions and FCM delivery can delay or suppress a message.
+
+The normal People notification preference is separate from the persistent Android foreground-service notification required while live location updates are active.
 
 ## Google Play / Android release requirements
 

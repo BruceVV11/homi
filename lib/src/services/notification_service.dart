@@ -31,6 +31,9 @@ class HomiNotificationService extends ChangeNotifier {
   static const _deviceIdKey = 'homi.notifications.deviceId';
   static const _scheduledIdsKey = 'homi.notifications.scheduledIds';
   static const _alertedKeysKey = 'homi.notifications.alertedKeys';
+  static const _updatesTopic = 'homi_updates';
+  static const _serviceTopic = 'homi_service';
+  static const _securityTopic = 'homi_security';
 
   static const _attentionChannel = AndroidNotificationChannel(
     'homi_attention',
@@ -110,8 +113,7 @@ class HomiNotificationService extends ChangeNotifier {
       final timezone = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(timezone.identifier));
     } catch (_) {
-      // The timezone package defaults to UTC. Scheduling still works, and the
-      // next initialization retries the device timezone lookup.
+      // UTC remains a safe fallback and the next app launch retries the lookup.
     }
 
     await _local.initialize(
@@ -125,6 +127,14 @@ class HomiNotificationService extends ChangeNotifier {
       },
     );
 
+    final localLaunch = await _local.getNotificationAppLaunchDetails();
+    final localPayload = localLaunch?.notificationResponse?.payload;
+    if (localLaunch?.didNotificationLaunchApp == true &&
+        localPayload != null &&
+        localPayload.isNotEmpty) {
+      _pendingRoute = localPayload;
+    }
+
     final android = _local.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     await android?.createNotificationChannel(_attentionChannel);
@@ -134,7 +144,8 @@ class HomiNotificationService extends ChangeNotifier {
     await android?.createNotificationChannel(_serviceChannel);
 
     if (firebaseReady) {
-      final settings = await FirebaseMessaging.instance.getNotificationSettings();
+      final settings =
+          await FirebaseMessaging.instance.getNotificationSettings();
       _osPermissionGranted =
           settings.authorizationStatus == AuthorizationStatus.authorized ||
               settings.authorizationStatus == AuthorizationStatus.provisional;
@@ -146,17 +157,18 @@ class HomiNotificationService extends ChangeNotifier {
         (message) => _routeFromMessage(message),
       );
       _tokenSubscription = FirebaseMessaging.instance.onTokenRefresh.listen(
-        (_) => refreshDeviceRegistration(),
+        (_) async {
+          await _syncDeveloperTopics();
+          await refreshDeviceRegistration();
+        },
       );
       _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
-        if (user == null) {
-          return;
-        }
-        unawaited(refreshDeviceRegistration());
+        if (user != null) unawaited(refreshDeviceRegistration());
       });
 
       final initial = await FirebaseMessaging.instance.getInitialMessage();
       if (initial != null) _routeFromMessage(initial, holdIfNeeded: true);
+      await _syncDeveloperTopics();
       await refreshDeviceRegistration();
     }
 
@@ -165,13 +177,7 @@ class HomiNotificationService extends ChangeNotifier {
   }
 
   Future<bool> requestPermissionAndEnable() async {
-    if (!firebaseReady) {
-      _preferences = _preferences.copyWith(enabled: true);
-      await _savePreferences();
-      _osPermissionGranted = true;
-      notifyListeners();
-      return true;
-    }
+    if (!firebaseReady) return false;
 
     final settings = await FirebaseMessaging.instance.requestPermission(
       alert: true,
@@ -184,6 +190,7 @@ class HomiNotificationService extends ChangeNotifier {
     if (_osPermissionGranted) {
       _preferences = _preferences.copyWith(enabled: true);
       await _savePreferences();
+      await _syncDeveloperTopics();
       await refreshDeviceRegistration();
     }
     notifyListeners();
@@ -197,6 +204,7 @@ class HomiNotificationService extends ChangeNotifier {
     }
     _preferences = _preferences.copyWith(enabled: value);
     await _savePreferences();
+    await _syncDeveloperTopics();
     if (value) {
       await refreshDeviceRegistration();
     } else {
@@ -209,14 +217,36 @@ class HomiNotificationService extends ChangeNotifier {
   Future<void> updatePreferences(HomiNotificationPreferences value) async {
     _preferences = value;
     await _savePreferences();
-    if (_preferences.enabled) {
-      await refreshDeviceRegistration();
-    }
+    await _syncDeveloperTopics();
+    if (_preferences.enabled) await refreshDeviceRegistration();
     notifyListeners();
   }
 
   Future<void> _savePreferences() async {
     await _prefs?.setString(_preferencesKey, _preferences.encode());
+  }
+
+  Future<void> _syncDeveloperTopics() async {
+    if (!firebaseReady) return;
+    final messaging = FirebaseMessaging.instance;
+    final allow = _preferences.enabled && _osPermissionGranted;
+    try {
+      if (allow && _preferences.homiUpdates) {
+        await messaging.subscribeToTopic(_updatesTopic);
+      } else {
+        await messaging.unsubscribeFromTopic(_updatesTopic);
+      }
+
+      if (allow && _preferences.serviceNotices) {
+        await messaging.subscribeToTopic(_serviceTopic);
+        await messaging.subscribeToTopic(_securityTopic);
+      } else {
+        await messaging.unsubscribeFromTopic(_serviceTopic);
+        await messaging.unsubscribeFromTopic(_securityTopic);
+      }
+    } catch (_) {
+      // Topic sync retries on the next token refresh, settings save or launch.
+    }
   }
 
   Future<void> refreshDeviceRegistration() async {
@@ -317,7 +347,8 @@ class HomiNotificationService extends ChangeNotifier {
         if (warning.isAfter(now)) {
           plans.add(
             _LocalNotificationPlan(
-              key: 'supply-expiry-warning:${supply.id}:${expiry.toIso8601String()}',
+              key:
+                  'supply-expiry-warning:${supply.id}:${expiry.toIso8601String()}',
               when: warning,
               title: '${supply.name} expires soon',
               body: 'Use it soon or update the supply if your stock changed.',
@@ -332,7 +363,8 @@ class HomiNotificationService extends ChangeNotifier {
               key: 'supply-expiry:${supply.id}:${expiry.toIso8601String()}',
               when: expiryMorning,
               title: '${supply.name} reaches its expiry date today',
-              body: 'Open Supplies to check whether it still belongs in your stock.',
+              body:
+                  'Open Supplies to check whether it still belongs in your stock.',
               channel: _attentionChannel,
               route: 'supplies',
             ),
@@ -353,7 +385,8 @@ class HomiNotificationService extends ChangeNotifier {
         if (warning.isAfter(now)) {
           plans.add(
             _LocalNotificationPlan(
-              key: 'maintenance-warning:${thing.id}:${serviceDate.toIso8601String()}',
+              key:
+                  'maintenance-warning:${thing.id}:${serviceDate.toIso8601String()}',
               when: warning,
               title: '${thing.name} needs attention soon',
               body: 'Its saved service date is one week away.',
@@ -365,7 +398,8 @@ class HomiNotificationService extends ChangeNotifier {
         if (dueMorning.isAfter(now)) {
           plans.add(
             _LocalNotificationPlan(
-              key: 'maintenance-due:${thing.id}:${serviceDate.toIso8601String()}',
+              key:
+                  'maintenance-due:${thing.id}:${serviceDate.toIso8601String()}',
               when: dueMorning,
               title: '${thing.name} service is due',
               body: 'Open Home to review the saved maintenance details.',
@@ -431,7 +465,9 @@ class HomiNotificationService extends ChangeNotifier {
       final names = newlyCritical.take(3).map((item) => item.name).join(', ');
       final remaining = newlyCritical.length - 3;
       await _local.show(
-        id: _notificationId('critical-supply:${DateTime.now().millisecondsSinceEpoch}'),
+        id: _notificationId(
+          'critical-supply:${DateTime.now().millisecondsSinceEpoch}',
+        ),
         title: newlyCritical.length == 1
             ? '${newlyCritical.first.name} needs attention'
             : '${newlyCritical.length} supplies need attention',
@@ -468,7 +504,9 @@ class HomiNotificationService extends ChangeNotifier {
     if (!_preferences.allowsCategory(category)) return;
     final title = message.notification?.title ?? message.data['title'];
     final body = message.notification?.body ?? message.data['body'];
-    if ((title == null || title.isEmpty) && (body == null || body.isEmpty)) return;
+    if ((title == null || title.isEmpty) && (body == null || body.isEmpty)) {
+      return;
+    }
     final channel = _channelForCategory(category);
     await _local.show(
       id: _notificationId(

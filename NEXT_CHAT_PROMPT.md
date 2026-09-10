@@ -5,6 +5,7 @@ Continue development of **Homi** from the current GitHub `main` branch. GitHub i
 Before changing anything, inspect:
 
 - `documentation/releases/0.8.1.md`
+- `documentation/releases/0.8.1-cloud-shell-storage-fix.md`
 - `documentation/RELEASE_READINESS.md`
 - `documentation/NOTIFICATIONS.md`
 - `documentation/ARCHITECTURE.md`
@@ -154,6 +155,32 @@ bash scripts/test-firestore-security.sh
 
 The normal backend deployment helper now runs this security suite automatically before it deploys. A failed security test blocks deployment rather than publishing rules that failed the test gate.
 
+### Cloud Shell storage incident / fix
+
+The first 0.8.1 security-gate run on 2026-09-10 stopped with `ENOSPC: no space left on device` while npm was extracting the Firebase security-test dependencies into the Cloud Shell persistent `$HOME` disk. Runtime IAM preparation had already succeeded, but the deployment itself did **not** proceed past the security gate.
+
+`test-firestore-security.sh` now removes any stale generated `security-tests/node_modules` tree and runs the disposable npm cache plus test dependencies from `${TMPDIR:-/tmp}` instead of the persistent Homi repository/home disk. The temp workspace is deleted automatically after the run.
+
+On the affected Cloud Shell session, one-time recovery is:
+
+```bash
+cd ~/homi
+rm -rf security-tests/node_modules
+rm -rf ~/.npm/_cacache
+rm -rf ~/.npm/_logs
+df -h "$HOME"
+git pull
+bash scripts/deploy-notification-backend.sh
+```
+
+If space is still unexpectedly low, inspect before deleting anything else:
+
+```bash
+du -hs "$HOME"/.[!.]* "$HOME"/* 2>/dev/null | sort -h | tail -30
+```
+
+Do not delete the Homi repository to resolve this condition.
+
 ## App Check
 
 Bruce registered the debug App Check token privately. Do not request it.
@@ -225,7 +252,7 @@ git pull
 bash scripts/deploy-notification-backend.sh
 ```
 
-The deploy helper now performs Function syntax validation and the Firestore Emulator security suite before publishing the stricter rules/Functions.
+The deploy helper performs Function syntax validation and the Firestore Emulator security suite before publishing the stricter rules/Functions.
 
 Then re-test on the S25 Ultra:
 

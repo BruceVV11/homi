@@ -75,6 +75,17 @@ if (Test-Path $GradleKts) {
 $gradle = [System.IO.File]::ReadAllText($gradlePath)
 
 if ($gradlePath.EndsWith('.kts')) {
+    if ($gradle -notmatch 'multiDexEnabled\s*=\s*true') {
+        if ($gradle -match '(?s)defaultConfig\s*\{') {
+            $gradle = [regex]::Replace(
+                $gradle,
+                '(defaultConfig\s*\{)',
+                "`$1`r`n        multiDexEnabled = true",
+                1
+            )
+        }
+    }
+
     if ($gradle -notmatch 'isCoreLibraryDesugaringEnabled\s*=\s*true') {
         if ($gradle -match '(?s)compileOptions\s*\{') {
             $gradle = [regex]::Replace(
@@ -93,7 +104,7 @@ if ($gradlePath.EndsWith('.kts')) {
             $gradle = [regex]::Replace(
                 $gradle,
                 '(?m)^(dependencies\s*\{)',
-                "`$1`r`n    coreLibraryDesugaring(`"com.android.tools:desugar_jdk_libs:2.1.5`")",
+                "`$1`r`n    coreLibraryDesugaring(`"com.android.tools:desugar_jdk_libs:2.1.4`")",
                 1
             )
         } else {
@@ -101,12 +112,23 @@ if ($gradlePath.EndsWith('.kts')) {
 
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 "@
         }
     }
 } else {
+    if ($gradle -notmatch 'multiDexEnabled\s+true') {
+        if ($gradle -match '(?s)defaultConfig\s*\{') {
+            $gradle = [regex]::Replace(
+                $gradle,
+                '(defaultConfig\s*\{)',
+                "`$1`r`n        multiDexEnabled true",
+                1
+            )
+        }
+    }
+
     if ($gradle -notmatch 'coreLibraryDesugaringEnabled\s+true') {
         if ($gradle -match '(?s)compileOptions\s*\{') {
             $gradle = [regex]::Replace(
@@ -120,12 +142,12 @@ dependencies {
         }
     }
 
-    if ($gradle -notmatch 'coreLibraryDesugaring\s+["'']com\.android\.tools:desugar_jdk_libs:') {
+    if ($gradle -notmatch 'com\.android\.tools:desugar_jdk_libs:') {
         if ($gradle -match '(?m)^dependencies\s*\{') {
             $gradle = [regex]::Replace(
                 $gradle,
                 '(?m)^(dependencies\s*\{)',
-                "`$1`r`n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'",
+                "`$1`r`n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'",
                 1
             )
         } else {
@@ -133,7 +155,7 @@ dependencies {
 
 
 dependencies {
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 }
 "@
         }
@@ -158,16 +180,16 @@ if (-not (Test-Path $NotificationIcon)) {
 $updatedGradle = [System.IO.File]::ReadAllText($gradlePath)
 if ($gradlePath.EndsWith('.kts')) {
     if ($updatedGradle -notmatch 'isCoreLibraryDesugaringEnabled\s*=\s*true' -or
-        $updatedGradle -notmatch 'coreLibraryDesugaring\("com\.android\.tools:desugar_jdk_libs:2\.1\.5"\)') {
+        $updatedGradle -notmatch 'coreLibraryDesugaring\("com\.android\.tools:desugar_jdk_libs:2\.1\.4"\)') {
         throw 'Core library desugaring was not configured correctly in build.gradle.kts.'
     }
 } else {
     if ($updatedGradle -notmatch 'coreLibraryDesugaringEnabled\s+true' -or
-        $updatedGradle -notmatch 'com\.android\.tools:desugar_jdk_libs:2\.1\.5') {
+        $updatedGradle -notmatch 'com\.android\.tools:desugar_jdk_libs:2\.1\.4') {
         throw 'Core library desugaring was not configured correctly in build.gradle.'
     }
 }
 
 Write-Host 'Homi Android notification host integration enabled.' -ForegroundColor Green
-Write-Host 'Added/verified notification permission, reboot rescheduling, exact Homi status icon and core-library desugaring.'
+Write-Host 'Added/verified notification permission, reboot rescheduling, approved Homi status icon, multidex and core-library desugaring.'
 Write-Host 'No Firebase, Maps, signing or secret values were printed or changed.'

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/supply_attention.dart';
 import '../../domain/supply_icon_catalog.dart';
 import '../../domain/supply_item.dart';
 import '../../theme/homi_theme.dart';
@@ -167,6 +168,76 @@ class SuppliesPage extends StatelessWidget {
     );
   }
 
+  Widget _cardFor(BuildContext context, SupplyItem item, DateTime now) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: _SupplyCard(
+        item: item,
+        now: now,
+        onDecrease:
+            item.tracksQuantity ? () => _adjustAmount(item, -1) : null,
+        onIncrease:
+            item.tracksQuantity ? () => _adjustAmount(item, 1) : null,
+        onAmountTap: () => _editAmount(context, item),
+        onOptions: () => _showOptions(context, item),
+      ),
+    );
+  }
+
+  List<Widget> _statusSections(BuildContext context, DateTime now) {
+    final attention = SupplyAttention.sorted(items, now);
+    final needToBuy = attention
+        .where((item) => item.effectiveStatus(now) == SupplyStatus.needToBuy)
+        .toList(growable: false);
+    final useSoon = attention
+        .where((item) => item.effectiveStatus(now) == SupplyStatus.eatSoon)
+        .toList(growable: false);
+    final runningLow = attention
+        .where((item) => item.effectiveStatus(now) == SupplyStatus.runningLow)
+        .toList(growable: false);
+    final inStock = items
+        .where((item) => item.effectiveStatus(now) == SupplyStatus.okay)
+        .toList(growable: true)
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    final widgets = <Widget>[];
+    void addSection(String label, List<SupplyItem> sectionItems, String hint) {
+      if (sectionItems.isEmpty) return;
+      if (widgets.isNotEmpty) widgets.add(const SizedBox(height: 14));
+      widgets.add(
+        _SupplySectionHeader(
+          label: label,
+          count: sectionItems.length,
+          hint: hint,
+        ),
+      );
+      widgets.add(const SizedBox(height: 8));
+      widgets.addAll(sectionItems.map((item) => _cardFor(context, item, now)));
+    }
+
+    addSection(
+      'Need to buy',
+      needToBuy,
+      'Out of stock or marked for the next shop',
+    );
+    addSection(
+      'Use soon',
+      useSoon,
+      'Expired and nearest expiry dates first',
+    );
+    addSection(
+      'Running low',
+      runningLow,
+      'Still available, but worth keeping an eye on',
+    );
+    addSection(
+      'In stock',
+      inStock,
+      'Everything that does not need attention right now',
+    );
+    return widgets;
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -242,27 +313,53 @@ class SuppliesPage extends StatelessWidget {
             );
           }).toList(growable: false),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
         if (items.isEmpty)
           _EmptySupplyCard(onAdd: () => _addSupply(context))
         else
-          ...items.map(
-            (item) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _SupplyCard(
-                item: item,
-                now: now,
-                onDecrease: item.tracksQuantity
-                    ? () => _adjustAmount(item, -1)
-                    : null,
-                onIncrease: item.tracksQuantity
-                    ? () => _adjustAmount(item, 1)
-                    : null,
-                onAmountTap: () => _editAmount(context, item),
-                onOptions: () => _showOptions(context, item),
-              ),
-            ),
+          ..._statusSections(context, now),
+      ],
+    );
+  }
+}
+
+class _SupplySectionHeader extends StatelessWidget {
+  const _SupplySectionHeader({
+    required this.label,
+    required this.count,
+    required this.hint,
+  });
+
+  final String label;
+  final int count;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 2),
+              Text(hint, style: Theme.of(context).textTheme.bodyMedium),
+            ],
           ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: HomiColors.peach.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Text(
+            '$count',
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ),
       ],
     );
   }
@@ -669,8 +766,9 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
                               overflow: TextOverflow.ellipsis,
                               textAlign: TextAlign.center,
                               style: const TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w800),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ],
                         ),
@@ -696,9 +794,11 @@ class _SupplyEditorSheetState extends State<_SupplyEditorSheet> {
     double? quantity;
     SupplyUnit? unit;
     if (_trackAmount) {
-      quantity = double.tryParse(_quantityController.text.trim().replaceAll(',', '.'));
+      quantity =
+          double.tryParse(_quantityController.text.trim().replaceAll(',', '.'));
       if (quantity == null || quantity < 0) {
-        setState(() => _error = 'Enter a valid amount, or switch amount tracking off.');
+        setState(() =>
+            _error = 'Enter a valid amount, or switch amount tracking off.');
         return;
       }
       unit = _unit;
@@ -986,7 +1086,10 @@ class _SupplyAmountSheetState extends State<_SupplyAmountSheet> {
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
-              child: FilledButton(onPressed: _save, child: const Text('Save amount')),
+              child: FilledButton(
+                onPressed: _save,
+                child: const Text('Save amount'),
+              ),
             ),
           ],
         ),

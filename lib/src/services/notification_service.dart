@@ -459,25 +459,35 @@ class HomiNotificationService extends ChangeNotifier {
       final effective = supply.effectiveStatus(now);
       String? key;
       String? label;
-      String route = 'supplies';
+      var priority = 99;
 
       if (effective == SupplyStatus.needToBuy) {
         key = 'supply-buy:${supply.id}';
         label = '${supply.name} needs to be bought';
+        priority = 0;
       } else if (supply.isExpired(now)) {
         key =
             'supply-expired:${supply.id}:${supply.expiryDate?.toIso8601String() ?? ''}';
         label = '${supply.name} is past its expiry date';
+        priority = 1;
       } else if (effective == SupplyStatus.eatSoon) {
         key =
             'supply-use-soon:${supply.id}:${supply.expiryDate?.toIso8601String() ?? ''}';
         label = '${supply.name} expires soon';
+        priority = 2;
       }
 
       if (key != null && label != null) {
         activeKeys.add(key);
         if (!alreadyAlerted.contains(key)) {
-          newItems.add(_ImmediateAttention(key: key, label: label, route: route));
+          newItems.add(
+            _ImmediateAttention(
+              key: key,
+              label: label,
+              route: 'supplies',
+              priority: priority,
+            ),
+          );
         }
       }
     }
@@ -487,30 +497,45 @@ class HomiNotificationService extends ChangeNotifier {
       if (serviceDate == null) continue;
       String? key;
       String? label;
+      var priority = 99;
       if (thing.serviceDue(now)) {
         key = 'home-service-due:${thing.id}:${serviceDate.toIso8601String()}';
         label = '${thing.name} service is due';
+        priority = 1;
       } else if (thing.serviceSoon(now)) {
         key = 'home-service-soon:${thing.id}:${serviceDate.toIso8601String()}';
         label = '${thing.name} service is coming up';
+        priority = 3;
       }
       if (key != null && label != null) {
         activeKeys.add(key);
         if (!alreadyAlerted.contains(key)) {
-          newItems.add(_ImmediateAttention(key: key, label: label, route: 'home'));
+          newItems.add(
+            _ImmediateAttention(
+              key: key,
+              label: label,
+              route: 'home',
+              priority: priority,
+            ),
+          );
         }
       }
     }
+
+    newItems.sort((a, b) {
+      final priority = a.priority.compareTo(b.priority);
+      if (priority != 0) return priority;
+      return a.label.toLowerCase().compareTo(b.label.toLowerCase());
+    });
 
     if (newItems.isNotEmpty) {
       final visible = newItems.take(3).map((item) => item.label).join(' · ');
       final remaining = newItems.length - 3;
       final onlyRoute = newItems.map((item) => item.route).toSet();
       final route = onlyRoute.length == 1 ? onlyRoute.first : 'overview';
+      final notificationKey = newItems.map((item) => item.key).join('|');
       await _local.show(
-        id: _notificationId(
-          'household-attention:${DateTime.now().millisecondsSinceEpoch}',
-        ),
+        id: _notificationId('household-attention:$notificationKey'),
         title: newItems.length == 1
             ? 'Something needs your attention'
             : '${newItems.length} things need your attention',
@@ -649,9 +674,11 @@ class _ImmediateAttention {
     required this.key,
     required this.label,
     required this.route,
+    required this.priority,
   });
 
   final String key;
   final String label;
   final String route;
+  final int priority;
 }

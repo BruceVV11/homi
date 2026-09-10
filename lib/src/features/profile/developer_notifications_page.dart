@@ -72,6 +72,13 @@ class _DeveloperNotificationsPageState
   String _audienceLabel(String value) =>
       value == 'all' ? 'All enabled Homi devices' : 'Just this account (test)';
 
+  void _selectCategory(String value) {
+    setState(() {
+      _category = value;
+      if (value == 'update') _priority = 'normal';
+    });
+  }
+
   Future<void> _send() async {
     if (_busy) return;
     final title = _titleController.text.trim();
@@ -105,7 +112,7 @@ class _DeveloperNotificationsPageState
         category: _category,
         route: _route,
         audience: _audience,
-        priority: _priority,
+        priority: _category == 'update' ? 'normal' : _priority,
       );
       if (!mounted) return;
       _titleController.clear();
@@ -225,7 +232,7 @@ class _DeveloperNotificationsPageState
                 values: _categories,
                 selected: _category,
                 labelFor: _categoryLabel,
-                onSelected: (value) => setState(() => _category = value),
+                onSelected: _selectCategory,
                 compact: true,
               ),
             ),
@@ -249,14 +256,31 @@ class _DeveloperNotificationsPageState
               ),
             ),
             _ChoiceSection(
-              title: 'Priority',
-              child: HomiChoiceGroup<String>(
-                values: _priorities,
-                selected: _priority,
-                labelFor: (value) =>
-                    value == 'important' ? 'Important' : 'Normal',
-                onSelected: (value) => setState(() => _priority = value),
-                compact: true,
+              title: 'Delivery urgency',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  HomiChoiceGroup<String>(
+                    values: _priorities,
+                    selected: _category == 'update' ? 'normal' : _priority,
+                    labelFor: (value) =>
+                        value == 'important' ? 'Important' : 'Normal',
+                    onSelected: _category == 'update'
+                        ? (_) {}
+                        : (value) => setState(() => _priority = value),
+                    compact: true,
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    _category == 'update'
+                        ? 'Homi updates always use normal delivery so product news never wakes a sleeping device unnecessarily.'
+                        : 'Important asks Android for faster delivery when the notice is genuinely time-sensitive. It does not bypass the user’s notification or Do Not Disturb settings.',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: HomiColors.muted,
+                    ),
+                  ),
+                ],
               ),
             ),
             if (_error != null) ...[

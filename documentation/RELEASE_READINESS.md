@@ -75,8 +75,9 @@ Force-stopping an Android app can prevent background work until the user opens i
 ### Must be proven/configured before release
 
 - **VERIFY** run `configure-auth-security.sh` successfully: improved email privacy + password policy.
-- **VERIFY** 0.8.2 Functions/rules deploy using the dedicated runtime identity.
-- **VERIFY** emulator security suite passes against 0.8.2 rules.
+- **VERIFY** 0.8.2 Functions deploy using the dedicated runtime identity. The 10 September deployment reached Cloud Build, but all Function creates/updates failed because an untracked stale `functions/package-lock.json` was uploaded; the deploy helper now regenerates and locally validates a disposable synchronized lock before upload.
+- **DONE (2026-09-10)** Firestore Emulator security suite passed **12/12** against the 0.8.2 rules.
+- **DONE (2026-09-10)** 0.8.2 Firestore rules compiled and were released to `homi-ee80a` after the 12/12 security gate.
 - **VERIFY** all active debug testers have individually registered App Check debug tokens before testing protected callables.
 - **OPEN** inspect App Check metrics for legitimate debug traffic.
 - **BLOCKER** release build uses Play Integrity App Check.
@@ -170,6 +171,6 @@ Recommended before broad rollout:
 
 ## Current release position
 
-The approved Homi interface and core single-device flows are close to release-candidate quality. Notifications and developer self-test delivery have been proven on the Samsung S25 Ultra. 0.8.2 is the security-closure source pass and must now be compiled, emulator-tested, deployed and exercised across at least two Android devices.
+The approved Homi interface and core single-device flows are close to release-candidate quality. Notifications and developer self-test delivery have been proven on the Samsung S25 Ultra. On 10 September 2026, the 0.8.2 Firestore Emulator security gate passed 12/12 and the stricter Firestore rules were released successfully. The corresponding Functions deployment did not complete because Cloud Build received a stale untracked package lock; the deployment helper has been corrected in source and must now be rerun to prove all 0.8.2 Functions on the dedicated runtime identity.
 
 The largest product blocker remains the shared-Household contract. If the public product promises a household-wide source of truth, Household cloud sync is the next major implementation milestone after 0.8.2 verification. Production signing, Play Integrity/App Check enforcement, public legal URLs and Play policy declarations then form the final deployment phase.

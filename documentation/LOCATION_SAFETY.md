@@ -1,7 +1,7 @@
 # Homi Location & Safety
 
 Date: 2026-09-10
-Source version: `0.9.0+11`
+Source version: `0.9.1+12`
 
 ## Purpose
 
@@ -21,7 +21,7 @@ A trusted person may be a partner, family member, roommate, friend, caregiver or
 - Stopping live updates, disabling check-ins and revoking one person's location access remain understandable controls.
 - Homi has no stealth-sharing mode.
 - Location/battery values must not be placed in analytics or general logs.
-- Arrival notification payloads must not contain saved Home/Work coordinates.
+- Arrival notification payloads must not contain saved Home/Work coordinates or readable addresses.
 
 ## Emergency call shortcuts
 
@@ -66,39 +66,56 @@ A household Task may be visible to the creator's chosen Household people so ever
 
 Household status still does not automatically share location or enable arrival check-ins.
 
-## People hub and identity
+## People page and identity
 
-The primary People destination separates accepted connections into:
+The approved primary People destination remains the map-first People page. The embedded map, person chips, current-device location card and live-sharing controls appear immediately when the user opens People inside the normal Homi shell.
+
+Accepted connections then appear underneath that location experience, separated into:
 
 - **Household**;
 - **Friends & trusted people**.
 
-Both sections use the connection profile photo where available, with safe fallbacks when an image is unavailable. Pending requests remain surfaced. The existing detailed map/connection/location experience is preserved behind **Manage connections & live location**.
+Both sections use the connection profile photo where available, with safe fallbacks when an image is unavailable. Pending requests and the existing Homi code remain surfaced. There is no separate required **Manage connections & live location** detour in the primary flow.
 
-Task assignment continues to use the Household-only service boundary and now displays profile images for identifiable assignees.
+Relationship editing is exposed with a labelled Edit action so Household/Friend classification is not hidden behind a small icon.
+
+Task assignment continues to use the Household-only service boundary and displays profile images for identifiable assignees.
 
 ## Arrival check-ins
 
-Arrival check-ins currently support two user-defined places: **Home** and **Work**.
+Arrival check-ins support two user-defined places: **Home** and **Work**.
 
 The user must:
 
 1. sign in;
-2. save Home or Work while physically at that location;
+2. configure Home or Work by entering an address or using **Set from here**;
 3. choose an arrival radius;
 4. choose accepted trusted people who should receive that place's arrival notification;
 5. turn Arrival check-ins on.
 
 The current UI offers 150 m, 250 m and 500 m arrival radii. The underlying local model accepts a bounded 75 m–1 km radius.
 
+The enable/disable surface follows the existing Notifications settings pattern: status hero, explicit enable button while off, and a settings-style switch while on. Educational detail is behind **How it works** rather than a persistent oversized help box.
+
+### Address setup
+
+Home and Work can be configured two ways:
+
+- **Enter address** — Homi uses the existing device geocoding service to resolve the typed address/place into latitude/longitude and then stores a readable address locally.
+- **Set from here** — Homi captures the phone's current location locally and reverse-geocodes a readable address when available.
+
+The current implementation resolves the entered text when the user submits it; it does not add a separate Google Places autocomplete SDK/API dependency.
+
+Older 0.9 saved places that contain coordinates but no readable address remain valid.
+
 ### Local-data boundary
 
-Home/Work coordinates are stored in user-scoped local preferences on the device. The `sendArrivalCheckIn` callable receives only:
+Home/Work latitude/longitude and readable addresses are stored in user-scoped local preferences on the device. The `sendArrivalCheckIn` callable receives only:
 
 - `place`: `home` or `work`;
 - selected trusted-recipient UIDs.
 
-It receives no saved place latitude/longitude. The push payload includes the place label but no coordinates or address.
+It receives no saved place latitude/longitude or readable address. The push payload includes the place label but no coordinates or address.
 
 No route or long-term movement history is created by arrival check-ins.
 
@@ -106,7 +123,7 @@ No route or long-term movement history is created by arrival check-ins.
 
 Homi avoids false arrival messages on startup:
 
-- the first location sample establishes whether the device is already inside or outside a saved place and does not send;
+- the first fresh location sample establishes whether the device is already inside or outside a saved place and does not send;
 - only an outside → inside transition is an arrival;
 - the device must move beyond the configured radius plus a 100 m exit margin before being considered outside again;
 - a one-hour per-place local cooldown reduces repeated edge notifications.
@@ -126,7 +143,7 @@ The Android strategy remains:
 - roughly two-minute update interval;
 - no wake/Wi-Fi lock policy added by Homi.
 
-When the user turns check-ins off, Homi checks for any still-active explicit per-person location shares. If none exist, it stops the continuous location stream. If Homi cannot safely prove that there are no active viewers, it leaves the existing live-location stream untouched rather than silently breaking another sharing choice.
+Live updates and Arrival check-ins retain independent local ownership flags. Turning one off does not stop the shared foreground stream if the other still requires it. When both are off, the stream stops.
 
 Force-stopping the Android app can interrupt background behaviour until the user opens Homi again. Do not claim Life360-equivalent force-stop/reboot persistence until it is proven on production devices.
 
@@ -141,9 +158,11 @@ The backend requires:
 - Firebase App Check;
 - place label limited to Home/Work;
 - 1–10 unique non-self recipients;
-- every recipient to be an accepted trusted connection.
+- every delivered recipient to remain an accepted trusted connection.
 
 It also applies sender rate limits and respects each recipient device's People-notification preference. No client may use the arrival callable to notify an arbitrary UID that is not an accepted Homi connection.
+
+The 0.9 backend containing this callable was deployed successfully according to Bruce's Cloud Shell result. 0.9.1 changes client/local UX only and does not require another backend deployment.
 
 ## People hearts
 
@@ -231,7 +250,7 @@ Default architecture favours current state, not indefinite route history.
 
 - latest location remains until replaced or sharing is revoked according to product policy;
 - long-term route history is not enabled by default;
-- Home/Work check-in coordinates remain local to the device;
+- Home/Work check-in coordinates/readable addresses remain local to the device;
 - check-ins store only the most recent local send time needed for cooldown/status;
 - any future breadcrumb/history feature requires a specific purpose, short retention by default and explicit user-facing controls.
 

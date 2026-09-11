@@ -116,9 +116,13 @@ If Homi is in explicit local-only mode, the Household synchronizer does not star
 
 Personal **Me** Tasks remain local/private.
 
-For a shared Task, the server now derives `householdId` and `memberUids` from the creator's current canonical Household. A caller cannot manufacture task visibility by setting a People scope. An assignee must be a current member of the same Household.
+For a new 0.12 shared Task, the server derives `householdId` and `memberUids` from the creator's current canonical Household. A caller cannot manufacture task visibility by setting a People scope. An assignee must be a current member of the same Household.
 
 The new callable implementation also verifies canonical Household access before toggle/remove operations. Existing completion/reopen/removal restrictions remain.
+
+`onHouseholdTaskMembershipChanged` keeps new Tasks carrying the canonical `householdId` aligned when the Household member list changes. Removed assignee UIDs are cleared, and removed completion UIDs are stripped. This prevents the authorization list on a new shared Task from becoming stale merely because membership changed after task creation.
+
+Pre-0.12 Tasks without `householdId` are deliberately not broadened by this trigger. Automatically adding a newer Household audience to a task that was originally shared under the older preference-era model would itself create a privacy regression.
 
 `sharedTasks` remains a separate compatibility collection in 0.12 rather than being destructively migrated into the generic data plane during the same release.
 
@@ -128,7 +132,7 @@ Firestore parent deletion does not recursively delete subcollections. 0.12 adds 
 
 The trigger deletes nested `data` documents in bounded batches and removes new shared Tasks that carry the deleted `householdId`. This prevents an intentionally deleted Household from leaving unreachable synchronized data indefinitely.
 
-The Functions export surface is therefore exactly **36** in the 0.12 deployment contract; the other new modules override existing callable names rather than adding public names.
+The Functions export surface is therefore exactly **37** in the 0.12 deployment contract: one new Household-data cleanup trigger plus one new Task-membership synchronizer. The preference/task implementation modules override existing callable names rather than adding further public names.
 
 ## Continuous-location abuse/cost controls
 
@@ -188,7 +192,7 @@ Permanent backend identity remains:
 
 For 0.12 the expected suite is **21 tests** once executed: the original 13 server-boundary tests plus eight Household tests. The Household suite now covers identity/invite boundaries as well as valid member data access, outsider denial, deterministic record identity, forged actor/domain denial and the two-sided membership requirement.
 
-The governed Functions helper requires Node 22, the immutable project number, exact source files, dependency lint and exactly **36** exports before it reaches any deployment. Firestore security tests run before Firestore/Functions deployment.
+The governed Functions helper requires Node 22, the immutable project number, exact source files, dependency lint and exactly **37** exports before it reaches any deployment. Firestore security tests run before Firestore/Functions deployment.
 
 The standalone new JavaScript modules have been syntax-checked under Node 22 during source development. This is not a substitute for the governed dependency/export/emulator gate.
 
@@ -208,7 +212,7 @@ Privacy, current-location revoke, exact-place revoke, local erase and account de
 
 - exact 0.12 Windows analyzer/full Flutter test pass;
 - S25 Ultra acceptance of the affected People/Household/data flows;
-- governed Node 22 / **36-export** / expected **21-test** backend pass before 0.12 deployment;
+- governed Node 22 / **37-export** / expected **21-test** backend pass before 0.12 deployment;
 - permanent release signing / Play App Signing fingerprints;
 - Play-installed Google Sign-In;
 - production Maps/Places key restrictions;

@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 PROJECT_ID="homi-ee80a"
 EXPECTED_PROJECT_NUMBER="883068189841"
-TEST_FILE="server.boundary.test.js"
+TEST_FILES=("server.boundary.test.js" "household.boundary.test.js")
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${REPO_ROOT}"
@@ -14,10 +14,16 @@ if [ "${ACTUAL_PROJECT_NUMBER}" != "${EXPECTED_PROJECT_NUMBER}" ]; then
   exit 1
 fi
 
-if [ ! -f security-tests/package.json ] || [ ! -f "security-tests/${TEST_FILE}" ]; then
+if [ ! -f security-tests/package.json ]; then
   echo "Homi Firestore security test harness is incomplete." >&2
   exit 1
 fi
+for test_file in "${TEST_FILES[@]}"; do
+  if [ ! -f "security-tests/${test_file}" ]; then
+    echo "Homi Firestore security test harness is missing ${test_file}." >&2
+    exit 1
+  fi
+done
 
 # Generated dependencies are never source data. Remove leftovers from earlier
 # Cloud Shell runs so the small persistent home disk cannot fill silently.
@@ -31,7 +37,9 @@ trap cleanup EXIT
 
 mkdir -p "${WORK_ROOT}/security-tests" "${WORK_ROOT}/firebase"
 cp security-tests/package.json "${WORK_ROOT}/security-tests/package.json"
-cp "security-tests/${TEST_FILE}" "${WORK_ROOT}/security-tests/${TEST_FILE}"
+for test_file in "${TEST_FILES[@]}"; do
+  cp "security-tests/${test_file}" "${WORK_ROOT}/security-tests/${test_file}"
+done
 cp firebase/firestore.rules "${WORK_ROOT}/firebase/firestore.rules"
 
 NPM_CACHE_DIR="${WORK_ROOT}/npm-cache"

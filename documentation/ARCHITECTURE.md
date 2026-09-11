@@ -26,9 +26,11 @@ These identifiers are locked for the Android/Firebase/Play lifecycle. The delete
 - Firebase App Check: debug provider during development, Play Integrity for release
 - `flutter_local_notifications` for local due/attention reminders and foreground push presentation
 - Google Maps Flutter + Geolocator for consensual trusted-person location and local arrival detection
-- `flutter_google_places_sdk` with Places API (New) for South African Home/Work autocomplete and place details
+- `google_places_sdk_plus 1.1.0` with native Places API (New) on Android for South African Home/Work autocomplete and place details
 - `geocoding` for readable reverse-geocoding when the user chooses **Set from here**
 - `url_launcher` for external Google Maps and emergency phone-app handoff
+
+`google_places_sdk_plus` replaced the original `flutter_google_places_sdk` dependency after its published Android 0.2.2 implementation failed Kotlin compilation and its advertised 0.2.3 fix proved unavailable from pub.dev. The maintained fork requires Dart >=3.11 / Flutter >=3.41, matching Homi's current toolchain, and retains native Android Places SDK usage so the credential can remain Android package/SHA restricted.
 
 ## Primary shell
 
@@ -90,7 +92,7 @@ The page order remains intentionally:
 
 There is no separate primary **Manage connections & live location** detour. Relationship editing uses a labelled Edit action rather than relying on a small pencil icon alone.
 
-`PeopleHubPage` is now only a compatibility/lifecycle wrapper around `PeoplePage`. It watches Firebase ID-token identity changes and re-keys the map-first People destination when the signed-in UID changes/restores so realtime subscriptions cannot remain bound to a stale signed-out user.
+`PeopleHubPage` is only a compatibility/lifecycle wrapper around `PeoplePage`. It watches Firebase ID-token identity changes and re-keys the map-first People destination when the signed-in UID changes/restores so realtime subscriptions cannot remain bound to a stale signed-out user.
 
 Relationship scope, location share, arrival-recipient selection and exact Home/Work visibility remain independent choices.
 
@@ -157,12 +159,7 @@ Arrival logic:
 - local one-hour place cooldown reduces repeated edge sends;
 - no route/breadcrumb history is created.
 
-When an arrival occurs, the client calls `sendArrivalCheckIn` with only:
-
-- `place`: `home` or `work`;
-- selected trusted-recipient UIDs.
-
-The arrival callable still receives **no saved coordinate or address**.
+When an arrival occurs, the client calls `sendArrivalCheckIn` with only `place` (`home` or `work`) and selected trusted-recipient UIDs. The arrival callable receives no saved coordinate or address.
 
 The enable/disable UX follows the Notifications settings pattern with one always-visible settings card and one switch. Contextual education uses **How it works** with an information icon and bottom sheet rather than persistent oversized help containers.
 
@@ -198,15 +195,9 @@ Homi uses `tel:` external phone-app handoff. It deliberately does not request si
 
 The People map remains the immediate live-location surface. Available people use profile-photo markers with initials fallback.
 
-Full-map Person Details now includes:
+Full-map Person Details includes latest location, Home and Work. The current user's Home/Work comes from local saved arrival settings. Another person's Home/Work appears only through the exact-place permission boundary above. Visible saved places can be opened in Google Maps.
 
-- latest location;
-- Home;
-- Work.
-
-The current user's Home/Work comes from local saved arrival settings. Another person's Home/Work appears only through the exact-place permission boundary above. Visible saved places can be opened in Google Maps.
-
-A selected accepted trusted person can receive a lightweight People heart through the protected `sendHeart` callable. The full map now routes that action through `HomiCloudActions`, including the same token refresh/friendly failure handling used by other protected People actions.
+A selected accepted trusted person can receive a lightweight People heart through the protected `sendHeart` callable. The full map routes that action through `HomiCloudActions`, including the same token refresh/friendly failure handling used by other protected People actions.
 
 ## Protected callable client boundary
 
@@ -239,9 +230,13 @@ All Functions use the dedicated runtime identity:
 
 Global bounded defaults remain `maxInstances: 5`, `minInstances: 0`, `256MiB`, with smaller per-Function caps where appropriate.
 
-The backend deployment helper validates Node 22, prepares a disposable synchronized npm lock, runs local `npm ci`, syntax checks all Function modules, runs the Firestore Emulator security gate, deploys Firestore separately, then deploys discovered Function exports in batches of five.
+The backend deployment helper validates Node 22, prepares a disposable synchronized npm lock, runs local `npm ci`, syntax-checks all Function modules, runs the Firestore Emulator security gate, deploys Firestore separately, then deploys discovered Function exports in batches of five.
 
-The validated/deployed 0.9.0 backend remains the active backend until 0.9.2 passes Flutter validation and the governed helper publishes the new saved-place callable/trigger/rules.
+### Current backend state
+
+The 0.9.2 backend is deployed. Bruce's governed Cloud Shell run on 2026-09-11 used source `d8fb786269feea43223c673e84b2b5a6c499a91f`, passed the expanded Firestore security suite **13/13**, deployed rules/indexes, deployed all 24 Functions, created `onHomiUserSharedPlacesDeleted` and `setSharedArrivalPlace`, and finished with `PASS` / `Homi backend deployment completed.`
+
+The later Google Places dependency migration is client-only and does not require another Firebase deployment.
 
 ## Firestore collections in active use
 
@@ -286,6 +281,6 @@ Privacy, stop-sharing, check-in disable, exact-place revoke and account deletion
 
 ## Verification state
 
-`0.9.2+13` is implemented in source in response to the first 0.9.1 device review. The existing 0.9 backend is still deployed, but 0.9.2 adds a new callable, cleanup trigger and Firestore rule boundary.
+The 0.9.2 Flutter analyzer/tests passed before the first Android device build and the 0.9.2 backend is deployed successfully. The first device build then exposed the original third-party Places Android compilation defect; a follow-up attempt to pin its advertised `0.2.3` fix failed dependency resolution because that version is not published.
 
-Do not call 0.9.2 compiled, backend-deployed or device-accepted until Bruce's real Flutter analyzer/tests, the governed backend security/deployment helper and the S25 Ultra regression all pass.
+Source now uses `google_places_sdk_plus 1.1.0` instead. This maintained-client migration is **not yet proven by Bruce's Windows resolver/analyzer/tests or by the S25 Ultra build**. Do not call 0.9.2 device-accepted until those client gates and the affected on-device workflows pass.

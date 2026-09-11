@@ -108,13 +108,15 @@ class HomiCloudActions {
       'deadline-exceeded' =>
         'Homi took too long to respond. Check your connection and try again.',
       'permission-denied' => 'That action is not available to this account.',
-      'resource-exhausted' => 'Too many attempts. Wait a moment and try again.',
-      'invalid-argument' => backendMessage?.isNotEmpty == true
+      'resource-exhausted' => backendMessage?.isNotEmpty == true
           ? backendMessage!
-          : 'Check the details and try again.',
-      'failed-precondition' => backendMessage?.isNotEmpty == true
+          : 'Too many attempts. Wait a moment and try again.',
+      'invalid-argument' ||
+      'failed-precondition' ||
+      'already-exists' ||
+      'not-found' => backendMessage?.isNotEmpty == true
           ? backendMessage!
-          : 'Homi cannot complete that action yet.',
+          : 'Homi could not complete that action yet.',
       _ => 'Homi could not complete that action. Try again.',
     };
   }

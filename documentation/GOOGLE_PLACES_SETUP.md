@@ -44,32 +44,29 @@ PLACES_API_KEY=<private restricted key>
 
 Never paste the actual value into ChatGPT, GitHub, Dart source, documentation or a screenshot/log shared publicly.
 
-## Android dependency compatibility
+## Flutter Places dependency
 
-Homi uses `flutter_google_places_sdk 0.4.3`, but its default Android implementation resolves to `flutter_google_places_sdk_android 0.2.2`.
+Homi uses `google_places_sdk_plus 1.1.0`, a maintained fork of the original `flutter_google_places_sdk` package that continues to use Google's native Places SDK on Android and supports Places API (New).
 
-The upstream package publisher explicitly identifies Android `0.2.2` as build-broken and says to skip it in favour of `0.2.3`. Homi therefore pins the Android implementation through `dependency_overrides`:
+The original package path was abandoned after its published Android `0.2.2` implementation failed Kotlin compilation and the advertised `0.2.3` fix was not actually published to pub.dev. Do not restore the old `flutter_google_places_sdk_android: 0.2.3` override.
 
-```yaml
-dependency_overrides:
-  flutter_google_places_sdk_android: 0.2.3
-```
+`google_places_sdk_plus 1.1.0` requires Dart >=3.11.0 and Flutter >=3.41.0, which matches Homi's Flutter 3.41.x toolchain. Its Android implementation remains a native SDK integration, so Homi can keep using an Android application-restricted Places key rather than an unrestricted browser/server key.
 
-This is intentional. Do not remove the override merely because `pub outdated` reports other available versions. Revisit the package only as a separately validated dependency upgrade.
+The resolved application lock file must be regenerated and committed after this dependency migration is validated on Bruce's Windows Flutter toolchain.
 
 ## Why one extra Flutter run setting is needed in 0.9.2
 
-The existing Android Maps host reads the local key for the native map. The new Flutter Places wrapper creates its native Places client from Dart, so the same restricted private key is supplied to Dart at build/run time using:
+The existing Android Maps host reads the local key for the native map. The Flutter Places client is created from Dart, so the same restricted private key is supplied to Dart at build/run time using:
 
 ```text
 --dart-define=HOMI_PLACES_API_KEY=<private PLACES_API_KEY value>
 ```
 
-`HomiGooglePlacesService` reads only `HOMI_PLACES_API_KEY`. If it is absent, Homi does not crash or fall back to an unrestricted request; the address picker explains that Google address search is not configured and **Set from here** remains available.
+`HomiGooglePlacesService` reads only `HOMI_PLACES_API_KEY`. If it is absent, Homi does not crash or fall back to an unrestricted request; the address picker explains that Google address search is unavailable and **Set from here** remains available.
 
 ## Android Studio development configuration
 
-After the 0.9.2 Flutter/backend gates pass:
+After the Flutter/backend gates pass:
 
 1. Open `C:\ConceptLab\Projects\homi\secrets.properties` locally.
 2. Copy only the value after `PLACES_API_KEY=` to the clipboard. Do not send it in chat.
@@ -89,13 +86,13 @@ This is a one-time development-machine setup until the key changes.
 
 ### Verification
 
-When Android Studio starts Flutter, inspect the first command line. It must contain both Flutter's own inspector define and Homi's private Places define. The Homi part should look like:
+When Android Studio starts Flutter, inspect the first command line. It must contain Homi's private Places define:
 
 ```text
 --dart-define=HOMI_PLACES_API_KEY=...
 ```
 
-Do not share the line publicly if it contains the real key.
+Do not share the full generated command publicly if it contains the real key.
 
 If the generated Flutter command does not contain `HOMI_PLACES_API_KEY`, the saved Android Studio Flutter run configuration is not supplying the Places key yet. Fix the run configuration before judging autocomplete behaviour.
 

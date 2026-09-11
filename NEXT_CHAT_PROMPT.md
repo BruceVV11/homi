@@ -1,8 +1,10 @@
 # Homi — Next Chat Prompt
 
-Continue **Homi** from GitHub `main`. GitHub is source of truth for tracked source/docs.
+Continue **Homi** from GitHub `main`. GitHub is the source of truth for tracked source/docs.
 
 Use **mobile-app-development** first. For Firebase/Cloud Shell release work also use **concept-lab-release-integrity**. Preserve approved design/behaviour and diagnose from source/log evidence before asking Bruce to rerun anything.
+
+Never claim compiled/deployed/on-device success without Bruce's actual toolchain/provider/device evidence.
 
 ## Permanent project context
 
@@ -16,7 +18,7 @@ Use **mobile-app-development** first. For Firebase/Cloud Shell release work also
 - JDK 21 / Gradle 8.14
 - Functions Node 22
 - Device: Samsung S25 Ultra / SM S938B
-- `android/` is intentionally local/untracked.
+- `android/` intentionally remains local/untracked.
 - Never request or expose Maps/Places keys, App Check debug tokens, signing secrets or Firebase private credentials.
 - Deleted project `homi-508000` must never be used.
 - Safety stash `stash@{0}: On main: Homi pre-0.5.0 local tracked changes` must not be popped/deleted automatically.
@@ -41,103 +43,129 @@ Current release line: **0.9.2+13**.
 - Safety/check-ins using one Notifications-style persistent ON/OFF toggle card;
 - no large green passive help/status boxes and no redundant check-ins-on success box;
 - `How it works` with information icon and bottom-sheet education;
-- Google Places autocomplete for Home/Work plus **Set from here**;
+- Google Places API (New) autocomplete for Home/Work plus **Set from here**;
 - arrival recipients shown as profile photo/initial + name;
 - People auth lifecycle recovery and one protected-callable token refresh/retry for `unauthenticated`;
 - product-friendly error wording instead of raw backend codes.
 
 ## Proven Flutter/backend state
 
-Bruce completed the Windows static gate before device build:
+Bruce previously completed the 0.9.2 Windows static gate before the first Android build:
 
 - `flutter analyze` → **No issues found**;
 - `flutter test` → **32 tests passed**;
-- `pubspec.lock` committed.
+- application `pubspec.lock` committed.
 
 Bruce then completed the governed 0.9.2 backend deployment successfully:
 
+- backend deployment source: `d8fb786269feea43223c673e84b2b5a6c499a91f`;
 - Node 22;
 - Firestore emulator security suite **13/13 passed**;
 - Firestore rules/indexes deployed;
-- 24 Functions deployed in batches;
-- new `onHomiUserSharedPlacesDeleted` created;
-- new `setSharedArrivalPlace` created;
+- all 24 Functions deployed in batches;
+- `onHomiUserSharedPlacesDeleted` created;
+- `setSharedArrivalPlace` created;
 - final status **PASS** / `Homi backend deployment completed.`
 
-Backend deployment source was `d8fb786269feea43223c673e84b2b5a6c499a91f`. Later dependency/docs commits are client/local only. **Do not redeploy Firebase for the Android Places dependency correction.**
+The later Places dependency/client-source changes do **not** change Functions, Firestore rules/indexes or the backend contract. **Do not redeploy Firebase for the Places client correction.**
 
-## Current Android build failure and fix
+## Android Places dependency failure history
 
-First S25 Ultra Gradle build after backend deployment failed inside the third-party package:
+The first S25 Ultra Gradle build failed inside third-party:
 
 `flutter_google_places_sdk_android-0.2.2/android/.../FlutterGooglePlacesSdkPlugin.kt`
 
-with unresolved Kotlin references including:
+with unresolved Kotlin references including `address`, `latLng`, `name`, `nameLanguageCode`, `phoneNumber`, `userRatingsTotal` and `placeTypes`.
 
-- `address`
-- `latLng`
-- `name`
-- `nameLanguageCode`
-- `phoneNumber`
-- `userRatingsTotal`
-- `placeTypes`
+This is the same failure reported upstream in `matanshukry/flutter_google_places_sdk` issue #137.
 
-This is an upstream package failure, not Homi app code. The publisher's changelog explicitly says Android `0.2.2` has build errors and to skip it/use `0.2.3`.
+An attempted fix then pinned `flutter_google_places_sdk_android 0.2.3`, because the upstream changelog said to skip 0.2.2 and use 0.2.3. Bruce's Windows resolver proved that artifact is **not published**:
 
-Homi now keeps `flutter_google_places_sdk 0.4.3` but pins:
+`Because homi depends on flutter_google_places_sdk_android 0.2.3 which doesn't match any versions, version solving failed.`
+
+Upstream issue #136 independently confirms that the advertised 0.2.3 Android artifact is unavailable. That failed resolver attempt did not modify `pubspec.lock`, run analysis/tests or start an Android build.
+
+## Maintained Places SDK migration — current source
+
+Do not restore the broken original package or the invalid 0.2.3 override.
+
+Homi now uses:
 
 ```yaml
-dependency_overrides:
-  flutter_google_places_sdk_android: 0.2.3
+google_places_sdk_plus: 1.1.0
 ```
 
-This source fix is **pending Bruce's real Windows resolver/analyzer/test/device-build validation**. The lock file still needs to be regenerated locally so it changes from Android `0.2.2` to `0.2.3`, then committed.
+This is an independently maintained fork of the original plugin. It uses native Places SDKs on Android/iOS, supports Places API (New), and version 1.1.0 declares Dart >=3.11.0 / Flutter >=3.41.0, matching Homi's Dart 3.11.3 / Flutter 3.41.5 environment.
 
-## Important Google Places local-run finding
+The maintained Android implementation currently has a 1.1.x line and is automatically included by the root package. Do not pin a transitive Android version unless a proven resolver/build issue requires it; let Bruce's regenerated `pubspec.lock` record the exact compatible version.
 
-Bruce's failed Android Studio Flutter command did **not** contain:
+### Homi client API migration already implemented
 
-`--dart-define=HOMI_PLACES_API_KEY=...`
+`lib/src/services/google_places_service.dart` now:
 
-It only showed Flutter's inspector define. Therefore the Android Studio run configuration has not yet proven it is supplying the private Places key.
+- imports `package:google_places_sdk_plus/google_places_sdk_plus.dart`;
+- constructs `FlutterGooglePlacesSdk(apiKey)` without the obsolete `useNewApi` argument;
+- uses `PlaceField.Id`, `PlaceField.FormattedAddress` and `PlaceField.Location`;
+- handles nullable prediction `placeId`, `primaryText`, `secondaryText` and `fullText` safely;
+- preserves South Africa autocomplete restriction and session-token behaviour.
 
-Before judging autocomplete behaviour:
+`lib/src/features/people/safety_check_in_page.dart` now imports the maintained package and uses `FlutterGooglePlacesSdk.assetPoweredByGoogleOnWhite` for Google attribution.
 
-1. open `C:\ConceptLab\Projects\homi\secrets.properties` locally;
-2. copy only the private `PLACES_API_KEY` value;
-3. Android Studio → **Run → Edit Configurations…** → Homi Flutter `lib\main.dart` configuration;
-4. **Additional run args** must contain:
+The app SDK lower bound is now Dart `>=3.11.0`, consistent with the maintained package and Bruce's installed Dart 3.11.3.
 
-   `--dart-define=HOMI_PLACES_API_KEY=<private local value>`
+## Google Places local key
 
-5. Apply/save. Keep this configuration local and never share the resulting full command line publicly if it contains the real key.
+The private Places key remains local in:
+
+`C:\ConceptLab\Projects\homi\secrets.properties`
+
+with `PLACES_API_KEY=...`.
+
+Android Studio → **Run → Edit Configurations…** → Homi Flutter configuration → **Additional run args** must include:
+
+`--dart-define=HOMI_PLACES_API_KEY=<private local value>`
+
+Never paste/share the real key or a generated Flutter command containing it.
 
 See `documentation/GOOGLE_PLACES_SETUP.md`.
 
 ## Immediate next gate
 
-Bruce should pull current `main` and run one validation block:
+The current client dependency migration has not yet been proven by Bruce's Windows resolver. Run exactly once after pulling current `main`:
 
 ```powershell
 cd C:\ConceptLab\Projects\homi
 git pull --ff-only
+flutter clean
 flutter pub get
+flutter pub deps | Select-String "google_places_sdk_plus|flutter_google_places_sdk"
 flutter analyze
 flutter test
 git status --short -- pubspec.lock
 ```
 
-Expected dependency resolution must show `flutter_google_places_sdk_android 0.2.3`, not `0.2.2`.
+Expected:
 
-Expected gates:
+- dependency resolution succeeds;
+- output includes `google_places_sdk_plus 1.1.0` plus its maintained federated packages;
+- output must **not** include the old `flutter_google_places_sdk` package family;
+- analyzer → **No issues found**;
+- tests → **All tests passed**;
+- `pubspec.lock` should show modified because the dependency graph changed.
 
-- analyzer: **No issues found**;
-- tests: **All tests passed**;
-- `pubspec.lock` modified because Android implementation changed.
+If the gate is green, commit/push only the regenerated lock:
 
-If clean, commit/push only the regenerated lock file, then configure the private Places dart-define in Android Studio and run on the S25 Ultra.
+```powershell
+git add pubspec.lock
+git commit -m "Lock maintained Google Places SDK dependencies"
+git push
+```
 
-No Cloud Shell step follows this dependency-only fix.
+Then confirm the private `HOMI_PLACES_API_KEY` run argument locally and use Android Studio's normal Run button on the S25 Ultra.
+
+**No Cloud Shell step follows this dependency-only migration.**
+
+If the dependency resolver/analyzer/test/build fails, inspect the full output and all related source/package contracts before another Bruce rerun.
 
 ## S25 Ultra acceptance matrix
 
@@ -164,7 +192,7 @@ Once the app builds:
 19. Task assignee photos/Household-only eligibility remain healthy.
 20. Live updates and Arrival check-ins still independently own the shared foreground location stream.
 
-Real arrival delivery still requires second trusted account/device plus a genuine outside→inside transition.
+Real arrival delivery still requires a second trusted account/device plus a genuine outside→inside transition.
 
 ## Production gates still later
 

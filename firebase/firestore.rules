@@ -160,14 +160,18 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
     }
 
-    // Household documents are readable only by current members whose canonical
-    // membership record points at that Household. Client mutations remain
-    // blocked; App-Check-protected Functions own create/invite/role changes.
+    // Household documents are server-managed. Direct document reads retain the
+    // canonical membership-pointer check. Collection queries authorize against
+    // memberUids because that server-owned field is the constraint used by the
+    // mobile query and Firestore rules must be provable from query constraints.
     match /households/{householdId} {
-      allow get, list: if signedIn()
+      allow get: if signedIn()
         && resource.data.memberUids is list
         && resource.data.memberUids.hasAny([request.auth.uid])
         && myHouseholdMembership(householdId);
+      allow list: if signedIn()
+        && resource.data.memberUids is list
+        && resource.data.memberUids.hasAny([request.auth.uid]);
       allow create, update, delete: if false;
 
       match /members/{memberUid} {
@@ -176,14 +180,18 @@ service cloud.firestore {
       }
     }
 
-    // Invitees can read invitations addressed to them. The current Household
-    // owner can read invitations issued for that Household. Invitation writes
-    // remain server-only so seats and membership cannot be forged by clients.
+    // Invitees can read invitations addressed to them. Direct owner reads keep
+    // the canonical owner check. Collection queries use the server-owned
+    // inviterUid field so the app's incoming/outgoing filtered queries can be
+    // proven safe by Firestore without allowing unfiltered enumeration.
     match /householdInvites/{inviteId} {
-      allow get, list: if signedIn()
+      allow get: if signedIn()
         && (resource.data.inviteeUid == request.auth.uid
           || (resource.data.inviterUid == request.auth.uid
             && isHouseholdOwner(resource.data.householdId)));
+      allow list: if signedIn()
+        && (resource.data.inviteeUid == request.auth.uid
+          || resource.data.inviterUid == request.auth.uid);
       allow create, update, delete: if false;
     }
 

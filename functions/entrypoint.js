@@ -8,6 +8,7 @@ const deviceRegistration = require("./device_registration");
 const savedPlaces = require("./saved_places");
 const locationShare = require("./location_share");
 const households = require("./households");
+const householdInviteOwnerSync = require("./household_invite_owner_sync");
 
 // A stale deployed HTTPS function already owned the historical
 // `onConnectionDeleted` name. Do not export that obsolete endpoint from the
@@ -29,4 +30,5 @@ module.exports = {
   // implementation with the viewer-capped privacy/cost boundary.
   ...locationShare,
   ...households,
+  ...householdInviteOwnerSync,
 };

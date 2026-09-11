@@ -5,6 +5,7 @@ const db = getFirestore();
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const COMPLETED_TASK_RETENTION_MS = 48 * HOUR_MS;
+const CANONICAL_AUDIENCE_VERSION = 1;
 
 function requireVerifiedCloudAccount(request) {
   if (!request.auth) {
@@ -105,18 +106,17 @@ async function canAccessSharedTask(uid, data) {
     return false;
   }
   const creatorUid = data.createdByUid;
-  if (typeof creatorUid !== "string" || !creatorUid) return false;
+  const storedHouseholdId = typeof data.householdId === "string" ?
+    data.householdId.trim() : "";
+  if (!creatorUid || !storedHouseholdId) return false;
+
   const [actorHousehold, creatorHousehold] = await Promise.all([
     canonicalHouseholdFor(uid),
     canonicalHouseholdFor(creatorUid),
   ]);
-  if (!actorHousehold || !creatorHousehold ||
-      actorHousehold.id !== creatorHousehold.id) {
-    return false;
-  }
-  const storedHouseholdId = typeof data.householdId === "string" ?
-    data.householdId : null;
-  return storedHouseholdId == null || storedHouseholdId === actorHousehold.id;
+  return Boolean(actorHousehold && creatorHousehold &&
+    actorHousehold.id === storedHouseholdId &&
+    creatorHousehold.id === storedHouseholdId);
 }
 
 // Keep the historic callable names so existing app clients continue to work.
@@ -201,6 +201,7 @@ exports.createSharedTask = onCall(
       const ref = db.collection("sharedTasks").doc();
       await ref.create({
         householdId: household.id,
+        audienceVersion: CANONICAL_AUDIENCE_VERSION,
         title,
         notes,
         assigneeUid,

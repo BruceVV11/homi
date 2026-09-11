@@ -4,3 +4,11 @@ linter:
   rules:
     prefer_single_quotes: true
     use_super_parameters: true
+    # Homi intentionally keeps conventional _, __, ___ ignored callback names
+    # across established widget/error builders. This is style-only and avoids
+    # broad source churn when newer Dart/Flutter lints change wildcard guidance.
+    unnecessary_underscores: false
+    # Null-aware collection elements are optional syntax sugar. Existing explicit
+    # null guards remain readable and equivalent; do not make release gates depend
+    # on this cosmetic rewrite.
+    use_null_aware_elements: false

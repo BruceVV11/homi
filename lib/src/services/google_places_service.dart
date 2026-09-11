@@ -1,4 +1,4 @@
-import 'package:flutter_google_places_sdk/flutter_google_places_sdk.dart';
+import 'package:google_places_sdk_plus/google_places_sdk_plus.dart';
 
 class HomiPlaceSuggestion {
   const HomiPlaceSuggestion({
@@ -28,12 +28,12 @@ class HomiResolvedPlace {
   final double longitude;
 }
 
-/// Thin product boundary around Google Places Autocomplete (New).
+/// Thin product boundary around Google Places API (New).
 ///
 /// The key is supplied at build/run time and is never committed to source:
 /// `--dart-define=HOMI_PLACES_API_KEY=<restricted Android key>`.
-/// Homi's existing Google Cloud setup already restricts the Android credential
-/// by package/SHA and Maps SDK + Places API (New).
+/// Homi's existing Google Cloud setup restricts the Android credential by
+/// package/SHA and to Maps SDK for Android + Places API (New).
 class HomiGooglePlacesService {
   HomiGooglePlacesService({String? apiKey})
       : _apiKey = apiKey ??
@@ -50,14 +50,9 @@ class HomiGooglePlacesService {
 
   FlutterGooglePlacesSdk get _places {
     if (!configured) {
-      throw StateError(
-        'Google address search is unavailable right now.',
-      );
+      throw StateError('Google address search is unavailable right now.');
     }
-    return _client ??= FlutterGooglePlacesSdk(
-      _apiKey.trim(),
-      useNewApi: true,
-    );
+    return _client ??= FlutterGooglePlacesSdk(_apiKey.trim());
   }
 
   Future<List<HomiPlaceSuggestion>> search(String query) async {
@@ -71,15 +66,29 @@ class HomiGooglePlacesService {
         newSessionToken: _startNewSession,
       );
       _startNewSession = false;
+
       return response.predictions
-          .map(
-            (prediction) => HomiPlaceSuggestion(
-              placeId: prediction.placeId,
-              primaryText: prediction.primaryText,
-              secondaryText: prediction.secondaryText,
-              fullText: prediction.fullText,
-            ),
-          )
+          .where((prediction) => prediction.placeId?.trim().isNotEmpty == true)
+          .map((prediction) {
+            final placeId = prediction.placeId!.trim();
+            final primary = prediction.primaryText?.trim() ?? '';
+            final secondary = prediction.secondaryText?.trim() ?? '';
+            final full = prediction.fullText?.trim() ?? '';
+            final fallback = <String>[primary, secondary]
+                .where((part) => part.isNotEmpty)
+                .join(', ');
+
+            return HomiPlaceSuggestion(
+              placeId: placeId,
+              primaryText: primary.isNotEmpty
+                  ? primary
+                  : (full.isNotEmpty ? full : 'Google Maps result'),
+              secondaryText: secondary,
+              fullText: full.isNotEmpty
+                  ? full
+                  : (fallback.isNotEmpty ? fallback : 'Google Maps result'),
+            );
+          })
           .toList(growable: false);
     } catch (_) {
       throw StateError(
@@ -94,7 +103,7 @@ class HomiGooglePlacesService {
         suggestion.placeId,
         fields: const <PlaceField>[
           PlaceField.Id,
-          PlaceField.Address,
+          PlaceField.FormattedAddress,
           PlaceField.Location,
         ],
       );

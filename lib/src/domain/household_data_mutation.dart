@@ -14,13 +14,13 @@ extension HouseholdDataDomainValue on HouseholdDataDomain {
         HouseholdDataDomain.homeEvent => 'homeEvent',
         HouseholdDataDomain.utilityReading => 'utilityReading',
       };
+}
 
-  static HouseholdDataDomain? fromCloudValue(String value) {
-    for (final domain in HouseholdDataDomain.values) {
-      if (domain.cloudValue == value) return domain;
-    }
-    return null;
+HouseholdDataDomain? householdDataDomainFromCloudValue(String value) {
+  for (final domain in HouseholdDataDomain.values) {
+    if (domain.cloudValue == value) return domain;
   }
+  return null;
 }
 
 class HouseholdDataMutation {

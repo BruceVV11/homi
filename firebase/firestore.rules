@@ -161,16 +161,15 @@ service cloud.firestore {
     }
 
     // Household documents are server-managed. Direct document reads retain the
-    // canonical membership-pointer check. Collection queries authorize against
-    // memberUids because that server-owned field is the constraint used by the
-    // mobile query and Firestore rules must be provable from query constraints.
+    // canonical membership-pointer check. Collection queries use the same
+    // membership predicate already proven for sharedTasks; adding a separate
+    // query-time type predicate prevents Firestore from proving the list query.
     match /households/{householdId} {
       allow get: if signedIn()
         && resource.data.memberUids is list
         && resource.data.memberUids.hasAny([request.auth.uid])
         && myHouseholdMembership(householdId);
       allow list: if signedIn()
-        && resource.data.memberUids is list
         && resource.data.memberUids.hasAny([request.auth.uid]);
       allow create, update, delete: if false;
 

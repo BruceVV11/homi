@@ -10,16 +10,16 @@ Status markers: **DONE**, **VERIFY**, **OPEN**, **BLOCKER**.
 - **DONE (0.9.2)** Google Places dependency migrated to maintained `google_places_sdk_plus`; Windows dependency resolution succeeded.
 - **DONE (0.9.2)** Windows analyzer clean and 32 Flutter tests passed after the Places migration.
 - **DONE (0.10.0)** `flutter pub get` succeeded on Bruce's Windows toolchain.
-- **DONE (0.10.0 initial candidate)** `flutter test` passed 41/41 on `9ee7fe0e2d18f185e53b0ad210c703bdd1510c29`.
-- **VERIFY (0.10.0 corrected candidate)** `flutter analyze` clean after the emergency-region null-safety/import correction.
-- **VERIFY (0.10.0 corrected candidate)** rerun all 41+ Flutter tests on the exact corrected head before backend deployment.
-- **VERIFY** S25 Ultra launch/regression after 0.10.0.
+- **DONE (0.10.0)** `flutter analyze` clean on exact app/runtime source `11df198bfc5801257cef45dc4bba64e9d37772d7`.
+- **DONE (0.10.0)** `flutter test` passed **41/41** on the same exact app/runtime source.
+- **DONE (0.10.0)** no tracked local source drift was reported after the Windows gate.
+- **VERIFY** S25 Ultra launch/regression after backend deployment.
 - **OPEN** fresh-install and returning-user paths.
 - **OPEN** background/resume/swipe-away/reopen/network-loss recovery.
 - **OPEN** keyboard/safe-area/Android navigation insets.
 - **OPEN** screen-off/several-hours/process recreation/reboot/Samsung power-saving tests.
 
-The first 0.10 analyzer run found only four client static-analysis findings in the new emergency-region code: one unused import, two nullable accesses caused by mutable-local promotion loss inside a sheet closure, and one redundant import. The source correction changes no backend/rules behavior. The local gate showed no tracked source drift; only established untracked local Android/assets/store/PSD/logcat material was present.
+The first 0.10 analyzer run found only four client static-analysis findings in the new emergency-region code. Those were corrected before the final Windows gate. A later deployment-tool-only correction changed `scripts/deploy-notification-backend.sh` and documentation but did not modify Flutter app source, Functions runtime source, Firestore rules, or the validated dependency graph; the Windows gate therefore remains valid and should not be repeated merely because the deployment-tool/docs head moved.
 
 ## Gate 2 — People/location/safety
 
@@ -99,12 +99,16 @@ Do not enforce paid live sending until the secure server entitlement path exists
 - **DONE previously** server-side limits for connections, shared Tasks, hearts, arrivals and campaigns.
 - **DONE previously** dedicated bounded runtime identity.
 - **DONE previously** 0.9.2 Firestore security suite passed 13/13 and governed backend deployment completed.
+- **DONE (preflight diagnosis)** first 0.10 Cloud Shell worker failed before emulator/deployment because the installed gcloud uses `--v2`, not the stale `--gen2` selector.
+- **DONE in deployment tooling** corrected all discovered `--gen2` occurrences in the governed deployment helper to `--v2` so the same failure cannot recur later in the helper.
 - **VERIFY 0.10.0** updated Firestore emulator suite passes with 90-second location rule.
 - **VERIFY 0.10.0** governed deployment updates Firestore rules and `setLocationShare` while keeping the same public export count/name.
 - **VERIFY** active debug devices have registered private App Check debug tokens.
 - **BLOCKER** Play Integrity App Check for release traffic.
 - **BLOCKER** Firestore App Check enforcement only after known-good valid-client metrics.
 - **BLOCKER** Cloud Billing budgets/alerts/spend controls.
+
+The failed Cloud Shell preflight occurred before any Firebase deployment began. The live backend therefore remains the previously proven 0.9.2 deployment until the corrected 0.10 worker completes successfully.
 
 ## Gate 7 — Authentication/account lifecycle
 
@@ -139,8 +143,8 @@ Permanent package: `za.co.theconceptlab.homi`.
 
 ## Immediate sequence
 
-1. Pull the corrected 0.10.0 candidate on Windows.
-2. Run `flutter analyze` and `flutter test` on the exact corrected head.
-3. If clean, run the governed Cloud Shell backend helper; it must pass the updated Firestore emulator gate before deploying rules/Functions.
+1. Pull the current exact GitHub head in Cloud Shell.
+2. Run the corrected refresh-safe governed backend worker. Do not rerun the failed worker that used `--gen2`.
+3. Worker must prove Node 22, project identity, local export count, updated Firestore emulator suite, Firestore deployment, Function batches and `setLocationShare` ACTIVE.
 4. S25 Ultra device acceptance for emergency regions, Places, People and viewer cap.
 5. Then begin Shared Household + Google Play Billing/entitlement implementation.

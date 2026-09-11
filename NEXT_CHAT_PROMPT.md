@@ -124,40 +124,36 @@ Do not ask Bruce to rerun this Windows gate solely because later deployment-tool
 
 ## Current Cloud Shell deployment state
 
-The first governed 0.10 Cloud Shell worker failed before emulator/deployment with:
+Two governed 0.10 Cloud Shell workers have failed, both **before the Firestore emulator and before any Firebase deployment**.
+
+First failure:
 
 ```text
 ERROR: (gcloud.functions.list) unrecognized arguments: --gen2 (did you mean '--v2'?)
 ```
 
-This was a release-tooling compatibility failure, not an app/backend test failure.
+All discovered stale gcloud Functions selectors in release tooling were corrected from `--gen2` to `--v2`.
 
-Safe state:
+Second failure:
 
-- exact project identity guard had passed: `homi-ee80a` / `883068189841`;
-- Node was `v22.23.2`;
-- no Firestore emulator gate had run yet;
-- no Firestore or Functions deployment had begun;
-- therefore the previously proven 0.9.2 backend remains live.
+```text
+Error: Cannot find module 'firebase-functions/v2'
+Require stack:
+- functions/index.js
+- functions/entrypoint.js
+```
 
-Repository inspection found the same stale `--gen2` selector inside `scripts/deploy-notification-backend.sh` for Gen2/v2 legacy/replacement trigger checks. These were corrected together to current Cloud Shell `--v2` syntax. Do not rerun the old worker or reuse the old expected SHA.
+The second worker had already proven exact source, Node `v22.23.2`, project `homi-ee80a` / `883068189841`, and successfully inventoried the deployed Functions. It then tried to load the local Functions entrypoint before `functions/node_modules` existed in the intentionally clean Cloud Shell checkout.
+
+The governed backend helper is now hardened so it generates the disposable dependency lock, runs `npm ci`, then loads and validates the Function export surface. It requires exactly **24** exports before any security test or Firebase deployment begins and reuses that validated list for deployment batches. Do not add a separate pre-dependency `node -e require("./functions/entrypoint.js")` wrapper check again.
+
+Safe state: neither failed worker reached emulator/rules/Functions deployment, so the previously proven 0.9.2 backend remains live.
 
 ## Immediate next step
 
-Run a new refresh-safe Cloud Shell worker against the **current exact GitHub `main` head**. The worker must:
+Run a new refresh-safe Cloud Shell worker against the **current exact GitHub `main` head**. The worker should only prove Node 22/project/exact SHA externally and then call `scripts/deploy-notification-backend.sh`; the helper itself now owns dependency installation, exact 24-export validation, lint, Firestore emulator gate, Firestore deploy and five-function deployment batches.
 
-1. force/verify Node 22;
-2. verify `homi-ee80a` and project number `883068189841`;
-3. fetch/fast-forward to the exact current GitHub SHA;
-4. inventory deployed Functions using `gcloud functions list --v2`;
-5. prove exactly 24 local Homi Function exports;
-6. run `scripts/deploy-notification-backend.sh`;
-7. allow that helper to run lint + the updated Firestore emulator security suite;
-8. deploy Firestore rules/indexes and Functions in batches of five;
-9. verify `setLocationShare` ACTIVE with `gcloud functions describe ... --v2`;
-10. write durable PASS/FAIL status and log.
-
-If Cloud Shell refreshes, inspect the status/log only. Never blindly rerun while a worker may still be running.
+After helper completion, verify `setLocationShare` is ACTIVE with `gcloud functions describe ... --v2` and write durable PASS/FAIL status/log. If Cloud Shell refreshes, inspect status/log only; never blindly rerun while a worker may still be running.
 
 After deployment PASS, S25 Ultra acceptance should cover:
 

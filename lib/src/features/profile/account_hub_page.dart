@@ -12,6 +12,7 @@ import '../../theme/homi_theme.dart';
 import '../../widgets/google_provider_mark.dart';
 import '../../widgets/homi_controls.dart';
 import 'developer_notifications_page.dart';
+import 'household_settings_route.dart';
 import 'notification_settings_page.dart';
 import 'profile_settings_page.dart';
 
@@ -77,6 +78,18 @@ class _AccountHubPageState extends State<AccountHubPage> {
     if (!mounted) return;
     await _loadDeveloperAccess();
     setState(() {});
+  }
+
+  Future<void> _openHousehold() async {
+    if (_user == null) {
+      widget.onSignIn();
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const HouseholdSettingsRoute(),
+      ),
+    );
   }
 
   Future<void> _openNotifications() async {
@@ -150,7 +163,7 @@ class _AccountHubPageState extends State<AccountHubPage> {
       context,
       title: 'Permanently delete your Homi account?',
       message:
-          'This cannot be undone. Homi deletes your account identity, connection code, trusted connections, location-sharing permissions, latest cloud location and Homi cloud collaboration data associated with your account. It also erases this phone’s Homi household data and cached location.',
+          'This cannot be undone. Homi deletes your account identity, connection code, trusted connections, Household membership, location-sharing permissions, latest cloud location and Homi cloud collaboration data associated with your account. It also erases this phone’s Homi household data and cached location.',
       confirmLabel: 'Continue to delete',
       cancelLabel: 'Keep my account',
       icon: Icons.delete_forever_outlined,
@@ -308,6 +321,14 @@ class _AccountHubPageState extends State<AccountHubPage> {
               title: 'Why Homi exists',
               subtitle: 'The problem Homi solves at home and beyond it.',
               onTap: () => _openInfo(context, HomiInfoTopic.whyHomi),
+            ),
+            _HubCard(
+              icon: Icons.home_work_outlined,
+              title: 'Household',
+              subtitle: user == null
+                  ? 'Sign in to create or join a shared Homi Household.'
+                  : 'Create, join and manage your shared Homi Household.',
+              onTap: _busy ? null : _openHousehold,
             ),
             _HubCard(
               icon: Icons.notifications_none_rounded,
@@ -793,7 +814,7 @@ _InfoContent _content(HomiInfoTopic topic) {
             'That is why Homi’s People feature is broader than a family tracker. Partners, relatives, roommates and trusted friends can choose to share location with each other. A friend can stay location-only and does not become part of your household data simply because you both choose to share location.',
           ]),
           _SectionContent('Useful, not intrusive', [
-            'Homi is deliberately built around consent. Connecting with somebody, marking them as part of a household and sharing location are separate choices. A person controls whether their location is shared and can stop it again.',
+            'Homi is deliberately built around consent. Connecting with somebody, joining a shared Household and sharing location are separate choices. A person controls whether their location is shared and can stop it again.',
             'Homi makes home life clearer and the people you care about easier to check in on without creating a hidden surveillance system or a daily data-entry burden.',
           ]),
           _SectionContent('The standard Homi follows', [
@@ -815,8 +836,11 @@ _InfoContent _content(HomiInfoTopic topic) {
             'Signing out does not silently erase those local household records.',
           ]),
           _SectionContent('What uses the cloud', [
-            'When you sign in and use cloud features, Homi may store account/profile identity, your Homi connection code, trusted connections, private relationship preferences, specifically shared household Tasks, notification device registration, location-sharing permissions, and your latest shared location/battery status.',
-            'Home, Routine and Supply records stay on this device unless Homi clearly marks a feature as shared. Cloud sharing is limited to the features that identify themselves as shared.',
+            'When you sign in and use cloud features, Homi may store account/profile identity, your Homi connection code, trusted connections, private relationship preferences, canonical Household membership/invitations, specifically shared household Tasks, notification device registration, location-sharing permissions, and your latest shared location/battery status.',
+            'Creating or joining a Household does not silently upload your local Home, Routine or Supply records. Those records stay on this device unless Homi clearly identifies a data type as shared.',
+          ]),
+          _SectionContent('Household membership', [
+            'A Household is separate from a trusted People connection. Joining requires an explicit invitation and acceptance. One account can belong to one shared Household at a time, and leaving/removal does not automatically change a person’s separate location-sharing choices.',
           ]),
           _SectionContent('Location data', [
             'Location is sensitive. Homi only shares it with connected people you explicitly choose. Background updates require separate permission and Android keeps a visible notification while live updates are active.',
@@ -833,7 +857,7 @@ _InfoContent _content(HomiInfoTopic topic) {
             'Homi does not need to sell your location or household records to make the product useful. Privacy controls, stopping location sharing and deleting an account are not dependent on a paid plan.',
           ]),
           _SectionContent('Your controls', [
-            'You can stop live location updates, revoke location access to an individual person, disconnect trusted people, change notification categories, erase local data from a device, sign out, or permanently delete your Homi account.',
+            'You can stop live location updates, revoke location access to an individual person, disconnect trusted people, leave a Household when you are not its owner, change notification categories, erase local data from a device, sign out, or permanently delete your Homi account.',
             'Deleting an account is different from signing out. Account deletion removes the Homi cloud identity and associated Homi cloud data that the service manages, then clears Homi household/location data from the current device.',
           ]),
         ],
@@ -847,7 +871,7 @@ _InfoContent _content(HomiInfoTopic topic) {
             'Location can be useful for everyday check-ins, but it is sensitive and it is never a guarantee that somebody is safe.',
         sections: [
           _SectionContent('Consent comes first', [
-            'A trusted connection does not automatically start location sharing. Household status does not start location sharing either. The person being located decides who can see their location.',
+            'A trusted connection does not automatically start location sharing. Household membership does not start location sharing either. The person being located decides who can see their location.',
             'Homi has no intended stealth-sharing mode. Live background updates are visible through Android’s foreground-service notification.',
           ]),
           _SectionContent('Friends are supported too', [
@@ -909,7 +933,10 @@ _InfoContent _content(HomiInfoTopic topic) {
             'Homi explains the important choices where they appear. This page covers broader questions that apply across the app.',
         sections: [
           _SectionContent('Local or cloud?', [
-            'You can use Homi locally without an account. Sign-in is for features that need identity or sharing. Cloud-backed features follow your account; local household records stay on this device unless Homi marks them as shared.',
+            'You can use Homi locally without an account. Sign-in is for features that need identity or sharing. Your canonical Household identity follows your account, while local Home, Routine and Supply records stay on this device unless Homi clearly marks that data type as shared.',
+          ]),
+          _SectionContent('What is a Household?', [
+            'A Household is the small group of Homi accounts that share one home context. It is separate from your wider trusted People list: somebody can remain a trusted friend without joining your Household.',
           ]),
           _SectionContent('Why is my location not updating?', [
             'Check that location is enabled on the phone and that Homi still has the permission needed for the mode you chose. Live background updates require “Allow all the time” on Android and a visible Homi notification.',
@@ -921,7 +948,7 @@ _InfoContent _content(HomiInfoTopic topic) {
             'Yes. A trusted person can be marked as a Friend · location only. That lets people opt into location check-ins without exposing household records.',
           ]),
           _SectionContent('What happens if I change phones?', [
-            'Cloud-backed features follow your account. Local household records remain on the phone where they were created unless Homi identifies that record type as shared.',
+            'Cloud-backed identity, connections and Household membership follow your account. Local household records remain on the phone where they were created unless Homi identifies that record type as shared.',
           ]),
           _SectionContent('Need more help?', [
             'Homi is developed by Concept Lab in South Africa. Visit Concept Lab below for support and developer information.',
@@ -935,9 +962,9 @@ _InfoContent _content(HomiInfoTopic topic) {
         icon: Icons.info_outline_rounded,
         intro: 'Happy homes, easier days.',
         sections: [
-          _SectionContent('Homi 0.8.0', [
-            'Build 8 · Android.',
-            'Homi is a local-first household operating system with a user-controlled trusted-person location layer.',
+          _SectionContent('Homi 0.11.0', [
+            'Build 15 · Android.',
+            'Homi is a local-first household operating system with a user-controlled trusted-person location layer and canonical shared-Household identity.',
           ]),
           _SectionContent('Built by Concept Lab', [
             'Homi is developed by Concept Lab in South Africa. The product is designed around practical household clarity, restrained data collection and user-controlled sharing.',

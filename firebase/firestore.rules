@@ -42,11 +42,6 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/locationShares/$(ownerUid)/viewers/$(viewerUid)).data.active == true;
     }
 
-    function isSharedTaskMember(data) {
-      return signedIn()
-        && data.memberUids.hasAny([request.auth.uid]);
-    }
-
     function myHouseholdMembership(householdId) {
       let membershipPath = /databases/$(database)/documents/householdMemberships/$(request.auth.uid);
       return signedIn()
@@ -60,6 +55,14 @@ service cloud.firestore {
         && exists(householdPath)
         && get(householdPath).data.memberUids is list
         && get(householdPath).data.memberUids.hasAny([request.auth.uid]);
+    }
+
+    function isCanonicalSharedTaskMember(data) {
+      return signedIn()
+        && data.householdId is string
+        && data.memberUids is list
+        && data.memberUids.hasAny([request.auth.uid])
+        && isCanonicalHouseholdMember(data.householdId);
     }
 
     function isHouseholdOwner(householdId) {
@@ -190,8 +193,13 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Shared one-off Tasks are readable only when both the task's exact
+    // recipient list and the canonical Household agree. The client queries by
+    // householdId plus array-contains auth.uid, so Firestore can prove this
+    // boundary without treating rules as post-query filters. Legacy tasks that
+    // have not been safely attached to a canonical Household fail closed.
     match /sharedTasks/{taskId} {
-      allow get, list: if isSharedTaskMember(resource.data);
+      allow get, list: if isCanonicalSharedTaskMember(resource.data);
       allow create, update, delete: if false;
     }
 
@@ -205,8 +213,7 @@ service cloud.firestore {
 
     // Household documents are server-managed. Direct document reads retain the
     // canonical membership-pointer check. Collection queries use the same
-    // membership predicate already proven for sharedTasks; adding a separate
-    // query-time type predicate prevents Firestore from proving the list query.
+    // memberUids predicate constrained by the app's array-contains query.
     match /households/{householdId} {
       allow get: if signedIn()
         && resource.data.memberUids is list

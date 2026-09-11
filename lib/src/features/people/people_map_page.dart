@@ -11,6 +11,7 @@ import '../../services/shared_place_service.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/emergency_call_section.dart';
 import '../../widgets/emergency_region_picker.dart';
+import '../../widgets/homi_country_flag.dart';
 
 class HomiMapPerson {
   const HomiMapPerson({
@@ -109,56 +110,71 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
 
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Emergency calls',
-                      style: Theme.of(context).textTheme.headlineSmall,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.88,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Emergency calls',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
                     ),
-                  ),
-                  TextButton.icon(
-                    onPressed: () async {
-                      Navigator.pop(sheetContext);
-                      await showEmergencyRegionPicker(context);
-                    },
-                    icon: const Icon(Icons.public_rounded, size: 17),
-                    label: const Text('Change'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              Text(
-                '${region.countryName} · Homi opens your phone app with the number ready. It does not place the call or send your location automatically.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 14),
-              ...region.contacts.map(
-                (contact) => _EmergencyNumberRow(
-                  icon: emergencyIconFor(contact.kind),
-                  title: contact.label,
-                  number: contact.number,
-                  detail: contact.note,
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _call(contact.number);
-                  },
+                    TextButton.icon(
+                      onPressed: () async {
+                        Navigator.pop(sheetContext);
+                        await showEmergencyRegionPicker(context);
+                      },
+                      icon: const Icon(Icons.public_rounded, size: 17),
+                      label: const Text('Change'),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Emergency services and availability can vary by network and location. Homi is a call shortcut, not an emergency-response service.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
+                const SizedBox(height: 5),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    HomiCountryFlag(isoCode: region.isoCode, size: 36),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${region.countryName} · Homi opens your phone app with the number ready. It does not place the call or send your location automatically.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                ...region.contacts.map(
+                  (contact) => _EmergencyNumberRow(
+                    icon: emergencyIconFor(contact.kind),
+                    title: contact.label,
+                    number: contact.number,
+                    detail: contact.note,
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _call(contact.number);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Emergency services and availability can vary by network and location. Homi is a call shortcut, not an emergency-response service.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -298,6 +298,11 @@ test("Household data envelope rejects forged actor domain and item identity", as
       doc(alice, "households/home1/data/routine--outer-id"),
       mismatchedPayload,
   ));
+
+  await assertFails(setDoc(
+      doc(alice, "households/home1/data/routine--wrong-document-id"),
+      routineRecord("alice", "actual-item-id"),
+  ));
 });
 
 test("Household data requires both membership pointer and current member list", async () => {

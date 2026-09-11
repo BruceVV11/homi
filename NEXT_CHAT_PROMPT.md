@@ -31,18 +31,15 @@ People remains the approved **map-first** experience.
 
 Local-first use remains available. Do not claim full Household sync until it actually exists.
 
-## Proven 0.9.2 state
+## Proven 0.9.2 baseline
 
-- Windows `flutter analyze` clean after Places migration.
-- Windows `flutter test` -> 32 tests passed.
 - Broken `flutter_google_places_sdk` removed; `google_places_sdk_plus 1.1.0` resolved with Android 1.1.4 and lock committed.
 - 0.9.2 backend governed deployment previously passed Firestore emulator 13/13 and deployed 24 Functions/rules, including saved-place functions.
-- Backend deployment source: `d8fb786269feea43223c673e84b2b5a6c499a91f`.
 - Google Places requires Android Studio Additional run arg `--dart-define=HOMI_PLACES_API_KEY=<private value>`; never ask Bruce to share the value. A development key appeared in a screenshot and must be rotated before production.
 
-## 0.10.0+14 source candidate
+## 0.10.0+14 purpose
 
-Purpose: commercial cost guardrails + Homi+ plan contract + international Emergency region foundation.
+Commercial cost guardrails + Homi+ plan contract + international Emergency region foundation.
 
 ### Homi+ approved commercial contract
 
@@ -68,10 +65,10 @@ Source contract: `lib/src/domain/homi_plus_plan.dart` + `documentation/MONETIZAT
 
 Existing Android stream stays ~2 minutes / 100 m movement.
 
-0.10 source changes:
+0.10 changes now deployed:
 
 - client Firestore cloud-write floor: 90 seconds;
-- Firestore update rule floor: 90 seconds;
+- Firestore server update floor: 90 seconds;
 - protected `setLocationShare` maximum: 5 active outbound viewers;
 - disabling a viewer bypasses activation connection/rate-limit checks so stop-sharing remains reliable;
 - normal trusted-connection limit remains separate.
@@ -79,7 +76,7 @@ Existing Android stream stays ~2 minutes / 100 m movement.
 ### Emergency regions
 
 - offline source-controlled catalog;
-- onboarding now includes Emergency region confirmation;
+- onboarding includes Emergency region confirmation;
 - device locale may suggest a supported region without location permission;
 - user can change region from Safety;
 - Safety emergency cards and full-map emergency controls use the same region;
@@ -90,8 +87,6 @@ Existing Android stream stays ~2 minutes / 100 m movement.
 - every public launch country must be release-reviewed against ITU-T E.129 and/or national official source.
 
 Google Places Home/Work autocomplete follows the selected Emergency region country instead of hardcoded South Africa.
-
-See `documentation/EMERGENCY_REGIONS.md`.
 
 ## Privacy/location contracts that must not regress
 
@@ -120,56 +115,46 @@ Evidence:
 - `flutter test` -> **41/41 passed**;
 - no tracked local source drift was reported.
 
-Do not ask Bruce to rerun this Windows gate solely because later deployment-tool/documentation commits moved `main`; those later commits do not alter Flutter app source, Functions runtime source, Firestore rules or the validated dependency graph.
+Later deployment-tool/documentation commits do not alter Flutter app source, Functions runtime source, Firestore rules or the validated dependency graph. Do not ask Bruce to rerun the Windows gate solely because those tooling/docs commits moved `main`.
 
-## Current Cloud Shell deployment state
+## Proven 0.10 backend deployment
 
-Two governed 0.10 Cloud Shell workers have failed, both **before the Firestore emulator and before any Firebase deployment**.
+The accepted refresh-safe Cloud Shell worker deployed from exact source/tooling SHA:
 
-First failure:
+`fba7479a8304aec30a964f32cfd8b3e268b6c78e`
 
-```text
-ERROR: (gcloud.functions.list) unrecognized arguments: --gen2 (did you mean '--v2'?)
-```
+Proven:
 
-All discovered stale gcloud Functions selectors in release tooling were corrected from `--gen2` to `--v2`.
+- Node `v22.23.2`;
+- project `homi-ee80a` / `883068189841`;
+- exactly 24 Homi Function exports validated after dependency installation;
+- Firestore emulator security suite **13/13 passed**, including the 90-second location update boundary;
+- Firestore rules compiled/released and indexes deployed successfully;
+- all 24 Node 22 Gen2 Functions deployed in five controlled batches;
+- `setLocationShare(africa-south1)` successfully updated;
+- final `setLocationShare` state **ACTIVE**;
+- worker final status **PASS**.
 
-Second failure:
+The recurring `GOOGLE_CLOUD_QUOTA_PROJECT is not usable when uploading source for Cloud Functions` warning was non-fatal; source uploads and all deployment batches succeeded.
 
-```text
-Error: Cannot find module 'firebase-functions/v2'
-Require stack:
-- functions/index.js
-- functions/entrypoint.js
-```
+The two earlier workers failed during release-tooling preflight and never reached deployment. Do not rerun them.
 
-The second worker had already proven exact source, Node `v22.23.2`, project `homi-ee80a` / `883068189841`, and successfully inventoried the deployed Functions. It then tried to load the local Functions entrypoint before `functions/node_modules` existed in the intentionally clean Cloud Shell checkout.
+## Immediate next step: S25 Ultra acceptance
 
-The governed backend helper is now hardened so it generates the disposable dependency lock, runs `npm ci`, then loads and validates the Function export surface. It requires exactly **24** exports before any security test or Firebase deployment begins and reuses that validated list for deployment batches. Do not add a separate pre-dependency `node -e require("./functions/entrypoint.js")` wrapper check again.
+Bruce should pull current `main` (current post-deployment commits are documentation-only), keep the existing private Places dart-define in the Android Studio Flutter run configuration, and launch Homi on the S25 Ultra.
 
-Safe state: neither failed worker reached emulator/rules/Functions deployment, so the previously proven 0.9.2 backend remains live.
+Focused 0.10 acceptance:
 
-## Immediate next step
+1. app launches with existing local/account data retained;
+2. normal Homi shell/nav and People map remain visually unchanged except the intended new emergency-region behavior;
+3. Google Places Home/Work autocomplete still works;
+4. Safety & check-ins shows the selected Emergency region and regional emergency numbers;
+5. changing Emergency region updates Safety/full-map emergency controls immediately;
+6. representative ZA/AU/US dialer handoff uses 112/10111/10177, `000`, 911 as applicable; do not complete emergency calls;
+7. People/live location, hearts, check-ins and exact Home/Work privacy remain healthy;
+8. when enough test accounts exist, five active live viewers succeed and a sixth is rejected cleanly; deactivation always works.
 
-Run a new refresh-safe Cloud Shell worker against the **current exact GitHub `main` head**. The worker should only prove Node 22/project/exact SHA externally and then call `scripts/deploy-notification-backend.sh`; the helper itself now owns dependency installation, exact 24-export validation, lint, Firestore emulator gate, Firestore deploy and five-function deployment batches.
-
-After helper completion, verify `setLocationShare` is ACTIVE with `gcloud functions describe ... --v2` and write durable PASS/FAIL status/log. If Cloud Shell refreshes, inspect status/log only; never blindly rerun while a worker may still be running.
-
-After deployment PASS, S25 Ultra acceptance should cover:
-
-1. existing local/account data retained;
-2. normal Homi shell/nav/People map unchanged;
-3. Places autocomplete still works with private dart-define;
-4. Emergency region onboarding on fresh install;
-5. existing install gets supported locale suggestion and can change region from Safety;
-6. ZA 112/10111/10177; AU `000`; US 911; service-specific country behavior without invented SOS;
-7. full-map emergency controls update after region change;
-8. do not complete test emergency calls;
-9. five active live viewers succeed, sixth denied cleanly;
-10. removing/deactivating a viewer always works;
-11. live location, hearts, check-ins and exact Home/Work privacy remain healthy.
-
-## Next major product work after 0.10 acceptance
+## Next major product work after 0.10 device acceptance
 
 1. Canonical shared Household identity/membership/sync for Home, Tasks, Routines, Supplies and supported activity/history.
 2. Google Play subscription products/base plans.

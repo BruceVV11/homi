@@ -2,7 +2,7 @@
   "name": "homi-security-tests",
   "private": true,
   "scripts": {
-    "test": "node --test server.boundary.test.js"
+    "test": "node --test server.boundary.test.js household.boundary.test.js"
   },
   "dependencies": {
     "@firebase/rules-unit-testing": "5.0.2",

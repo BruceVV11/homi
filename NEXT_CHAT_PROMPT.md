@@ -1,13 +1,11 @@
 # Homi — Next Chat Prompt
 
-Continue **Homi** from GitHub `main`. GitHub is the tracked source of truth.
+Continue **Homi** from GitHub `main`. GitHub is the tracked source of truth. Use **mobile-app-development** first; for Firebase/Cloud Shell/release work also use **concept-lab-release-integrity**. Diagnose source/log evidence before asking Bruce to rerun anything.
 
-Use **mobile-app-development** first. For Firebase/Cloud Shell/release work also use **concept-lab-release-integrity**. Diagnose from source/log evidence before asking Bruce to rerun anything. Preserve approved design and privacy behavior.
-
-## Permanent project context
+## Permanent project identity
 
 - Local root: `C:\ConceptLab\Projects\homi`
-- GitHub: `BruceVV11/homi`
+- Repo: `BruceVV11/homi`
 - Android package: `za.co.theconceptlab.homi`
 - Firebase/GCP: `homi-ee80a`
 - Project number: `883068189841`
@@ -15,153 +13,101 @@ Use **mobile-app-development** first. For Firebase/Cloud Shell/release work also
 - Flutter 3.41.5 / Dart 3.11.3
 - JDK 21 / Gradle 8.14
 - Functions Node 22
-- Device: Samsung S25 Ultra / SM S938B
+- Runtime identity: `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`
+- Device: Samsung S25 Ultra / SM-S938B
 - `android/` is intentionally local/untracked.
-- Never request/expose Maps/Places keys, App Check debug tokens, signing secrets or private Firebase credentials.
+- Never request/expose Maps/Places keys, App Check debug tokens, signing secrets or private Firebase configuration.
 - Deleted project `homi-508000` must never be used.
 - Safety stash `stash@{0}: On main: Homi pre-0.5.0 local tracked changes` must not be popped/deleted automatically.
 
-## Approved design/product baseline
+## Approved product/design contract
 
-Brand: coral `#FF6B5E`, peach `#FFB08A`, sage `#A7B89F`, cream `#FFF8F2`, slate `#2E2E2E`, Nunito, exact assets under `assets/brand/`.
+Brand: coral `#FF6B5E`, peach `#FFB08A`, sage `#A7B89F`, cream `#FFF8F2`, slate `#2E2E2E`, Nunito and exact `assets/brand/` artwork.
 
-Primary nav: **Overview · Tasks · Home · Supplies · People**, with persistent header/profile and exact centered Homi Home mark.
+Primary nav: **Overview · Tasks · Home · Supplies · People**. People remains map-first. Local-first use remains available. Connection, Household membership, location sharing, arrival recipients and exact Home/Work visibility are separate choices. Privacy/revoke/stop-sharing/delete controls are never paywalled.
 
-People remains the approved **map-first** experience.
+## Proven 0.10 baseline
 
-Local-first use remains available. Do not claim full Household sync until it actually exists.
+0.10 Windows Flutter gate passed on its accepted source: analyze clean and 41/41 tests passed. The 0.10 governed backend deployment passed Node 22/project guards, Firestore emulator 13/13 and deployed 24 Functions/rules. Google Places uses the existing private `HOMI_PLACES_API_KEY` Dart define; never ask Bruce to paste it. A previously exposed development key must be rotated before production.
 
-## Proven 0.9.2 baseline
+## Current candidate — 0.11.0+15
 
-- Broken `flutter_google_places_sdk` removed; `google_places_sdk_plus 1.1.0` resolved with Android 1.1.4 and lock committed.
-- 0.9.2 backend governed deployment previously passed Firestore emulator 13/13 and deployed 24 Functions/rules, including saved-place functions.
-- Google Places requires Android Studio Additional run arg `--dart-define=HOMI_PLACES_API_KEY=<private value>`; never ask Bruce to share the value. A development key appeared in a screenshot and must be rotated before production.
+0.11 closes the S25 Ultra emergency-sheet overflow and implements the first **canonical shared Household identity**.
 
-## 0.10.0+14 purpose
+### Emergency UI
 
-Commercial cost guardrails + Homi+ plan contract + international Emergency region foundation.
+- Added `country_flags: 4.1.2` and `HomiCountryFlag` so supported emergency regions show bundled ISO flags rather than country-code placeholders.
+- Emergency-region picker and onboarding selected-region card use flags.
+- Full People-map emergency sheet is now scroll-controlled, SafeArea-aware and height-bounded to avoid the yellow/black bottom RenderFlex overflow above Android navigation.
+- The flag library supports the broad ISO flag set, but Homi intentionally does **not** invent emergency numbers for every flag. Only source-reviewed emergency regions remain selectable.
 
-### Homi+ approved commercial contract
+### Canonical Household
 
-Core rule once billing enforcement exists:
+Collections:
 
-**Receiving live location is free. Continuously sending your own location requires one Homi+ sender seat. Every paid sender may share with up to five active trusted viewers.**
+- `households/{householdId}`
+- `households/{householdId}/members/{uid}`
+- `householdMemberships/{uid}`
+- `householdInvites/{householdId}_{inviteeUid}`
 
-Plans:
+Rules/behavior:
 
-- Free R0: local Homi, account/connections, receive live location, arrival check-ins, emergency, hearts, privacy/delete controls; no paid continuous sender seat after enforcement activates.
-- Personal R19.99/month: 1 sender seat.
-- Duo R34.99/month: 2 sender seats under one payer; second person does not have to live in the same home; target 7-day seat reassignment cooldown.
-- Household R49.99/month or R499.99/year: up to 4 members, each with a sender seat, plus the future full shared-Household product.
-- Every sender seat gets max 5 active viewers.
-- Friends who only receive do not consume Household seats.
-- Privacy/stop-sharing/check-in disable/exact-place revoke/erase/account deletion never paywalled.
+- one canonical Household per account;
+- up to four occupied/reserved seats;
+- owner/member roles;
+- invite requires an existing accepted trusted-person connection;
+- invitee still explicitly accepts;
+- create, rename, invite, accept/decline, cancel invite, remove member, leave, transfer ownership and eligible Household deletion implemented through App-Check-protected callables;
+- direct client Household/membership/invite mutation denied by Firestore;
+- member/invite reads are scope-limited;
+- ownership-change trigger rebinds pending invite ownership to the current owner;
+- Homi account deletion has Household cleanup/owner-transfer support;
+- shared Household management is available from **Homi & account -> Household** and from profile settings;
+- joining/creating does not delete or silently upload existing local Home/Routines/Supplies data.
 
-Source contract: `lib/src/domain/homi_plus_plan.dart` + `documentation/MONETIZATION.md`.
+Important boundary: 0.11 creates the real Household identity layer, but **full cross-device Home/Routines/Supplies synchronization and Google Play billing are not yet claimed complete**. Existing selected shared Tasks remain the older narrow collaboration path until the shared data-plane migration is implemented.
 
-0.10 does **not** activate paid entitlement yet. Actual billing requires Play products, official Flutter Billing flow, server Play Developer API verification, authoritative entitlement state, RTDN/Pub/Sub and Internal Testing lifecycle proof. Never unlock from a client purchase callback alone.
+### Backend governance
 
-### Continuous-location cost guardrails
+- Functions export guard now expects **35** exports and deploys in batches of five.
+- Functions lint includes `households.js` and `household_invite_owner_sync.js`.
+- Firestore security harness now runs original + Household boundary suites serially.
+- New Household unit test covers seat/role model.
+- No new Firebase/GCP project or runtime identity.
 
-Existing Android stream stays ~2 minutes / 100 m movement.
+Local static evidence available before Bruce's Windows run: new ownership-sync JS syntax and updated Firestore security shell helper syntax were checked successfully in Node/Bash. Full Flutter analyze/tests and Firestore emulator behavior are still intentionally unclaimed until the real toolchains run.
 
-0.10 changes now deployed:
+## Immediate validation — do this once
 
-- client Firestore cloud-write floor: 90 seconds;
-- Firestore server update floor: 90 seconds;
-- protected `setLocationShare` maximum: 5 active outbound viewers;
-- disabling a viewer bypasses activation connection/rate-limit checks so stop-sharing remains reliable;
-- normal trusted-connection limit remains separate.
+Bruce should run on Windows:
 
-### Emergency regions
+```powershell
+cd C:\ConceptLab\Projects\homi
+git pull --ff-only
+flutter clean
+flutter pub get
+flutter analyze
+flutter test
+```
 
-- offline source-controlled catalog;
-- onboarding includes Emergency region confirmation;
-- device locale may suggest a supported region without location permission;
-- user can change region from Safety;
-- Safety emergency cards and full-map emergency controls use the same region;
-- leading-zero numbers are strings (`000` remains `000`);
-- regions without one universal number do not get an invented SOS button;
-- unsupported regions have no South Africa fallback;
-- emergency action remains external `tel:` only, no silent call/dispatch/location transmission;
-- every public launch country must be release-reviewed against ITU-T E.129 and/or national official source.
+`country_flags` is new, so `flutter pub get` should update `pubspec.lock`. If analyze/tests are green, commit only the lockfile:
 
-Google Places Home/Work autocomplete follows the selected Emergency region country instead of hardcoded South Africa.
+```powershell
+git add pubspec.lock
+git commit -m "Lock country flag dependencies"
+git push
+```
 
-## Privacy/location contracts that must not regress
+If anything fails, inspect the complete output and all likely related failures before asking Bruce to rerun.
 
-- connection != location share;
-- live/background requires explicit opt-in + visible Android foreground notification;
-- latest/current location only by default; no route history;
-- check-in-only background samples do not refresh cloud latest location unless Live updates independently active;
-- fresh first arrival sample primes state; only outside->inside sends;
-- exit hysteresis radius +100 m; one-hour local cooldown;
-- arrival callable/push contains no saved Home/Work coordinate/address;
-- exact Home/Work visibility separately opt-in and requires selected viewer + accepted connection + active owner->viewer location share;
-- turning place sharing off removes cloud copy but preserves local arrival setup;
-- disconnect cleanup removes stale exact-place viewer;
-- privacy/revoke/delete controls never paywalled.
+After the lock commit, re-fetch exact `main` SHA before backend deployment. Then use the governed `scripts/deploy-notification-backend.sh` Cloud Shell path. It must prove Node 22, project `homi-ee80a` / `883068189841`, Functions lint, exactly 35 exports, both Firestore emulator suites, Firestore deploy and all Function batches before calling 0.11 backend accepted.
 
-## Proven 0.10 Windows validation
+## S25 Ultra acceptance after backend PASS
 
-Bruce's Windows Flutter toolchain fully passed the client gate on exact app/runtime source:
+Verify the emergency sheet has no overflow and can scroll to its final disclaimer; flags display in region UI; emergency actions still only open the dialer; Household page opens; create Household; invite/accept with a second trusted account; member/seat state updates; ownership transfer keeps pending invitations manageable; remove/leave does not alter location sharing; existing local Home/Tasks/Routines/Supplies stay intact; People/live/check-ins/Places remain healthy.
 
-`11df198bfc5801257cef45dc4bba64e9d37772d7`
+## Next major implementation after 0.11 acceptance
 
-Evidence:
+Build the shared Household **data plane** on the canonical `householdId`, with an explicit first-sync merge/conflict strategy for existing local data. Prioritize Tasks/Routines/Supplies/Home and supported activity/history. Then add a centralized capability/entitlement layer, followed by Google Play Billing, backend purchase verification, RTDN/Pub/Sub and Internal Testing lifecycle proof before paid enforcement.
 
-- `flutter pub get` succeeded;
-- `flutter analyze` -> **No issues found**;
-- `flutter test` -> **41/41 passed**;
-- no tracked local source drift was reported.
-
-Later deployment-tool/documentation commits do not alter Flutter app source, Functions runtime source, Firestore rules or the validated dependency graph. Do not ask Bruce to rerun the Windows gate solely because those tooling/docs commits moved `main`.
-
-## Proven 0.10 backend deployment
-
-The accepted refresh-safe Cloud Shell worker deployed from exact source/tooling SHA:
-
-`fba7479a8304aec30a964f32cfd8b3e268b6c78e`
-
-Proven:
-
-- Node `v22.23.2`;
-- project `homi-ee80a` / `883068189841`;
-- exactly 24 Homi Function exports validated after dependency installation;
-- Firestore emulator security suite **13/13 passed**, including the 90-second location update boundary;
-- Firestore rules compiled/released and indexes deployed successfully;
-- all 24 Node 22 Gen2 Functions deployed in five controlled batches;
-- `setLocationShare(africa-south1)` successfully updated;
-- final `setLocationShare` state **ACTIVE**;
-- worker final status **PASS**.
-
-The recurring `GOOGLE_CLOUD_QUOTA_PROJECT is not usable when uploading source for Cloud Functions` warning was non-fatal; source uploads and all deployment batches succeeded.
-
-The two earlier workers failed during release-tooling preflight and never reached deployment. Do not rerun them.
-
-## Immediate next step: S25 Ultra acceptance
-
-Bruce should pull current `main` (current post-deployment commits are documentation-only), keep the existing private Places dart-define in the Android Studio Flutter run configuration, and launch Homi on the S25 Ultra.
-
-Focused 0.10 acceptance:
-
-1. app launches with existing local/account data retained;
-2. normal Homi shell/nav and People map remain visually unchanged except the intended new emergency-region behavior;
-3. Google Places Home/Work autocomplete still works;
-4. Safety & check-ins shows the selected Emergency region and regional emergency numbers;
-5. changing Emergency region updates Safety/full-map emergency controls immediately;
-6. representative ZA/AU/US dialer handoff uses 112/10111/10177, `000`, 911 as applicable; do not complete emergency calls;
-7. People/live location, hearts, check-ins and exact Home/Work privacy remain healthy;
-8. when enough test accounts exist, five active live viewers succeed and a sixth is rejected cleanly; deactivation always works.
-
-## Next major product work after 0.10 device acceptance
-
-1. Canonical shared Household identity/membership/sync for Home, Tasks, Routines, Supplies and supported activity/history.
-2. Google Play subscription products/base plans.
-3. Official Flutter Play Billing client.
-4. Backend purchase verification + authoritative entitlements.
-5. RTDN/Pub/Sub lifecycle handling.
-6. Internal Testing purchase/cancel/restore/grace/hold/expiry/refund proof.
-7. Then activate paid continuous-sender gating and Household premium capability checks.
-
-Remaining production gates: background-location policy, multi-hour/reboot/battery tests, release signing/Play App Signing fingerprints, Play-installed Google Sign-In, production Maps/Places restrictions, Play Integrity App Check, later Firestore enforcement after valid metrics, billing alerts, public Privacy/Terms/deletion URLs, Data Safety/content rating/audience/app-access/store assets and country-by-country emergency-number verification.
+Commercial contract remains: Personal R19.99/month, Duo R34.99/month, Household R49.99/month or R499.99/year; Household currently targets four members. Receiving location stays free; paid continuous senders may share to up to five trusted viewers. Do not activate paid entitlement based only on client purchase state.

@@ -10,6 +10,7 @@ const locationShare = require("./location_share");
 const households = require("./households");
 const householdInviteOwnerSync = require("./household_invite_owner_sync");
 const trustedPeoplePreferences = require("./trusted_people_preferences");
+const sharedTasksCanonical = require("./shared_tasks_canonical");
 
 // A stale deployed HTTPS function already owned the historical
 // `onConnectionDeleted` name. Do not export that obsolete endpoint from the
@@ -35,4 +36,7 @@ module.exports = {
   // Keep the deployed callable name stable while canonical Household
   // membership, rather than a People toggle, determines Household scope.
   ...trustedPeoplePreferences,
+  // Shared task names remain stable for existing clients, but the current
+  // canonical Household now defines who can create/read/change them.
+  ...sharedTasksCanonical,
 };

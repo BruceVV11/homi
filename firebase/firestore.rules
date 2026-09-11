@@ -157,15 +157,15 @@ service cloud.firestore {
     }
 
     // Latest location is the only high-frequency collaboration state written
-    // directly from the device. Owner/schema checks plus a minimum update
-    // interval provide a cost-abuse backstop even before service-level App
-    // Check enforcement is switched on for production.
+    // directly from the device. Owner/schema checks plus a 90-second minimum
+    // update interval provide a cost-abuse backstop even before service-level
+    // App Check enforcement is switched on for production.
     match /locations/{ownerUid} {
       allow create: if isSelf(ownerUid)
         && validLocationSnapshot(request.resource.data);
       allow update: if isSelf(ownerUid)
         && validLocationSnapshot(request.resource.data)
-        && request.time >= resource.data.updatedAt + duration.value(30, 's');
+        && request.time >= resource.data.updatedAt + duration.value(90, 's');
       allow delete: if false;
       allow read: if isSelf(ownerUid)
         || (signedIn() && hasActiveLocationShare(ownerUid, request.auth.uid));

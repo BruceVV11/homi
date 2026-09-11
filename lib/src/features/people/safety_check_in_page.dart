@@ -7,10 +7,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/arrival_check_in.dart';
 import '../../services/arrival_check_in_service.dart';
+import '../../services/emergency_region_service.dart';
 import '../../services/google_places_service.dart';
 import '../../services/location_status_service.dart';
 import '../../services/trusted_people_service.dart';
 import '../../theme/homi_theme.dart';
+import '../../widgets/emergency_call_section.dart';
 import '../../widgets/homi_controls.dart';
 
 class SafetyCheckInPage extends StatefulWidget {
@@ -461,30 +463,13 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 34),
           children: [
-            Text('Emergency calls', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 5),
-            Text(
-              'Tap a service to open your phone app with the South African emergency number ready. Homi does not place the call automatically.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 12),
-            _EmergencyCallCard(
-              icon: Icons.emergency_outlined,
-              title: 'Emergency',
-              detail: '112 · from a mobile phone',
-              onTap: () => _call('112'),
-            ),
-            _EmergencyCallCard(
-              icon: Icons.local_police_outlined,
-              title: 'Police emergency',
-              detail: '10111',
-              onTap: () => _call('10111'),
-            ),
-            _EmergencyCallCard(
-              icon: Icons.medical_services_outlined,
-              title: 'Ambulance emergency',
-              detail: '10177',
-              onTap: () => _call('10177'),
+            HomiEmergencyCallSection(
+              contactBuilder: (context, contact) => _EmergencyCallCard(
+                icon: emergencyIconFor(contact.kind),
+                title: contact.label,
+                detail: emergencyContactDetail(contact),
+                onTap: () => _call(contact.number),
+              ),
             ),
             const SizedBox(height: 24),
             _SectionHeader(
@@ -1062,6 +1047,8 @@ class _GooglePlacePickerSheetState extends State<_GooglePlacePickerSheet> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final region = EmergencyRegionService.instance.current;
+    final regionLabel = region == null ? '' : ' in ${region.countryName}';
     return SafeArea(
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -1077,7 +1064,7 @@ class _GooglePlacePickerSheetState extends State<_GooglePlacePickerSheet> {
                   style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 6),
               Text(
-                'Start typing an address or place in South Africa, then choose the correct Google Maps result.',
+                'Start typing an address or place$regionLabel, then choose the correct Google Maps result.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 14),

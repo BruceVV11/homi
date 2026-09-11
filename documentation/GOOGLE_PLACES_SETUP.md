@@ -1,109 +1,73 @@
 # Homi Google Places setup
 
 Date: 2026-09-11
-Applies to source: `0.9.2+13`
+Applies to source: `0.10.0+14`
 
-## Existing cloud setup
-
-Homi uses the existing Google Cloud project:
+## Permanent cloud identity
 
 - Project ID: `homi-ee80a`
 - Project number: `883068189841`
 - Android package: `za.co.theconceptlab.homi`
 
-The established Cloud Shell bootstrap already enables:
-
-- Maps SDK for Android
-- Places API (New)
-- API Keys API
-
-The established key helper is:
-
-```bash
-cd ~/homi
-git pull
-bash scripts/create-android-maps-key.sh '<DEBUG_SHA1>'
-```
-
-It creates an Android-restricted credential for the Homi package + supplied SHA-1 and limits API usage to Maps SDK for Android and Places API (New).
-
-Do not create an unrestricted browser/server Places key for the mobile app.
+Homi uses Maps SDK for Android + Places API (New). The mobile credential must remain Android package/SHA restricted; do not create an unrestricted browser/server key for the app.
 
 ## Local secret
 
-The development key belongs only in the ignored local file:
+Development values remain only in ignored local configuration:
 
 `C:\ConceptLab\Projects\homi\secrets.properties`
 
-Expected entries:
+Expected names:
 
 ```properties
 MAPS_API_KEY=<private restricted key>
 PLACES_API_KEY=<private restricted key>
 ```
 
-Never paste the actual value into ChatGPT, GitHub, Dart source, documentation or a screenshot/log shared publicly.
+Never paste the values into ChatGPT, GitHub, Dart source or screenshots/logs shared publicly.
+
+A previously shown development key appeared in a screenshot and should be rotated/restricted before production acceptance.
 
 ## Flutter Places dependency
 
-Homi uses `google_places_sdk_plus 1.1.0`, a maintained fork of the original `flutter_google_places_sdk` package that continues to use Google's native Places SDK on Android and supports Places API (New).
+Homi uses `google_places_sdk_plus 1.1.0`, with the resolved Android implementation pinned through `pubspec.lock` by Flutter dependency resolution.
 
-The original package path was abandoned after its published Android `0.2.2` implementation failed Kotlin compilation and the advertised `0.2.3` fix was not actually published to pub.dev. Do not restore the old `flutter_google_places_sdk_android: 0.2.3` override.
+The abandoned `flutter_google_places_sdk` path must not be restored. Its published Android 0.2.2 implementation failed Kotlin compilation and the advertised 0.2.3 fix was not available through pub.dev.
 
-`google_places_sdk_plus 1.1.0` requires Dart >=3.11.0 and Flutter >=3.41.0, which matches Homi's Flutter 3.41.x toolchain. Its Android implementation remains a native SDK integration, so Homi can keep using an Android application-restricted Places key rather than an unrestricted browser/server key.
+## Dart define
 
-The resolved application lock file must be regenerated and committed after this dependency migration is validated on Bruce's Windows Flutter toolchain.
-
-## Why one extra Flutter run setting is needed in 0.9.2
-
-The existing Android Maps host reads the local key for the native map. The Flutter Places client is created from Dart, so the same restricted private key is supplied to Dart at build/run time using:
+The native Google Map and Dart Places client receive configuration differently. The Places client needs:
 
 ```text
 --dart-define=HOMI_PLACES_API_KEY=<private PLACES_API_KEY value>
 ```
 
-`HomiGooglePlacesService` reads only `HOMI_PLACES_API_KEY`. If it is absent, Homi does not crash or fall back to an unrestricted request; the address picker explains that Google address search is unavailable and **Set from here** remains available.
+Android Studio development configuration:
 
-## Android Studio development configuration
+1. **Run -> Edit Configurations...**
+2. Select the Homi Flutter configuration launching `lib\main.dart`.
+3. In **Additional run args**, enter the full `--dart-define=HOMI_PLACES_API_KEY=...` form.
+4. Paste only the private value after the final `=`.
+5. Keep **Store as project file** disabled so the key is not committed.
+6. Apply, stop the running process, then Run again; hot reload is not enough for a compile-time Dart define.
 
-After the Flutter/backend gates pass:
+Do not share the generated Flutter command once it contains the key.
 
-1. Open `C:\ConceptLab\Projects\homi\secrets.properties` locally.
-2. Copy only the value after `PLACES_API_KEY=` to the clipboard. Do not send it in chat.
-3. In Android Studio open **Run → Edit Configurations…**.
-4. Select the existing Flutter configuration used to run `lib\main.dart`. If Android Studio has only the temporary Flutter configuration, create a normal **Flutter** configuration for this project first.
-5. In **Additional run args**, enter:
+## Address search behavior
 
-   ```text
-   --dart-define=HOMI_PLACES_API_KEY=<paste the private local value here>
-   ```
+Homi fetches only the Place ID, formatted address and coordinate required for saved Home/Work.
 
-6. Apply/save the configuration.
-7. Keep the Android Studio run configuration local. Do not add a run-configuration file containing the key to Git.
-8. Run Homi normally with the green Run button on the S25 Ultra.
+In 0.10.0 the address picker is internationalized with the selected Homi Emergency region as its country restriction, replacing the previous hardcoded South Africa restriction. This is a product default for the current selected region; **Set from here** remains available independently.
 
-This is a one-time development-machine setup until the key changes.
-
-### Verification
-
-When Android Studio starts Flutter, inspect the first command line. It must contain Homi's private Places define:
-
-```text
---dart-define=HOMI_PLACES_API_KEY=...
-```
-
-Do not share the full generated command publicly if it contains the real key.
-
-If the generated Flutter command does not contain `HOMI_PLACES_API_KEY`, the saved Android Studio Flutter run configuration is not supplying the Places key yet. Fix the run configuration before judging autocomplete behaviour.
+The picker retains Google's required attribution asset.
 
 ## Production
 
 Before a Play build:
 
-- create/use the production credential restricted to `za.co.theconceptlab.homi` plus the Play App Signing SHA-1 as required by Google Maps/Places;
-- keep Places API (New) and Maps SDK for Android as the only needed API targets for that key;
-- supply the production key through the release build process/secrets environment, not committed source;
-- verify Google Places autocomplete from a Play-installed Internal Testing build;
-- review Places usage/billing and Cloud Billing alerts before broad release.
-
-The Google Places integration requests only the minimal details needed after selection: Place ID, formatted address and location.
+- use a production credential restricted to `za.co.theconceptlab.homi` and the relevant Play App Signing fingerprint;
+- keep Maps SDK for Android + Places API (New) as the intended API targets;
+- inject the key through the release build/secrets process, never committed source;
+- verify Maps and autocomplete from a Play-installed Internal Testing build;
+- configure Cloud Billing budgets/alerts before broad rollout;
+- rotate any development key that was exposed in screenshots/logs.

@@ -5,9 +5,13 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/arrival_check_in.dart';
+import '../../domain/emergency_region.dart';
+import '../../services/emergency_region_service.dart';
 import '../../services/homi_cloud_actions.dart';
 import '../../services/shared_place_service.dart';
 import '../../theme/homi_theme.dart';
+import '../../widgets/emergency_call_section.dart';
+import '../../widgets/emergency_region_picker.dart';
 
 class HomiMapPerson {
   const HomiMapPerson({
@@ -100,6 +104,12 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
   }
 
   Future<void> _showEmergencyNumbers() async {
+    var region = EmergencyRegionService.instance.current;
+    if (region == null) {
+      region = await showEmergencyRegionPicker(context);
+      if (!mounted || region == null) return;
+    }
+
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -110,41 +120,46 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Emergency calls',
-                  style: Theme.of(context).textTheme.headlineSmall),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Emergency calls',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(sheetContext);
+                      await showEmergencyRegionPicker(context);
+                    },
+                    icon: const Icon(Icons.public_rounded, size: 17),
+                    label: const Text('Change'),
+                  ),
+                ],
+              ),
               const SizedBox(height: 5),
               Text(
-                'Homi opens your phone app with the number ready. It does not place the call or send your location automatically.',
+                '${region.countryName} · Homi opens your phone app with the number ready. It does not place the call or send your location automatically.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 14),
-              _EmergencyNumberRow(
-                icon: Icons.emergency_outlined,
-                title: 'Emergency',
-                number: '112',
-                detail: 'From a mobile phone',
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _call('112');
-                },
+              ...region.contacts.map(
+                (contact) => _EmergencyNumberRow(
+                  icon: emergencyIconFor(contact.kind),
+                  title: contact.label,
+                  number: contact.number,
+                  detail: contact.note,
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _call(contact.number);
+                  },
+                ),
               ),
-              _EmergencyNumberRow(
-                icon: Icons.local_police_outlined,
-                title: 'Police emergency',
-                number: '10111',
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _call('10111');
-                },
-              ),
-              _EmergencyNumberRow(
-                icon: Icons.medical_services_outlined,
-                title: 'Ambulance emergency',
-                number: '10177',
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _call('10177');
-                },
+              const SizedBox(height: 4),
+              Text(
+                'Emergency services and availability can vary by network and location. Homi is a call shortcut, not an emergency-response service.',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ),
@@ -404,9 +419,19 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _EmergencyMapBar(
-                            onSos: () => _call('112'),
-                            onMore: _showEmergencyNumbers,
+                          ListenableBuilder(
+                            listenable: EmergencyRegionService.instance,
+                            builder: (context, _) {
+                              final primary = EmergencyRegionService
+                                  .instance.current?.primaryContact;
+                              return _EmergencyMapBar(
+                                sosNumber: primary?.number,
+                                onSos: primary == null
+                                    ? null
+                                    : () => _call(primary.number),
+                                onMore: _showEmergencyNumbers,
+                              );
+                            },
                           ),
                           if (widget.people.isNotEmpty) ...[
                             const SizedBox(height: 8),
@@ -711,20 +736,36 @@ class _DetailActionCard extends StatelessWidget {
 }
 
 class _EmergencyMapBar extends StatelessWidget {
-  const _EmergencyMapBar({required this.onSos, required this.onMore});
+  const _EmergencyMapBar({
+    required this.sosNumber,
+    required this.onSos,
+    required this.onMore,
+  });
 
-  final VoidCallback onSos;
+  final String? sosNumber;
+  final VoidCallback? onSos;
   final VoidCallback onMore;
 
   @override
   Widget build(BuildContext context) {
+    final number = sosNumber;
+    if (number == null) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: onMore,
+          icon: const Icon(Icons.emergency_rounded),
+          label: const Text('Emergency numbers'),
+        ),
+      );
+    }
     return Row(
       children: [
         Expanded(
           child: FilledButton.icon(
             onPressed: onSos,
             icon: const Icon(Icons.emergency_rounded),
-            label: const Text('SOS · 112'),
+            label: Text('SOS · $number'),
           ),
         ),
         const SizedBox(width: 8),

@@ -65,7 +65,12 @@ class LocationStatusService {
   static const _continuousEnabledKey = 'homi.location.continuousEnabled';
   static const _arrivalMonitoringEnabledKey =
       'homi.location.arrivalMonitoringEnabled';
-  static const _minimumCloudWriteGap = Duration(seconds: 30);
+
+  /// The foreground service asks Android for roughly two-minute updates. Keep
+  /// cloud writes below that cadence as a second client-side cost/battery
+  /// guard, while Firestore rules independently enforce the same 90-second
+  /// minimum against modified clients.
+  static const _minimumCloudWriteGap = Duration(seconds: 90);
 
   final bool firebaseReady;
   final Battery _battery = Battery();

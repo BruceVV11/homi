@@ -6,6 +6,7 @@ const checkIn = require("./check_in");
 const connectionCleanup = require("./connection_cleanup");
 const deviceRegistration = require("./device_registration");
 const savedPlaces = require("./saved_places");
+const locationShare = require("./location_share");
 
 // A stale deployed HTTPS function already owned the historical
 // `onConnectionDeleted` name. Do not export that obsolete endpoint from the
@@ -23,4 +24,7 @@ module.exports = {
   ...connectionCleanup,
   ...deviceRegistration,
   ...savedPlaces,
+  // Keep the deployed callable name stable while replacing the older core
+  // implementation with the viewer-capped privacy/cost boundary.
+  ...locationShare,
 };

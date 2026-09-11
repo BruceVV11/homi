@@ -5,10 +5,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'src/app.dart';
+import 'src/services/emergency_region_service.dart';
 import 'src/services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Emergency numbers are an offline safety preference and must remain
+  // available even when Firebase cannot initialize.
+  await EmergencyRegionService.instance.initialize();
 
   var firebaseReady = false;
   Object? firebaseError;

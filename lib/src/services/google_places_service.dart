@@ -1,5 +1,7 @@
 import 'package:google_places_sdk_plus/google_places_sdk_plus.dart';
 
+import 'emergency_region_service.dart';
+
 class HomiPlaceSuggestion {
   const HomiPlaceSuggestion({
     required this.placeId,
@@ -60,9 +62,13 @@ class HomiGooglePlacesService {
     if (value.length < 3) return const <HomiPlaceSuggestion>[];
 
     try {
+      final selectedRegion = EmergencyRegionService.instance.current;
+      final countries = selectedRegion == null
+          ? null
+          : <String>[selectedRegion.isoCode];
       final response = await _places.findAutocompletePredictions(
         value,
-        countries: const <String>['ZA'],
+        countries: countries,
         newSessionToken: _startNewSession,
       );
       _startNewSession = false;

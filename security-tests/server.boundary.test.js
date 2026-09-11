@@ -84,7 +84,9 @@ test("owner location write is allowed but foreign write and delete are denied", 
   await assertFails(deleteDoc(doc(alice, "locations/alice")));
 });
 
-test("location update minimum interval blocks rapid repeat writes", async () => {
+test("location update minimum interval enforces the 90-second cost boundary", async () => {
+  const alice = env.authenticatedContext("alice").firestore();
+
   await seed("locations/alice", {
     latitude: -29.86,
     longitude: 31.02,
@@ -94,14 +96,27 @@ test("location update minimum interval blocks rapid repeat writes", async () => 
     updatedAt: Timestamp.fromMillis(Date.now() - 60 * 1000),
     source: "continuous_foreground_service",
   });
-  const alice = env.authenticatedContext("alice").firestore();
-  await assertSucceeds(updateDoc(doc(alice, "locations/alice"), {
+  await assertFails(updateDoc(doc(alice, "locations/alice"), {
     ...validLocation(),
     latitude: -29.861,
   }));
-  await assertFails(updateDoc(doc(alice, "locations/alice"), {
+
+  await seed("locations/alice", {
+    latitude: -29.86,
+    longitude: 31.02,
+    accuracyMeters: 12,
+    batteryPercent: 80,
+    isCharging: false,
+    updatedAt: Timestamp.fromMillis(Date.now() - 120 * 1000),
+    source: "continuous_foreground_service",
+  });
+  await assertSucceeds(updateDoc(doc(alice, "locations/alice"), {
     ...validLocation(),
     latitude: -29.862,
+  }));
+  await assertFails(updateDoc(doc(alice, "locations/alice"), {
+    ...validLocation(),
+    latitude: -29.863,
   }));
 });
 

@@ -110,21 +110,46 @@ See `documentation/EMERGENCY_REGIONS.md`.
 - disconnect cleanup removes stale exact-place viewer;
 - privacy/revoke/delete controls never paywalled.
 
+## Latest Windows validation evidence
+
+Bruce pulled `9ee7fe0e2d18f185e53b0ad210c703bdd1510c29` on Windows and ran the requested gate.
+
+Proven on that exact source:
+
+- `flutter pub get` -> succeeded;
+- `flutter test` -> **41/41 passed**;
+- `pubspec.lock` did not appear as modified;
+- local `git status --short` showed only established untracked local files/directories (`.metadata`, PSD, `android/`, `assets/`, `play_store_assets/`, device logcat), not tracked source drift.
+
+The first `flutter analyze` run found four static findings only in the new emergency-region client code:
+
+1. unused `emergency_region.dart` import in `people_map_page.dart`;
+2. two nullable accesses to `region.countryName` / `region.contacts` because the mutable local variable lost null promotion when captured by the bottom-sheet closure;
+3. redundant `dart:ui` import in `emergency_region_service.dart`.
+
+Those findings have now been corrected in GitHub source:
+
+- the region value is a final local before the closure, preserving null-safety promotion;
+- the unused emergency-region import is removed;
+- the redundant `dart:ui` import is removed.
+
+No backend/rules behavior changed in this corrective patch. The corrected exact head must still be proven by Bruce's Windows analyzer/test gate before Firebase deployment.
+
 ## Immediate next validation
 
-Bruce must prove the source on the actual Windows Flutter toolchain:
+Bruce should now pull the corrected source and run only the gate that needs re-proving:
 
 ```powershell
 cd C:\ConceptLab\Projects\homi
 git pull --ff-only
-flutter pub get
 flutter analyze
 flutter test
+git status --short
 ```
 
-Expected: analyzer clean; all tests pass (0.10 adds plan/emergency/commercial guardrail tests). Do not claim compiled/device-accepted before this.
+Expected: analyzer clean; all tests pass. Do not claim compiled/device-accepted before this.
 
-If Windows gate is green, use the governed Cloud Shell backend helper because Firestore rules and the `setLocationShare` implementation changed. It must run Node 22 and the Firestore emulator gate before deploying.
+If that corrected Windows gate is green, use the governed Cloud Shell backend helper because Firestore rules and the `setLocationShare` implementation changed in the underlying 0.10 pass. It must run Node 22 and the Firestore emulator gate before deploying.
 
 After deployment, S25 Ultra acceptance should cover:
 

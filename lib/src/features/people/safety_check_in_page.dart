@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_google_places_sdk/flutter_google_places_sdk.dart';
+import 'package:google_places_sdk_plus/google_places_sdk_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/arrival_check_in.dart';
@@ -1141,7 +1141,7 @@ class _GooglePlacePickerSheetState extends State<_GooglePlacePickerSheet> {
                 const SizedBox(height: 10),
                 Center(
                   child: Image(
-                    image: FlutterGooglePlacesSdk.ASSET_POWERED_BY_GOOGLE_ON_WHITE,
+                    image: FlutterGooglePlacesSdk.assetPoweredByGoogleOnWhite,
                     height: 18,
                   ),
                 ),

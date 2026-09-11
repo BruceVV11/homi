@@ -61,7 +61,7 @@ class HouseholdDataSyncService {
   Future<void> start() async {
     if (!firebaseReady || _user == null || _disposed) return;
     _prefs = await SharedPreferences.getInstance();
-    if (_disposed) return;
+    if (_disposed || controller.localOnly) return;
     _householdSubscription = _householdService.watchCurrentHousehold().listen(
       (household) => unawaited(_switchHousehold(household)),
       onError: (_) {
@@ -79,7 +79,7 @@ class HouseholdDataSyncService {
   }
 
   Future<void> _switchHousehold(HomiHousehold? household) async {
-    if (_disposed) return;
+    if (_disposed || controller.localOnly) return;
     if (_household?.id == household?.id) {
       _household = household;
       return;
@@ -99,7 +99,9 @@ class HouseholdDataSyncService {
 
     if (household == null || _user == null) return;
     await _loadPersistedSharedIds(household.id);
-    if (_disposed || _household?.id != household.id) return;
+    if (_disposed || controller.localOnly || _household?.id != household.id) {
+      return;
+    }
 
     _dataSubscription = _firestore
         .collection('households')
@@ -120,7 +122,12 @@ class HouseholdDataSyncService {
   ) async {
     final household = _household;
     final user = _user;
-    if (_disposed || household == null || user == null) return;
+    if (_disposed ||
+        controller.localOnly ||
+        household == null ||
+        user == null) {
+      return;
+    }
 
     final parsed = _parseSnapshot(snapshot);
 
@@ -261,7 +268,13 @@ class HouseholdDataSyncService {
   Future<void> _handleLocalMutation(HouseholdDataMutation mutation) async {
     final household = _household;
     final user = _user;
-    if (_disposed || !_classified || household == null || user == null) return;
+    if (_disposed ||
+        controller.localOnly ||
+        !_classified ||
+        household == null ||
+        user == null) {
+      return;
+    }
 
     // Records that pre-date joining this Household remain device-private until
     // a future explicit merge choice. Editing one must not silently upload it.

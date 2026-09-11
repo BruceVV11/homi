@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../domain/emergency_region.dart';
 import '../services/emergency_region_service.dart';
 import '../theme/homi_theme.dart';
+import 'homi_country_flag.dart';
 
 Future<EmergencyRegion?> showEmergencyRegionPicker(BuildContext context) {
   return showModalBottomSheet<EmergencyRegion>(
@@ -112,21 +113,9 @@ class _EmergencyRegionPickerSheetState
                             contentPadding: EdgeInsets.zero,
                             enabled: !_saving,
                             onTap: () => _select(region),
-                            leading: Container(
-                              width: 42,
-                              height: 42,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: HomiColors.peach.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Text(
-                                region.isoCode,
-                                style: const TextStyle(
-                                  color: HomiColors.coral,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
+                            leading: HomiCountryFlag(
+                              isoCode: region.isoCode,
+                              size: 42,
                             ),
                             title: Text(
                               region.countryName,

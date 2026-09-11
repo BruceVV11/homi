@@ -156,9 +156,11 @@ fi
 # 0.8.2 source needs a Firestore deletion backstop. Migrate safely and
 # idempotently: deploy the renamed trigger, prove it ACTIVE, then delete only
 # the exact stale name/region before normal deployment continues.
+#
+# Cloud Shell's current gcloud Functions v2 selector is --v2 (not --gen2).
 LEGACY_PRESENT=false
 if gcloud functions describe "${LEGACY_CONNECTION_DELETE_FUNCTION}" \
-    --gen2 \
+    --v2 \
     --region "${FUNCTION_REGION}" \
     --project "${PROJECT_ID}" >/dev/null 2>&1; then
   LEGACY_PRESENT=true
@@ -175,7 +177,7 @@ if [ "${LEGACY_PRESENT}" = true ]; then
     --project "${PROJECT_ID}"
 
   REPLACEMENT_STATE="$(gcloud functions describe "${REPLACEMENT_CONNECTION_DELETE_FUNCTION}" \
-    --gen2 \
+    --v2 \
     --region "${FUNCTION_REGION}" \
     --project "${PROJECT_ID}" \
     --format='value(state)' 2>/dev/null || true)"

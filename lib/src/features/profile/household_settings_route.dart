@@ -68,7 +68,9 @@ class _HouseholdSettingsRouteState extends State<HouseholdSettingsRoute> {
         controller: _controller,
         // This route is entered from a signed-in profile. If the auth session
         // disappears while it is open, returning to Account is the safe path.
-        onSignIn: () => Navigator.of(context).maybePop(),
+        onSignIn: () {
+          Navigator.of(context).maybePop();
+        },
       );
     }
 

@@ -98,7 +98,7 @@ async function seedInvite() {
   });
 }
 
-test("members can query their Household while outsiders cannot", async () => {
+test("members can query their Household without exposing non-members", async () => {
   await seedHousehold();
   const alice = env.authenticatedContext("alice").firestore();
   const bob = env.authenticatedContext("bob").firestore();
@@ -115,9 +115,16 @@ test("members can query their Household while outsiders cannot", async () => {
   assert.equal(visible.size, 1);
 
   await assertFails(getDocs(collection(bob, "households")));
-  await assertFails(getDocs(query(
+
+  const outsiderVisible = await assertSucceeds(getDocs(query(
       collection(mallory, "households"),
       where("memberUids", "array-contains", "mallory"),
+  )));
+  assert.equal(outsiderVisible.size, 0);
+
+  await assertFails(getDocs(query(
+      collection(mallory, "households"),
+      where("memberUids", "array-contains", "bob"),
   )));
 });
 

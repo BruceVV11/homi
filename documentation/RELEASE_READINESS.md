@@ -10,10 +10,11 @@ Status markers: **DONE**, **VERIFY**, **OPEN**, **BLOCKER**.
 
 - **DONE (Bruce-confirmed, 2026-09-10)** 0.9.0+11 analyzer clean and Flutter tests passed.
 - **DONE (Bruce-confirmed, 2026-09-11)** 0.9.1+12 analyzer/tests passed before the first 0.9.1 S25 Ultra review.
-- **VERIFY** `flutter pub get` resolves the new Places dependency for 0.9.2+13.
-- **VERIFY** `flutter analyze` clean for 0.9.2+13.
-- **VERIFY** all Flutter tests pass for 0.9.2+13.
-- **OPEN** 0.9.2+13 launches and behaves correctly on Samsung S25 Ultra.
+- **DONE (Bruce-confirmed, 2026-09-11)** first 0.9.2+13 static gate: `flutter analyze` clean and 32 Flutter tests passed; app `pubspec.lock` committed.
+- **DONE (Bruce-confirmed, 2026-09-11)** 0.9.2 backend deployment: Firestore security 13/13, rules/indexes released, all 24 Functions deployed, new saved-place resources created.
+- **VERIFY** maintained Places client migration resolves successfully with `google_places_sdk_plus 1.1.0` and a compatible federated Android implementation.
+- **VERIFY** analyzer/tests remain green after the maintained Places migration and regenerated `pubspec.lock`.
+- **OPEN** 0.9.2+13 builds, launches and behaves correctly on Samsung S25 Ultra after the Places dependency migration.
 - **OPEN** fresh-install and returning-user paths tested.
 - **OPEN** local-only and signed-in paths tested.
 - **OPEN** background/resume, swipe-away/reopen and network-loss/recovery tested.
@@ -24,11 +25,11 @@ Status markers: **DONE**, **VERIFY**, **OPEN**, **BLOCKER**.
 - **OPEN** notification taps tested foreground/background/terminated.
 - **OPEN** one controlled **All enabled Homi devices** broadcast before public users exist.
 
-The deployed 0.9.0 backend candidate remains the current production-development backend until the 0.9.2 governed deployment succeeds:
+### Current dependency-build status
 
-`c7e7b86656bc650ce1c8f0aabbb5a3129319db3c`
+The original `flutter_google_places_sdk 0.4.3` dependency resolved Android implementation `0.2.2`, which failed Kotlin compilation inside the third-party plugin. An attempted `0.2.3` override then failed dependency resolution because that advertised Android release is not published to pub.dev. Neither failure altered Firebase or Homi's production-development backend.
 
-0.9.2 changes both Flutter and backend/rules and therefore requires a fresh deployment gate after Flutter validation.
+Homi now uses maintained `google_places_sdk_plus 1.1.0`, which requires Dart >=3.11 / Flutter >=3.41 and retains native Android Places SDK integration. This new client dependency graph is pending Bruce's real Windows resolver/analyzer/test/device proof. Do not manually invent or edit its resolved lock versions.
 
 ## Gate 2 — Shared Household product contract
 
@@ -52,7 +53,7 @@ A local-first public launch is possible only if store/in-app copy states those b
 - **DONE** `sendArrivalCheckIn` contains no Home/Work coordinate/address.
 - **DONE** Safety page uses one always-visible Notifications-style arrival switch card; no oversized green hero/redundant success box.
 - **DONE** How it works uses information icon + bottom sheet.
-- **DONE** Home/Work address setup uses Google Places autocomplete plus Set from here.
+- **DONE in source** Home/Work address setup uses Google Places API (New) autocomplete plus Set from here. The maintained client package migration is still pending device build proof.
 - **DONE** arrival recipients display profile images + names.
 - **DONE** full People map contains bottom-reach **SOS · 112** and **Emergency numbers** controls.
 - **DONE** full-map Person Details includes latest location + Home + Work.
@@ -102,25 +103,24 @@ Force-stopping Android can prevent background work until the app is opened again
 - **DONE** latest-location owner write is schema/time bounded.
 - **DONE** bounded Function instances + dedicated runtime identity.
 - **DONE** Firestore Emulator security suite gates deployment.
-- **DONE (2026-09-10)** previous suite passed 12/12 and deployed rules.
 - **DONE** stale historical `onConnectionDeleted` migration completed; active replacement is `onTrustedConnectionDeleted`.
-- **DONE (Bruce-confirmed, 2026-09-10)** batched 0.8.2 backend deployment successful.
-- **DONE (Bruce-confirmed, 2026-09-10)** 0.9 backend helper completed without observed failure, including `sendArrivalCheckIn`.
+- **DONE (2026-09-11)** expanded 0.9.2 Firestore security suite passed **13/13**.
+- **DONE (2026-09-11)** 0.9.2 Firestore rules/indexes deployed.
+- **DONE (2026-09-11)** all 24 0.9.2 Functions deployed through governed batches.
+- **DONE (2026-09-11)** `setSharedArrivalPlace` and `onHomiUserSharedPlacesDeleted` created successfully.
 
-### 0.9.2 additions pending deployment proof
+### 0.9.2 saved-place boundary
 
-- **DONE in source** `setSharedArrivalPlace` Auth/App Check/verified-password-email protected.
-- **DONE in source** only Home/Work accepted; bounded coordinates/address; max 10 viewers.
-- **DONE in source** viewer UIDs revalidated against accepted connections.
-- **DONE in source** precise-place change limits 120/hour and 400/day.
-- **DONE in source** direct client sharedPlaces writes denied.
-- **DONE in source** sharedPlaces reads require explicit viewer list + accepted connection + active owner→viewer location share.
-- **DONE in source** disconnect cleanup strips stale shared-place viewers.
-- **DONE in source** account deletion saved-place cleanup trigger.
+- **DONE** `setSharedArrivalPlace` Auth/App Check/verified-password-email protected.
+- **DONE** only Home/Work accepted; bounded coordinates/address; max 10 viewers.
+- **DONE** viewer UIDs revalidated against accepted connections.
+- **DONE** precise-place change limits 120/hour and 400/day.
+- **DONE** direct client sharedPlaces writes denied.
+- **DONE** sharedPlaces reads require explicit viewer list + accepted connection + active owner→viewer location share.
+- **DONE** disconnect cleanup strips stale shared-place viewers.
+- **DONE** account deletion saved-place cleanup trigger.
 - **DONE in source** protected callable client retries one stale Auth/App Check session and maps technical failures to product copy.
-- **VERIFY** expanded Firestore security suite passes under emulator.
-- **VERIFY** new Functions/rules deploy successfully through governed helper.
-- **VERIFY** valid App Check debug client can call `setSharedArrivalPlace`; invalid/unattested call rejected.
+- **VERIFY on device** valid App Check debug client can call `setSharedArrivalPlace`; invalid/unattested call remains rejected by server configuration.
 
 ### Remaining production configuration
 
@@ -162,8 +162,8 @@ Force-stopping Android can prevent background work until the app is opened again
 
 - **DONE in-app draft** Why Homi exists, Privacy & your data, Location & safety, Terms and account controls.
 - **DONE** Homi does not claim emergency dispatch/crash detection/proof of safety.
-- **DONE in source** arrival push remains coordinate/address-free.
-- **DONE in source** optional exact Home/Work cloud copy is separately opt-in and server/rule gated.
+- **DONE** arrival push remains coordinate/address-free.
+- **DONE** optional exact Home/Work cloud copy is separately opt-in and server/rule gated.
 - **VERIFY** local erase clears local place data and revokes/retries optional cloud shared-place clear correctly.
 - **BLOCKER** stable public Privacy Policy URL.
 - **BLOCKER** stable public Terms URL.
@@ -217,18 +217,20 @@ Recommended before broad rollout: privacy-conscious crash monitoring, Functions/
 
 ## Current release position
 
-The 0.9.0 backend foundation remains deployed and proven to the level previously recorded. 0.9.1 Flutter tests/analyzer passed, but its first S25 Ultra review exposed UI issues and a People authentication/connectivity failure.
+`0.9.2+13` has a **proven deployed backend** and a previously clean Flutter static gate. The outstanding blocker in the current iteration is purely the Android Places client dependency path.
 
-`0.9.2+13` is the corrective source pass. It removes the rejected check-in UI states, adds bottom-reach map emergency controls, adds Google Places autocomplete, adds profile-based recipient presentation, adds self/authorized-other Home/Work Person Details, and hardens People auth recovery/raw error handling.
-
-Because exact Home/Work sharing introduces `sharedPlaces`, a new protected callable/cleanup trigger and Firestore read boundary, **0.9.2 does require a backend deployment after its Flutter gate passes**.
+The original `flutter_google_places_sdk_android 0.2.2` failed compilation. The advertised `0.2.3` replacement proved unavailable from pub.dev. Homi has now migrated its small Places wrapper/UI to maintained `google_places_sdk_plus 1.1.0`, which retains native Places API (New) on Android and is compatible by declared SDK constraints with Homi's Flutter 3.41.x / Dart 3.11.3 environment.
 
 Immediate sequence:
 
-1. Windows `flutter pub get` + analyzer + tests.
-2. If clean, governed Cloud Shell backend helper and expanded Firestore emulator gate.
-3. Configure existing private restricted Places key for the debug run without sharing/committing it.
-4. S25 Ultra acceptance.
-5. Two-account/device privacy and arrival verification.
+1. Windows pull + `flutter clean` + `flutter pub get`.
+2. Verify the `google_places_sdk_plus` dependency graph and absence of the old `flutter_google_places_sdk*` graph.
+3. Run analyzer/tests.
+4. If green, commit the regenerated `pubspec.lock` only.
+5. Confirm the private `HOMI_PLACES_API_KEY` run argument locally.
+6. Rebuild on the S25 Ultra and run the People/Safety/Places acceptance matrix.
+7. Proceed to two-account/device exact-place and arrival verification.
 
-The largest later product blocker remains the Shared Household sync contract if Homi is marketed as a household-wide source of truth. Production signing, Play Integrity/App Check enforcement, public legal URLs and Google Play policy declarations remain subsequent deployment gates.
+**No Cloud Shell/Firebase redeployment follows the Places dependency migration.**
+
+The largest later product blocker remains the Shared Household sync contract if Homi is marketed as a household-wide source of truth. Production signing, Play Integrity/App Check enforcement, public legal URLs and Google Play policy declarations remain subsequent release gates.

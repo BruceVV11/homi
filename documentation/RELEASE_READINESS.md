@@ -33,12 +33,12 @@ Implemented source contracts:
 - **DONE** arrival delivery contains no Home/Work address/coordinate;
 - **DONE** exact Home/Work visibility separate opt-in + selected viewer + accepted connection + active current-location share;
 - **DONE** emergency actions use external phone-app handoff rather than silent direct call;
-- **DONE in 0.10.0 source** client cloud-write floor 90 seconds;
-- **DONE in 0.10.0 source** Firestore server floor 90 seconds;
-- **DONE in 0.10.0 source** five-active-live-viewer server cap;
-- **DONE in 0.10.0 source** privacy deactivation path not trapped by activation cap/rate limit.
+- **DONE in 0.10.0 source/deployed** client cloud-write floor 90 seconds;
+- **DONE in 0.10.0 source/deployed** Firestore server floor 90 seconds;
+- **DONE in 0.10.0 source/deployed** five-active-live-viewer server cap;
+- **DONE in 0.10.0 source/deployed** privacy deactivation path not trapped by activation cap/rate limit.
 
-Device/backend verification still required:
+Device verification still required:
 
 - **VERIFY** People auth recovery / Homi code / connection / relationship / heart flows;
 - **VERIFY** Google Places autocomplete and saved address;
@@ -99,18 +99,19 @@ Do not enforce paid live sending until the secure server entitlement path exists
 - **DONE previously** server-side limits for connections, shared Tasks, hearts, arrivals and campaigns.
 - **DONE previously** dedicated bounded runtime identity.
 - **DONE previously** 0.9.2 Firestore security suite passed 13/13 and governed backend deployment completed.
-- **DONE (preflight diagnosis 1)** first 0.10 Cloud Shell worker failed before emulator/deployment because the installed gcloud uses `--v2`, not the stale `--gen2` selector.
-- **DONE in deployment tooling** all discovered stale `--gen2` uses were corrected to `--v2`.
-- **DONE (preflight diagnosis 2)** second worker passed exact source/Node/project/deployed-function inventory, then failed before emulator/deployment because its wrapper loaded `functions/entrypoint.js` before `functions/node_modules` existed; exact error: `Cannot find module 'firebase-functions/v2'`.
-- **DONE in deployment tooling** governed helper now installs/verifies Functions dependencies first, then proves exactly 24 exports before any security test or Firebase deployment, and reuses the validated list for deployment batches.
-- **VERIFY 0.10.0** updated Firestore emulator suite passes with 90-second location rule.
-- **VERIFY 0.10.0** governed deployment updates Firestore rules and `setLocationShare` while keeping the same public export count/name.
+- **DONE (0.10.0)** governed Cloud Shell deployment ran from exact source/tooling SHA `fba7479a8304aec30a964f32cfd8b3e268b6c78e` with Node `v22.23.2` and verified project `homi-ee80a` / `883068189841`.
+- **DONE (0.10.0)** exactly **24** local Homi Function exports validated before deployment.
+- **DONE (0.10.0)** updated Firestore emulator suite passed **13/13**, including the 90-second location update boundary.
+- **DONE (0.10.0)** Firestore rules compiled/released and indexes deployed successfully.
+- **DONE (0.10.0)** all 24 Node 22 Gen2 Functions deployed in five controlled batches.
+- **DONE (0.10.0)** `setLocationShare(africa-south1)` updated and verified **ACTIVE** after deployment.
+- **DONE (0.10.0)** refresh-safe worker ended **PASS**.
 - **VERIFY** active debug devices have registered private App Check debug tokens.
 - **BLOCKER** Play Integrity App Check for release traffic.
 - **BLOCKER** Firestore App Check enforcement only after known-good valid-client metrics.
 - **BLOCKER** Cloud Billing budgets/alerts/spend controls.
 
-Neither failed Cloud Shell worker reached the emulator or Firebase deployment stage. The live backend therefore remains the previously proven 0.9.2 deployment until the corrected 0.10 worker completes successfully.
+The earlier failed Cloud Shell workers were release-tooling/preflight issues and did not reach Firebase deployment. The third worker is the accepted 0.10 backend deployment evidence. The repeated quota-project warning was non-fatal; source upload and all deployment batches succeeded.
 
 ## Gate 7 — Authentication/account lifecycle
 
@@ -145,8 +146,8 @@ Permanent package: `za.co.theconceptlab.homi`.
 
 ## Immediate sequence
 
-1. Pull the current exact GitHub head in Cloud Shell.
-2. Run a new refresh-safe governed backend worker; do not rerun either failed worker.
-3. Worker must prove Node 22 and project identity, then call the hardened helper. The helper installs dependencies before export loading, proves exactly 24 exports, runs lint + updated Firestore emulator security suite, deploys Firestore, deploys Functions in batches of five, and leaves `setLocationShare` ACTIVE.
-4. S25 Ultra device acceptance for emergency regions, Places, People and viewer cap.
-5. Then begin Shared Household + Google Play Billing/entitlement implementation.
+1. Pull current `main` on Windows; the new commits after the backend source are documentation-only.
+2. Run Homi on the S25 Ultra with the existing private Places dart-define configuration.
+3. Perform focused 0.10 device acceptance: Emergency region UI/dialer handoff, People/Maps/Places regression, existing live/check-in/privacy behavior, and the five-viewer boundary when enough test accounts are available.
+4. After device acceptance, begin canonical Shared Household implementation.
+5. Then implement Google Play Billing + server-authoritative Homi+ entitlements and lifecycle handling.

@@ -1,7 +1,7 @@
 # Homi Architecture
 
 Date: 2026-09-11
-Current source candidate: **0.10.0+14**
+Current source candidate: **0.11.0+15**
 
 ## Permanent identifiers
 
@@ -28,6 +28,7 @@ The deleted project `homi-508000` is not part of Homi and must never be reused.
 - Firebase App Check: debug provider during development, Play Integrity for release
 - Google Maps Flutter + Geolocator for consensual trusted-person location and local arrival detection
 - `google_places_sdk_plus` + Places API (New) for Home/Work address selection
+- `country_flags` for bundled ISO country-flag artwork in emergency-region selection and display
 - `geocoding` for readable reverse-geocoding when using **Set from here**
 - `url_launcher` for external Google Maps and emergency phone-app handoff
 
@@ -56,24 +57,44 @@ These areas remain local-first unless a specific feature explicitly states other
 
 Model changes must preserve existing data through safe defaults/migrations rather than destructive resets.
 
+## Canonical shared Household identity
+
+0.11.0 introduces the first real shared-Household identity layer. It deliberately separates **being a trusted person** from **being a member of one shared Household**.
+
+Canonical server-owned collections are:
+
+- `households/{householdId}` — Household name, owner UID, current member UIDs, pending invite UIDs and the four-seat limit;
+- `households/{householdId}/members/{uid}` — member profile snapshot and owner/member role;
+- `householdMemberships/{uid}` — one-per-account pointer to the Household and role;
+- `householdInvites/{householdId}_{inviteeUid}` — pending invitation state.
+
+A Homi account can belong to at most one canonical Household at a time. The first implementation supports up to four occupied or reserved seats, matching the approved Homi+ Household contract. Inviting a person requires an existing accepted trusted-person connection; the invitee must accept separately. Connection acceptance does not silently join a Household.
+
+Household mutations are App-Check-protected server callables. Clients can read only their own membership, a Household they currently belong to, that Household's member directory, and invitations they are entitled to see. Clients cannot manufacture membership, ownership or invitations directly in Firestore.
+
+The Household owner can rename the Household, invite connected people, cancel pending invitations, remove members, transfer ownership and delete an empty/sole-member Household. A non-owner can leave. Ownership transfer also rebinds pending invitation ownership to the new owner so management access does not become stale.
+
+The management UI is available from **Homi & account -> profile -> Shared Household**. It uses the existing local home name only as the default name when creating a new shared Household; creating or joining does not delete or replace local-first Home data.
+
 ## Current cloud collaboration
 
-Homi currently shares only narrowly defined collaboration state:
+Homi currently shares narrowly defined collaboration state:
 
 - `users/{uid}` and device registrations;
 - Homi connection codes and accepted connections;
 - private relationship/scope preferences;
+- canonical Household identity, member directory and invitations;
 - specifically shared one-off Tasks;
 - owner-to-viewer location-share grants;
 - one latest location document per sender;
 - optional explicitly shared Home/Work places;
 - notification/developer-admin state and server rate limits.
 
-A full shared Household identity and synchronization model is a later paid-product layer. 0.10.0 records the commercial contract but does not falsely claim Routines, Supplies or all Home records are already shared across devices.
+0.11.0 establishes the canonical Household that future paid synchronization can attach to. It does **not** falsely claim that recurring Routines, Supplies, all Home records or local history are already synchronized across Household devices. Those data-domain migrations are a later implementation layer and must include explicit merge/conflict behavior rather than silently overwriting local records.
 
 ## People, location and privacy
 
-Connection, relationship label, current-location sharing, arrival-recipient selection and exact Home/Work visibility remain independent choices.
+Connection, relationship label, canonical Household membership, current-location sharing, arrival-recipient selection and exact Home/Work visibility remain independent choices.
 
 Live location uses one latest-state document at `locations/{uid}`. Homi does not create route history by default.
 
@@ -84,7 +105,7 @@ The Android background stream is shared by two explicit consumers:
 
 The stream uses medium accuracy, roughly a 100 m movement threshold and roughly a two-minute Android interval. Check-in-only samples do not update the cloud location document unless Live updates are independently enabled.
 
-0.10.0 adds business/cost boundaries:
+Business/cost boundaries remain:
 
 - client latest-location cloud writes are held to at least 90 seconds apart;
 - Firestore independently rejects repeat latest-location writes inside 90 seconds;
@@ -118,11 +139,11 @@ Approved first plan structure:
 - Free: R0, no continuous sender seat after billing enforcement activates;
 - Personal: R19.99/month, 1 sender seat;
 - Duo: R34.99/month, 2 sender seats under one payer;
-- Household: R49.99/month or R499.99/year, up to 4 Household members plus the future fully shared Household product.
+- Household: R49.99/month or R499.99/year, up to 4 canonical Household members plus the future fully synchronized Household product.
 
 Duo members do not need to live together. Household value is the shared household platform, not an arbitrary restriction on who can receive a location.
 
-Plan definitions do **not** grant entitlement yet. Google Play product IDs, purchase-token verification, RTDN/Pub/Sub and authoritative server entitlement state are required before paid enforcement.
+Plan definitions and canonical Household membership do **not** grant entitlement yet. Google Play product IDs, purchase-token verification, RTDN/Pub/Sub and authoritative server entitlement state are required before paid enforcement.
 
 Privacy, stop-sharing, check-in disable, exact-place revoke, local erase and account deletion are never paywalled.
 
@@ -136,11 +157,15 @@ The same region powers:
 
 - People -> Safety & check-ins emergency cards;
 - full-screen People map emergency controls;
-- the Home/Work Google Places country bias in 0.10.0.
+- the Home/Work Google Places country bias.
+
+The emergency picker and emergency-call sheet use bundled ISO flag assets supplied by `country_flags`; flag rendering does not require a network request. Flag availability is broader than Homi's emergency-number catalog. Homi continues to list only regions whose emergency data has been explicitly source-reviewed rather than inventing numbers for every ISO country merely because a flag exists.
 
 Regions with one verified universal number can show an SOS shortcut. Regions such as Japan/Brazil that are represented with service-specific numbers do not get an invented universal SOS target.
 
 Emergency actions use external `tel:` handoff only. Homi does not silently place calls, dispatch responders or send the user's location to emergency services.
+
+The emergency-call bottom sheet is scroll-controlled and height-bounded so service-specific country lists remain usable above Android system navigation without RenderFlex overflow.
 
 The catalog is source-controlled and must be release-reviewed against ITU-T E.129 and/or the relevant national public-safety authority for every country enabled in public distribution.
 
@@ -150,7 +175,7 @@ Homi supports email/password and Google sign-in. Sensitive sharing requires Auth
 
 `HomiCloudActions` is the typed client boundary for protected callable mutations. A stale `unauthenticated` response gets one forced Firebase ID token + App Check refresh and one retry. Raw backend codes must not reach the UI.
 
-Sensitive server mutations include connection lifecycle, relationship/scope, location-share grants, shared Tasks, hearts, arrival delivery, exact saved-place sharing, device registration, developer notifications and account deletion.
+Sensitive server mutations include connection lifecycle, relationship/scope, canonical Household membership/ownership/invitations, location-share grants, shared Tasks, hearts, arrival delivery, exact saved-place sharing, device registration, developer notifications and account deletion.
 
 ## Notifications
 

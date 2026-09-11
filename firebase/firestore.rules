@@ -71,7 +71,7 @@ service cloud.firestore {
         && get(householdPath).data.ownerUid == request.auth.uid;
     }
 
-    function validHouseholdDataRecord(data) {
+    function validHouseholdDataRecord(recordId, data) {
       return data.keys().hasOnly([
           'domain',
           'itemId',
@@ -98,6 +98,7 @@ service cloud.firestore {
         && data.itemId is string
         && data.itemId.size() > 0
         && data.itemId.size() <= 128
+        && recordId == data.domain + '--' + data.itemId
         && data.payload is map
         && data.payload.id == data.itemId
         && data.schemaVersion == 1
@@ -223,13 +224,14 @@ service cloud.firestore {
       // 0.12 shared Household records are deliberately nested under the exact
       // canonical Household. Members can read and make local-first writes only
       // while both their membership pointer and Household member list agree.
-      // The outer envelope is fixed so clients cannot forge actor/timestamp or
-      // introduce an unreviewed data domain. Domain payloads remain versioned
-      // application records and are bounded by Firestore's document limit.
+      // The outer envelope is fixed so clients cannot forge actor/timestamp,
+      // record identity or an unreviewed data domain. Domain payloads remain
+      // versioned application records and are bounded by Firestore's document
+      // limit.
       match /data/{recordId} {
         allow read: if isCanonicalHouseholdMember(householdId);
         allow create, update: if isCanonicalHouseholdMember(householdId)
-          && validHouseholdDataRecord(request.resource.data);
+          && validHouseholdDataRecord(recordId, request.resource.data);
         allow delete: if isCanonicalHouseholdMember(householdId);
       }
     }

@@ -65,6 +65,8 @@ When a signed-in user belongs to a canonical Shared Household, 0.12 can addition
 
 The controller still saves these records to SharedPreferences first. Cloud snapshot application persists the synchronized result locally without echoing it back as another cloud write.
 
+Explicit local-only mode suppresses the Household synchronizer even if Firebase still has a cached authenticated identity. Returning through the account/cloud flow recreates the shell after local-only mode is disabled so synchronization starts deliberately rather than from stale authentication state.
+
 Model changes must preserve existing data through safe defaults/migrations rather than destructive resets.
 
 ## Canonical shared Household identity
@@ -144,6 +146,8 @@ Private **Me** Tasks remain local-only.
 Shared Tasks continue using `sharedTasks`, but the existing callable names `createSharedTask`, `toggleSharedTask` and `removeSharedTask` are overridden by canonical implementations. New shared Tasks derive `householdId` and `memberUids` from the creator's canonical Household. A People preference cannot manufacture task access or make a non-member assignable.
 
 The UI source for Household assignees is likewise canonical Household membership rather than `peoplePreferences.scope`.
+
+`onHouseholdTaskMembershipChanged` watches canonical Household member-list changes. New 0.12 shared Tasks carrying that `householdId` are rebound to the current member list, removed assignees become Unassigned, and removed completion UIDs are stripped. Pre-0.12 Tasks without `householdId` are deliberately not auto-expanded because widening an older preference-era Task to a new Household audience without consent would be unsafe.
 
 ## Current cloud collaboration
 
@@ -257,4 +261,4 @@ GitHub `main` is the tracked source of truth. `android/` remains intentionally l
 
 0.12 currently exists only on `homi-0.12-shared-data-plane` and is not production state until governed validation/merge/deployment completes.
 
-A source change is not considered compiled/device-accepted until Bruce's Windows Flutter toolchain and S25 Ultra prove it. Backend/rules changes require the governed Node 22 / Firestore emulator / batched Functions deployment helper after the Flutter gate passes. The 0.12 backend source surface is governed at exactly **36** Function exports.
+A source change is not considered compiled/device-accepted until Bruce's Windows Flutter toolchain and S25 Ultra prove it. Backend/rules changes require the governed Node 22 / Firestore emulator / batched Functions deployment helper after the Flutter gate passes. The 0.12 backend source surface is governed at exactly **37** Function exports.

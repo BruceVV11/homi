@@ -5,7 +5,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/arrival_check_in.dart';
-import '../../domain/emergency_region.dart';
 import '../../services/emergency_region_service.dart';
 import '../../services/homi_cloud_actions.dart';
 import '../../services/shared_place_service.dart';
@@ -104,11 +103,9 @@ class _PeopleMapPageState extends State<PeopleMapPage> {
   }
 
   Future<void> _showEmergencyNumbers() async {
-    var region = EmergencyRegionService.instance.current;
-    if (region == null) {
-      region = await showEmergencyRegionPicker(context);
-      if (!mounted || region == null) return;
-    }
+    final region = EmergencyRegionService.instance.current ??
+        await showEmergencyRegionPicker(context);
+    if (!mounted || region == null) return;
 
     await showModalBottomSheet<void>(
       context: context,

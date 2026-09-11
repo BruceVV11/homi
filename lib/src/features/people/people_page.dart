@@ -9,7 +9,9 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../domain/homi_household.dart';
 import '../../services/arrival_check_in_service.dart';
+import '../../services/household_service.dart';
 import '../../services/location_status_service.dart';
 import '../../services/trusted_people_service.dart';
 import '../../theme/homi_theme.dart';
@@ -55,14 +57,19 @@ class _PeoplePageState extends State<PeoplePage>
   StreamSubscription<List<TrustedConnection>>? _connectionSubscription;
   StreamSubscription<Map<String, TrustedPersonPreference>>?
       _preferenceSubscription;
+  StreamSubscription<HomiHousehold?>? _householdSubscription;
+  late final HouseholdService _householdService;
   GoogleMapController? _mapController;
   LocationStatusSnapshot? _selfSnapshot;
   List<TrustedConnection> _connections = const <TrustedConnection>[];
   Map<String, TrustedPersonPreference> _preferences =
       const <String, TrustedPersonPreference>{};
+  HomiHousehold? _household;
   HomiIdentity? _identity;
+  String? _identityError;
   String? _error;
   String? _focusedPersonId;
+  bool _identityBusy = false;
   bool _busy = false;
   bool _syncBusy = false;
   bool _liveSharingActive = false;
@@ -85,6 +92,7 @@ class _PeoplePageState extends State<PeoplePage>
   @override
   void initState() {
     super.initState();
+    _householdService = HouseholdService(firebaseReady: widget.firebaseReady);
     _selfSnapshot = widget.locationService.latest;
     _liveSharingActive = widget.locationService.isStreaming;
     _focusedPersonId = _selfSnapshot == null ? null : 'self';
@@ -96,14 +104,22 @@ class _PeoplePageState extends State<PeoplePage>
       }
     });
     widget.checkInService.addListener(_refreshCheckInStatus);
-    unawaited(_initialise());
+
+    // People is useful before GPS/location setup finishes. Bind Firestore
+    // immediately so accepted connections and relationship state do not sit
+    // behind cached-location, passive-GPS or background-sharing work.
+    if (_user != null) {
+      unawaited(_bindTrustedPeople(ensureIdentity: true));
+      _bindHousehold();
+    }
+    unawaited(_initialiseLocation());
   }
 
   void _refreshCheckInStatus() {
     if (mounted) setState(() {});
   }
 
-  Future<void> _initialise() async {
+  Future<void> _initialiseLocation() async {
     final cached = await widget.locationService.loadCachedStatus();
     if (mounted && cached != null) {
       final current = _selfSnapshot;
@@ -136,16 +152,13 @@ class _PeoplePageState extends State<PeoplePage>
             _liveSharingActive = widget.locationService.isStreaming);
       }
     }
-
-    if (_user != null) {
-      await _bindTrustedPeople(ensureIdentity: true);
-    }
   }
 
   @override
   void dispose() {
     widget.checkInService.removeListener(_refreshCheckInStatus);
     _selfSubscription?.cancel();
+    _householdSubscription?.cancel();
     _cancelTrustedCore();
     for (final subscription in _shareSubscriptions.values) {
       subscription.cancel();
@@ -164,6 +177,65 @@ class _PeoplePageState extends State<PeoplePage>
     _preferenceSubscription = null;
   }
 
+  void _bindHousehold() {
+    _householdSubscription?.cancel();
+    if (_user == null) {
+      _household = null;
+      return;
+    }
+    _householdSubscription = _householdService.watchCurrentHousehold().listen(
+      (value) {
+        if (!mounted) return;
+        setState(() => _household = value);
+      },
+      onError: (_) {
+        // Household membership is additive context on People. Keep accepted
+        // connections visible if the Household stream is temporarily offline.
+      },
+    );
+  }
+
+  Future<void> _loadIdentity() async {
+    if (_user == null || _identityBusy) return;
+    if (mounted) {
+      setState(() {
+        _identityBusy = true;
+        _identityError = null;
+      });
+    }
+    try {
+      final identity = await widget.trustedPeopleService.ensureIdentity();
+      if (mounted) {
+        setState(() {
+          _identity = identity;
+          _identityError = null;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _identityError = _identityFriendly(error));
+      }
+    } finally {
+      if (mounted) setState(() => _identityBusy = false);
+    }
+  }
+
+  Future<void> _showMyCode() async {
+    if (_user == null) {
+      widget.onSignIn();
+      return;
+    }
+    if (_identity == null) await _loadIdentity();
+    final identity = _identity;
+    if (!mounted || identity == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _HomiCodeSheet(identity: identity),
+    );
+  }
+
   Future<void> _bindTrustedPeople({bool ensureIdentity = false}) async {
     if (_user == null) return;
     _cancelTrustedCore();
@@ -174,15 +246,8 @@ class _PeoplePageState extends State<PeoplePage>
       });
     }
 
-    if (ensureIdentity) {
-      try {
-        final identity = await widget.trustedPeopleService.ensureIdentity();
-        if (mounted) setState(() => _identity = identity);
-      } catch (error) {
-        if (mounted) setState(() => _error = _friendly(error));
-      }
-    }
-
+    // Start the realtime subscriptions first. Identity provisioning is a
+    // separate concern and must never delay the visible People list.
     _connectionSubscription = widget.trustedPeopleService
         .watchConnections()
         .listen(_syncConnections, onError: (Object error) {
@@ -207,10 +272,14 @@ class _PeoplePageState extends State<PeoplePage>
         _error = _friendly(error);
       });
     });
+
+    if (ensureIdentity) unawaited(_loadIdentity());
   }
 
-  Future<void> _retryTrustedPeople() =>
-      _bindTrustedPeople(ensureIdentity: _identity == null);
+  Future<void> _retryTrustedPeople() async {
+    await _bindTrustedPeople(ensureIdentity: _identity == null);
+    _bindHousehold();
+  }
 
   void _syncConnections(List<TrustedConnection> connections) {
     final currentUid = _user?.uid;
@@ -364,13 +433,21 @@ class _PeoplePageState extends State<PeoplePage>
     final otherUid = connection.otherUid(currentUid);
     final current =
         _preferences[otherUid] ?? TrustedPersonPreference.fallback;
+    final isHouseholdMember =
+        _household?.memberUids.contains(otherUid) == true;
+    final canonical = TrustedPersonPreference(
+      relationship: current.relationship,
+      scope: isHouseholdMember ? 'household' : 'friend',
+    );
     final result = await showModalBottomSheet<TrustedPersonPreference>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => _RelationshipSheet(
         name: connection.otherName(currentUid),
-        initial: current,
+        initial: canonical,
+        hasHousehold: _household != null,
+        isHouseholdMember: isHouseholdMember,
       ),
     );
     if (result == null) return;
@@ -720,8 +797,14 @@ class _PeoplePageState extends State<PeoplePage>
     String currentUid,
   ) {
     final otherUid = connection.otherUid(currentUid);
-    final preference =
+    final storedPreference =
         _preferences[otherUid] ?? TrustedPersonPreference.fallback;
+    final preference = TrustedPersonPreference(
+      relationship: storedPreference.relationship,
+      scope: _household?.memberUids.contains(otherUid) == true
+          ? 'household'
+          : 'friend',
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: _TrustedPersonCard(
@@ -798,9 +881,7 @@ class _PeoplePageState extends State<PeoplePage>
     if (currentUid != null) {
       for (final connection in accepted) {
         final otherUid = connection.otherUid(currentUid);
-        final preference =
-            _preferences[otherUid] ?? TrustedPersonPreference.fallback;
-        if (preference.household) {
+        if (_household?.memberUids.contains(otherUid) == true) {
           household.add(connection);
         } else {
           trusted.add(connection);
@@ -997,6 +1078,12 @@ class _PeoplePageState extends State<PeoplePage>
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
+            if (user != null)
+              TextButton.icon(
+                onPressed: _identityBusy ? null : _showMyCode,
+                icon: const Icon(Icons.key_rounded, size: 18),
+                label: const Text('My code'),
+              ),
             TextButton.icon(
               onPressed: _connectWithCode,
               icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
@@ -1022,6 +1109,12 @@ class _PeoplePageState extends State<PeoplePage>
               onCopy: () => Clipboard.setData(
                 ClipboardData(text: _identity!.code),
               ),
+            )
+          else
+            _HomiCodeStateCard(
+              loading: _identityBusy,
+              error: _identityError,
+              onRetry: _loadIdentity,
             ),
           if (incoming.isNotEmpty) ...[
             const SizedBox(height: 14),
@@ -1075,7 +1168,7 @@ class _PeoplePageState extends State<PeoplePage>
                 title: 'Household',
                 count: household.length,
                 subtitle:
-                    'People included in your household context and task assignment.',
+                    'People who have actually joined your shared Household.',
               ),
               const SizedBox(height: 8),
               ...household.map((connection) =>
@@ -1102,6 +1195,24 @@ class _PeoplePageState extends State<PeoplePage>
         ),
       ],
     );
+  }
+
+  String _identityFriendly(Object error) {
+    final message = error
+        .toString()
+        .replaceFirst('Bad state: ', '')
+        .replaceFirst('StateError: ', '')
+        .replaceFirst('Exception: ', '');
+    if (message.contains('permission-denied') ||
+        message.contains('PERMISSION_DENIED')) {
+      return 'Your Homi code could not be loaded securely. Try again.';
+    }
+    if (message.contains('unavailable') || message.contains('UNAVAILABLE')) {
+      return 'Your Homi code is temporarily unavailable. Try again when you are online.';
+    }
+    return message.isEmpty
+        ? 'Your Homi code could not be loaded. Try again.'
+        : message;
   }
 
   String _friendly(Object error) {
@@ -1226,10 +1337,14 @@ class _RelationshipSheet extends StatefulWidget {
   const _RelationshipSheet({
     required this.name,
     required this.initial,
+    required this.hasHousehold,
+    required this.isHouseholdMember,
   });
 
   final String name;
   final TrustedPersonPreference initial;
+  final bool hasHousehold;
+  final bool isHouseholdMember;
 
   @override
   State<_RelationshipSheet> createState() => _RelationshipSheetState();
@@ -1263,11 +1378,17 @@ class _RelationshipSheetState extends State<_RelationshipSheet> {
     _relationship = _relationships.contains(widget.initial.relationship)
         ? widget.initial.relationship
         : 'Trusted person';
-    _scope = widget.initial.scope == 'household' ? 'household' : 'friend';
+    _scope = widget.isHouseholdMember ? 'household' : 'friend';
   }
 
   @override
   Widget build(BuildContext context) {
+    final connectionTypeHelp = widget.isHouseholdMember
+        ? '${widget.name} is a member of your shared Household. Household membership is managed from Homi & account → Shared Household, not from a connection label.'
+        : widget.hasHousehold
+            ? 'To include ${widget.name} in your Household, invite them from Homi & account → Shared Household. They must accept before Household access is granted.'
+            : 'Create a Shared Household first before anyone can become a Household member. Until then this connection stays separate from Home, supplies, routines and household records.';
+
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
@@ -1280,7 +1401,7 @@ class _RelationshipSheetState extends State<_RelationshipSheet> {
             ),
             const SizedBox(height: 6),
             Text(
-              'This label is for your Homi. It helps keep household collaboration separate from location-only friends.',
+              'The relationship label is yours to edit. Household access is controlled separately by real Shared Household membership.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 18),
@@ -1303,13 +1424,12 @@ class _RelationshipSheetState extends State<_RelationshipSheet> {
               labelFor: (value) => value == 'household'
                   ? 'Household'
                   : 'Friend · location only',
-              onSelected: (value) => setState(() => _scope = value),
+              enabledFor: (_) => false,
+              onSelected: (_) {},
             ),
             const SizedBox(height: 10),
             Text(
-              _scope == 'household'
-                  ? 'Household people can be offered household-only collaboration such as assigned tasks. Location sharing is still a separate choice.'
-                  : 'Location-only friends never receive access to your Home, supplies, routines or household records.',
+              connectionTypeHelp,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),
@@ -1623,6 +1743,63 @@ class _LocationStatusCard extends StatelessWidget {
   }
 }
 
+class _HomiCodeStateCard extends StatelessWidget {
+  const _HomiCodeStateCard({
+    required this.loading,
+    required this.error,
+    required this.onRetry,
+  });
+
+  final bool loading;
+  final String? error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: HomiColors.peach.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: HomiColors.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.key_rounded, color: HomiColors.coral),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Your Homi code',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  loading
+                      ? 'Loading your reusable connection code…'
+                      : error ?? 'Your code has not loaded yet.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+          if (loading)
+            const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.4),
+            )
+          else
+            TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
+}
+
 class _HomiCodeCard extends StatelessWidget {
   const _HomiCodeCard({required this.identity, required this.onCopy});
 
@@ -1659,6 +1836,11 @@ class _HomiCodeCard extends StatelessWidget {
                     letterSpacing: 2,
                   ),
                 ),
+                const SizedBox(height: 2),
+                Text(
+                  'Reuse this code to connect with more people.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
             ),
           ),
@@ -1668,6 +1850,63 @@ class _HomiCodeCard extends StatelessWidget {
             icon: const Icon(Icons.copy_rounded),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HomiCodeSheet extends StatelessWidget {
+  const _HomiCodeSheet({required this.identity});
+
+  final HomiIdentity identity;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Your Homi code',
+                style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 6),
+            Text(
+              'This is your reusable connection code. Give the same code to any person you want to connect with; creating one connection does not use it up.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 18),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+              decoration: BoxDecoration(
+                color: HomiColors.peach.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: HomiColors.border),
+              ),
+              child: Text(
+                identity.code,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 4,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => Clipboard.setData(
+                  ClipboardData(text: identity.code),
+                ),
+                icon: const Icon(Icons.copy_rounded),
+                label: const Text('Copy code'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

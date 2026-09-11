@@ -7,7 +7,7 @@ FUNCTION_REGION="africa-south1"
 LEGACY_CONNECTION_DELETE_FUNCTION="onConnectionDeleted"
 REPLACEMENT_CONNECTION_DELETE_FUNCTION="onTrustedConnectionDeleted"
 FUNCTION_BATCH_SIZE=5
-EXPECTED_FUNCTION_COUNT=36
+EXPECTED_FUNCTION_COUNT=37
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FUNCTIONS_DIR="${REPO_ROOT}/functions"
@@ -40,7 +40,8 @@ if [ ! -f functions/package.json ] || \
    [ ! -f functions/household_invite_owner_sync.js ] || \
    [ ! -f functions/trusted_people_preferences.js ] || \
    [ ! -f functions/shared_tasks_canonical.js ] || \
-   [ ! -f functions/household_data_cleanup.js ]; then
+   [ ! -f functions/household_data_cleanup.js ] || \
+   [ ! -f functions/household_task_membership_sync.js ]; then
   echo "Homi Functions source is incomplete." >&2
   exit 1
 fi

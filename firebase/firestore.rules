@@ -54,6 +54,14 @@ service cloud.firestore {
         && get(membershipPath).data.householdId == householdId;
     }
 
+    function isCanonicalHouseholdMember(householdId) {
+      let householdPath = /databases/$(database)/documents/households/$(householdId);
+      return myHouseholdMembership(householdId)
+        && exists(householdPath)
+        && get(householdPath).data.memberUids is list
+        && get(householdPath).data.memberUids.hasAny([request.auth.uid]);
+    }
+
     function isHouseholdOwner(householdId) {
       let membershipPath = /databases/$(database)/documents/householdMemberships/$(request.auth.uid);
       let householdPath = /databases/$(database)/documents/households/$(householdId);
@@ -61,6 +69,40 @@ service cloud.firestore {
         && get(membershipPath).data.role == 'owner'
         && exists(householdPath)
         && get(householdPath).data.ownerUid == request.auth.uid;
+    }
+
+    function validHouseholdDataRecord(data) {
+      return data.keys().hasOnly([
+          'domain',
+          'itemId',
+          'payload',
+          'schemaVersion',
+          'updatedByUid',
+          'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'domain',
+          'itemId',
+          'payload',
+          'schemaVersion',
+          'updatedByUid',
+          'updatedAt'
+        ])
+        && data.domain in [
+          'routine',
+          'supply',
+          'homeThing',
+          'homeEvent',
+          'utilityReading'
+        ]
+        && data.itemId is string
+        && data.itemId.size() > 0
+        && data.itemId.size() <= 128
+        && data.payload is map
+        && data.payload.id == data.itemId
+        && data.schemaVersion == 1
+        && data.updatedByUid == request.auth.uid
+        && data.updatedAt == request.time;
     }
 
     function validLocationSnapshot(data) {
@@ -176,6 +218,19 @@ service cloud.firestore {
       match /members/{memberUid} {
         allow get, list: if myHouseholdMembership(householdId);
         allow create, update, delete: if false;
+      }
+
+      // 0.12 shared Household records are deliberately nested under the exact
+      // canonical Household. Members can read and make local-first writes only
+      // while both their membership pointer and Household member list agree.
+      // The outer envelope is fixed so clients cannot forge actor/timestamp or
+      // introduce an unreviewed data domain. Domain payloads remain versioned
+      // application records and are bounded by Firestore's document limit.
+      match /data/{recordId} {
+        allow read: if isCanonicalHouseholdMember(householdId);
+        allow create, update: if isCanonicalHouseholdMember(householdId)
+          && validHouseholdDataRecord(request.resource.data);
+        allow delete: if isCanonicalHouseholdMember(householdId);
       }
     }
 

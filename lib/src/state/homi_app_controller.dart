@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../domain/home_event.dart';
 import '../domain/home_thing.dart';
+import '../domain/household_data_mutation.dart';
 import '../domain/household_task.dart';
 import '../domain/routine_item.dart';
 import '../domain/supply_item.dart';
@@ -24,6 +27,7 @@ class HomiAppController extends ChangeNotifier {
 
   final Uuid _uuid = const Uuid();
   SharedPreferences? _prefs;
+  HouseholdDataMutationSink? _householdDataSink;
 
   bool isReady = false;
   bool onboardingComplete = false;
@@ -93,6 +97,16 @@ class HomiAppController extends ChangeNotifier {
         })
         .whereType<T>()
         .toList(growable: false);
+  }
+
+  void bindHouseholdDataSink(HouseholdDataMutationSink? sink) {
+    _householdDataSink = sink;
+  }
+
+  void _queueHouseholdMutation(HouseholdDataMutation mutation) {
+    final sink = _householdDataSink;
+    if (sink == null) return;
+    unawaited(sink(mutation).catchError((_) {}));
   }
 
   Future<void> completeOnboarding({
@@ -229,6 +243,13 @@ class HomiAppController extends ChangeNotifier {
     }
     routines = <RoutineItem>[...routines, item];
     await _persistRoutines();
+    _queueHouseholdMutation(
+      HouseholdDataMutation.upsert(
+        domain: HouseholdDataDomain.routine,
+        itemId: item.id,
+        payload: item.toJson(),
+      ),
+    );
     notifyListeners();
   }
 
@@ -249,12 +270,28 @@ class HomiAppController extends ChangeNotifier {
       );
     }).toList(growable: false);
     await _persistRoutines();
+    final updated = routines.where((item) => item.id == id);
+    if (updated.isNotEmpty) {
+      _queueHouseholdMutation(
+        HouseholdDataMutation.upsert(
+          domain: HouseholdDataDomain.routine,
+          itemId: id,
+          payload: updated.first.toJson(),
+        ),
+      );
+    }
     notifyListeners();
   }
 
   Future<void> removeRoutine(String id) async {
     routines = routines.where((item) => item.id != id).toList(growable: false);
     await _persistRoutines();
+    _queueHouseholdMutation(
+      HouseholdDataMutation.delete(
+        domain: HouseholdDataDomain.routine,
+        itemId: id,
+      ),
+    );
     notifyListeners();
   }
 
@@ -276,20 +313,25 @@ class HomiAppController extends ChangeNotifier {
   }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
-    supplies = <SupplyItem>[
-      ...supplies,
-      SupplyItem(
-        id: _uuid.v4(),
-        name: trimmed,
-        category: category,
-        status: status,
-        iconKey: iconKey,
-        expiryDate: expiryDate,
-        quantity: quantity,
-        unit: unit,
-      ),
-    ];
+    final item = SupplyItem(
+      id: _uuid.v4(),
+      name: trimmed,
+      category: category,
+      status: status,
+      iconKey: iconKey,
+      expiryDate: expiryDate,
+      quantity: quantity,
+      unit: unit,
+    );
+    supplies = <SupplyItem>[...supplies, item];
     await _persistSupplies();
+    _queueHouseholdMutation(
+      HouseholdDataMutation.upsert(
+        domain: HouseholdDataDomain.supply,
+        itemId: item.id,
+        payload: item.toJson(),
+      ),
+    );
     notifyListeners();
   }
 
@@ -298,6 +340,16 @@ class HomiAppController extends ChangeNotifier {
         .map((item) => item.id == id ? item.copyWith(status: status) : item)
         .toList(growable: false);
     await _persistSupplies();
+    final updated = supplies.where((item) => item.id == id);
+    if (updated.isNotEmpty) {
+      _queueHouseholdMutation(
+        HouseholdDataMutation.upsert(
+          domain: HouseholdDataDomain.supply,
+          itemId: id,
+          payload: updated.first.toJson(),
+        ),
+      );
+    }
     notifyListeners();
   }
 
@@ -319,12 +371,28 @@ class HomiAppController extends ChangeNotifier {
       return item.copyWith(quantity: safeQuantity, unit: unit);
     }).toList(growable: false);
     await _persistSupplies();
+    final updated = supplies.where((item) => item.id == id);
+    if (updated.isNotEmpty) {
+      _queueHouseholdMutation(
+        HouseholdDataMutation.upsert(
+          domain: HouseholdDataDomain.supply,
+          itemId: id,
+          payload: updated.first.toJson(),
+        ),
+      );
+    }
     notifyListeners();
   }
 
   Future<void> removeSupply(String id) async {
     supplies = supplies.where((item) => item.id != id).toList(growable: false);
     await _persistSupplies();
+    _queueHouseholdMutation(
+      HouseholdDataMutation.delete(
+        domain: HouseholdDataDomain.supply,
+        itemId: id,
+      ),
+    );
     notifyListeners();
   }
 
@@ -346,31 +414,54 @@ class HomiAppController extends ChangeNotifier {
   }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
-    homeThings = <HomeThing>[
-      ...homeThings,
-      HomeThing(
-        id: _uuid.v4(),
-        name: trimmed,
-        category: category,
-        location: location,
-        brandModel: _cleanOptional(brandModel),
-        createdAt: DateTime.now(),
-        nextServiceDate: nextServiceDate,
-        warrantyUntil: warrantyUntil,
-        notes: _cleanOptional(notes),
-      ),
-    ];
+    final item = HomeThing(
+      id: _uuid.v4(),
+      name: trimmed,
+      category: category,
+      location: location,
+      brandModel: _cleanOptional(brandModel),
+      createdAt: DateTime.now(),
+      nextServiceDate: nextServiceDate,
+      warrantyUntil: warrantyUntil,
+      notes: _cleanOptional(notes),
+    );
+    homeThings = <HomeThing>[...homeThings, item];
     await _persistHomeThings();
+    _queueHouseholdMutation(
+      HouseholdDataMutation.upsert(
+        domain: HouseholdDataDomain.homeThing,
+        itemId: item.id,
+        payload: item.toJson(),
+      ),
+    );
     notifyListeners();
   }
 
   Future<void> removeHomeThing(String id) async {
+    final removedEventIds = homeEvents
+        .where((item) => item.thingId == id)
+        .map((item) => item.id)
+        .toList(growable: false);
     homeThings = homeThings.where((item) => item.id != id).toList(growable: false);
     homeEvents = homeEvents.where((item) => item.thingId != id).toList(growable: false);
     await Future.wait(<Future<void>>[
       _persistHomeThings(),
       _persistHomeEvents(),
     ]);
+    _queueHouseholdMutation(
+      HouseholdDataMutation.delete(
+        domain: HouseholdDataDomain.homeThing,
+        itemId: id,
+      ),
+    );
+    for (final eventId in removedEventIds) {
+      _queueHouseholdMutation(
+        HouseholdDataMutation.delete(
+          domain: HouseholdDataDomain.homeEvent,
+          itemId: eventId,
+        ),
+      );
+    }
     notifyListeners();
   }
 
@@ -384,27 +475,39 @@ class HomiAppController extends ChangeNotifier {
   }) async {
     final trimmed = title.trim();
     if (trimmed.isEmpty) return;
-    homeEvents = <HomeEvent>[
-      ...homeEvents,
-      HomeEvent(
-        id: _uuid.v4(),
-        type: type,
-        title: trimmed,
-        date: date,
-        completedByName: completedByName.trim().isEmpty
-            ? 'You'
-            : completedByName.trim(),
-        thingId: thingId,
-        notes: _cleanOptional(notes),
-      ),
-    ]..sort((a, b) => b.date.compareTo(a.date));
+    final item = HomeEvent(
+      id: _uuid.v4(),
+      type: type,
+      title: trimmed,
+      date: date,
+      completedByName: completedByName.trim().isEmpty
+          ? 'You'
+          : completedByName.trim(),
+      thingId: thingId,
+      notes: _cleanOptional(notes),
+    );
+    homeEvents = <HomeEvent>[...homeEvents, item]
+      ..sort((a, b) => b.date.compareTo(a.date));
     await _persistHomeEvents();
+    _queueHouseholdMutation(
+      HouseholdDataMutation.upsert(
+        domain: HouseholdDataDomain.homeEvent,
+        itemId: item.id,
+        payload: item.toJson(),
+      ),
+    );
     notifyListeners();
   }
 
   Future<void> removeHomeEvent(String id) async {
     homeEvents = homeEvents.where((item) => item.id != id).toList(growable: false);
     await _persistHomeEvents();
+    _queueHouseholdMutation(
+      HouseholdDataMutation.delete(
+        domain: HouseholdDataDomain.homeEvent,
+        itemId: id,
+      ),
+    );
     notifyListeners();
   }
 
@@ -416,21 +519,27 @@ class HomiAppController extends ChangeNotifier {
     String? unit,
     String? notes,
   }) async {
-    utilityReadings = <UtilityReading>[
-      ...utilityReadings,
-      UtilityReading(
-        id: _uuid.v4(),
-        type: type,
-        value: value,
-        unit: _cleanOptional(unit) ?? type.defaultUnit,
-        recordedAt: recordedAt,
-        recordedByName: recordedByName.trim().isEmpty
-            ? 'You'
-            : recordedByName.trim(),
-        notes: _cleanOptional(notes),
-      ),
-    ]..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
+    final item = UtilityReading(
+      id: _uuid.v4(),
+      type: type,
+      value: value,
+      unit: _cleanOptional(unit) ?? type.defaultUnit,
+      recordedAt: recordedAt,
+      recordedByName: recordedByName.trim().isEmpty
+          ? 'You'
+          : recordedByName.trim(),
+      notes: _cleanOptional(notes),
+    );
+    utilityReadings = <UtilityReading>[...utilityReadings, item]
+      ..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
     await _persistUtilityReadings();
+    _queueHouseholdMutation(
+      HouseholdDataMutation.upsert(
+        domain: HouseholdDataDomain.utilityReading,
+        itemId: item.id,
+        payload: item.toJson(),
+      ),
+    );
     notifyListeners();
   }
 
@@ -439,7 +548,100 @@ class HomiAppController extends ChangeNotifier {
         .where((item) => item.id != id)
         .toList(growable: false);
     await _persistUtilityReadings();
+    _queueHouseholdMutation(
+      HouseholdDataMutation.delete(
+        domain: HouseholdDataDomain.utilityReading,
+        itemId: id,
+      ),
+    );
     notifyListeners();
+  }
+
+  Future<void> applyHouseholdRoutines(
+    List<RoutineItem> cloudItems, {
+    Set<String> preserveLocalIds = const <String>{},
+  }) async {
+    routines = _replaceCloudSubset<RoutineItem>(
+      current: routines,
+      cloud: cloudItems,
+      preserveLocalIds: preserveLocalIds,
+      idOf: (item) => item.id,
+    );
+    await _persistRoutines();
+    notifyListeners();
+  }
+
+  Future<void> applyHouseholdSupplies(
+    List<SupplyItem> cloudItems, {
+    Set<String> preserveLocalIds = const <String>{},
+  }) async {
+    supplies = _replaceCloudSubset<SupplyItem>(
+      current: supplies,
+      cloud: cloudItems,
+      preserveLocalIds: preserveLocalIds,
+      idOf: (item) => item.id,
+    );
+    await _persistSupplies();
+    notifyListeners();
+  }
+
+  Future<void> applyHouseholdHomeThings(
+    List<HomeThing> cloudItems, {
+    Set<String> preserveLocalIds = const <String>{},
+  }) async {
+    homeThings = _replaceCloudSubset<HomeThing>(
+      current: homeThings,
+      cloud: cloudItems,
+      preserveLocalIds: preserveLocalIds,
+      idOf: (item) => item.id,
+    );
+    await _persistHomeThings();
+    notifyListeners();
+  }
+
+  Future<void> applyHouseholdHomeEvents(
+    List<HomeEvent> cloudItems, {
+    Set<String> preserveLocalIds = const <String>{},
+  }) async {
+    homeEvents = _replaceCloudSubset<HomeEvent>(
+      current: homeEvents,
+      cloud: cloudItems,
+      preserveLocalIds: preserveLocalIds,
+      idOf: (item) => item.id,
+    )..sort((a, b) => b.date.compareTo(a.date));
+    await _persistHomeEvents();
+    notifyListeners();
+  }
+
+  Future<void> applyHouseholdUtilityReadings(
+    List<UtilityReading> cloudItems, {
+    Set<String> preserveLocalIds = const <String>{},
+  }) async {
+    utilityReadings = _replaceCloudSubset<UtilityReading>(
+      current: utilityReadings,
+      cloud: cloudItems,
+      preserveLocalIds: preserveLocalIds,
+      idOf: (item) => item.id,
+    )..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
+    await _persistUtilityReadings();
+    notifyListeners();
+  }
+
+  List<T> _replaceCloudSubset<T>({
+    required List<T> current,
+    required List<T> cloud,
+    required Set<String> preserveLocalIds,
+    required String Function(T item) idOf,
+  }) {
+    final result = <String, T>{};
+    for (final item in current) {
+      final id = idOf(item);
+      if (preserveLocalIds.contains(id)) result[id] = item;
+    }
+    for (final item in cloud) {
+      result[idOf(item)] = item;
+    }
+    return result.values.toList(growable: false);
   }
 
   Future<void> _persistHomeThings() async {

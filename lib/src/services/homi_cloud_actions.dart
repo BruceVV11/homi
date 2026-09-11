@@ -99,6 +99,9 @@ class HomiCloudActions {
 
   String _friendlyMessage(FirebaseFunctionsException error) {
     final backendMessage = error.message?.trim();
+    String backendOr(String fallback) => backendMessage?.isNotEmpty == true
+        ? backendMessage!
+        : fallback;
 
     return switch (error.code) {
       'unauthenticated' =>
@@ -108,15 +111,13 @@ class HomiCloudActions {
       'deadline-exceeded' =>
         'Homi took too long to respond. Check your connection and try again.',
       'permission-denied' => 'That action is not available to this account.',
-      'resource-exhausted' => backendMessage?.isNotEmpty == true
-          ? backendMessage!
-          : 'Too many attempts. Wait a moment and try again.',
-      'invalid-argument' ||
-      'failed-precondition' ||
-      'already-exists' ||
-      'not-found' => backendMessage?.isNotEmpty == true
-          ? backendMessage!
-          : 'Homi could not complete that action yet.',
+      'resource-exhausted' =>
+        backendOr('Too many attempts. Wait a moment and try again.'),
+      'invalid-argument' => backendOr('Check the details and try again.'),
+      'failed-precondition' =>
+        backendOr('Homi cannot complete that action yet.'),
+      'already-exists' => backendOr('That Homi item already exists.'),
+      'not-found' => backendOr('That Homi item is no longer available.'),
       _ => 'Homi could not complete that action. Try again.',
     };
   }

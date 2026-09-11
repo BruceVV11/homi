@@ -38,7 +38,6 @@ Local-first use remains available. Do not claim full Household sync until it act
 - Broken `flutter_google_places_sdk` removed; `google_places_sdk_plus 1.1.0` resolved with Android 1.1.4 and lock committed.
 - 0.9.2 backend governed deployment previously passed Firestore emulator 13/13 and deployed 24 Functions/rules, including saved-place functions.
 - Backend deployment source: `d8fb786269feea43223c673e84b2b5a6c499a91f`.
-- Last proven source before 0.10 implementation: `e4bbe3f152e03f1b870a404c3ebd92332c894bb7`.
 - Google Places requires Android Studio Additional run arg `--dart-define=HOMI_PLACES_API_KEY=<private value>`; never ask Bruce to share the value. A development key appeared in a screenshot and must be rotated before production.
 
 ## 0.10.0+14 source candidate
@@ -77,8 +76,6 @@ Existing Android stream stays ~2 minutes / 100 m movement.
 - disabling a viewer bypasses activation connection/rate-limit checks so stop-sharing remains reliable;
 - normal trusted-connection limit remains separate.
 
-Backend/rules changed, so 0.10 requires a governed backend deployment **after** the Windows Flutter gate passes.
-
 ### Emergency regions
 
 - offline source-controlled catalog;
@@ -92,7 +89,7 @@ Backend/rules changed, so 0.10 requires a governed backend deployment **after** 
 - emergency action remains external `tel:` only, no silent call/dispatch/location transmission;
 - every public launch country must be release-reviewed against ITU-T E.129 and/or national official source.
 
-Google Places Home/Work autocomplete now follows the selected Emergency region country instead of hardcoded South Africa.
+Google Places Home/Work autocomplete follows the selected Emergency region country instead of hardcoded South Africa.
 
 See `documentation/EMERGENCY_REGIONS.md`.
 
@@ -110,48 +107,59 @@ See `documentation/EMERGENCY_REGIONS.md`.
 - disconnect cleanup removes stale exact-place viewer;
 - privacy/revoke/delete controls never paywalled.
 
-## Latest Windows validation evidence
+## Proven 0.10 Windows validation
 
-Bruce pulled `9ee7fe0e2d18f185e53b0ad210c703bdd1510c29` on Windows and ran the requested gate.
+Bruce's Windows Flutter toolchain fully passed the client gate on exact app/runtime source:
 
-Proven on that exact source:
+`11df198bfc5801257cef45dc4bba64e9d37772d7`
 
-- `flutter pub get` -> succeeded;
+Evidence:
+
+- `flutter pub get` succeeded;
+- `flutter analyze` -> **No issues found**;
 - `flutter test` -> **41/41 passed**;
-- `pubspec.lock` did not appear as modified;
-- local `git status --short` showed only established untracked local files/directories (`.metadata`, PSD, `android/`, `assets/`, `play_store_assets/`, device logcat), not tracked source drift.
+- no tracked local source drift was reported.
 
-The first `flutter analyze` run found four static findings only in the new emergency-region client code:
+Do not ask Bruce to rerun this Windows gate solely because later deployment-tool/documentation commits moved `main`; those later commits do not alter Flutter app source, Functions runtime source, Firestore rules or the validated dependency graph.
 
-1. unused `emergency_region.dart` import in `people_map_page.dart`;
-2. two nullable accesses to `region.countryName` / `region.contacts` because the mutable local variable lost null promotion when captured by the bottom-sheet closure;
-3. redundant `dart:ui` import in `emergency_region_service.dart`.
+## Current Cloud Shell deployment state
 
-Those findings have now been corrected in GitHub source:
+The first governed 0.10 Cloud Shell worker failed before emulator/deployment with:
 
-- the region value is a final local before the closure, preserving null-safety promotion;
-- the unused emergency-region import is removed;
-- the redundant `dart:ui` import is removed.
-
-No backend/rules behavior changed in this corrective patch. The corrected exact head must still be proven by Bruce's Windows analyzer/test gate before Firebase deployment.
-
-## Immediate next validation
-
-Bruce should now pull the corrected source and run only the gate that needs re-proving:
-
-```powershell
-cd C:\ConceptLab\Projects\homi
-git pull --ff-only
-flutter analyze
-flutter test
-git status --short
+```text
+ERROR: (gcloud.functions.list) unrecognized arguments: --gen2 (did you mean '--v2'?)
 ```
 
-Expected: analyzer clean; all tests pass. Do not claim compiled/device-accepted before this.
+This was a release-tooling compatibility failure, not an app/backend test failure.
 
-If that corrected Windows gate is green, use the governed Cloud Shell backend helper because Firestore rules and the `setLocationShare` implementation changed in the underlying 0.10 pass. It must run Node 22 and the Firestore emulator gate before deploying.
+Safe state:
 
-After deployment, S25 Ultra acceptance should cover:
+- exact project identity guard had passed: `homi-ee80a` / `883068189841`;
+- Node was `v22.23.2`;
+- no Firestore emulator gate had run yet;
+- no Firestore or Functions deployment had begun;
+- therefore the previously proven 0.9.2 backend remains live.
+
+Repository inspection found the same stale `--gen2` selector inside `scripts/deploy-notification-backend.sh` for Gen2/v2 legacy/replacement trigger checks. These were corrected together to current Cloud Shell `--v2` syntax. Do not rerun the old worker or reuse the old expected SHA.
+
+## Immediate next step
+
+Run a new refresh-safe Cloud Shell worker against the **current exact GitHub `main` head**. The worker must:
+
+1. force/verify Node 22;
+2. verify `homi-ee80a` and project number `883068189841`;
+3. fetch/fast-forward to the exact current GitHub SHA;
+4. inventory deployed Functions using `gcloud functions list --v2`;
+5. prove exactly 24 local Homi Function exports;
+6. run `scripts/deploy-notification-backend.sh`;
+7. allow that helper to run lint + the updated Firestore emulator security suite;
+8. deploy Firestore rules/indexes and Functions in batches of five;
+9. verify `setLocationShare` ACTIVE with `gcloud functions describe ... --v2`;
+10. write durable PASS/FAIL status and log.
+
+If Cloud Shell refreshes, inspect the status/log only. Never blindly rerun while a worker may still be running.
+
+After deployment PASS, S25 Ultra acceptance should cover:
 
 1. existing local/account data retained;
 2. normal Homi shell/nav/People map unchanged;

@@ -14,6 +14,9 @@ extension HouseholdDataDomainValue on HouseholdDataDomain {
         HouseholdDataDomain.homeEvent => 'homeEvent',
         HouseholdDataDomain.utilityReading => 'utilityReading',
       };
+
+  static HouseholdDataDomain? fromCloudValue(String value) =>
+      householdDataDomainFromCloudValue(value);
 }
 
 HouseholdDataDomain? householdDataDomainFromCloudValue(String value) {

@@ -47,6 +47,22 @@ service cloud.firestore {
         && data.memberUids.hasAny([request.auth.uid]);
     }
 
+    function myHouseholdMembership(householdId) {
+      let membershipPath = /databases/$(database)/documents/householdMemberships/$(request.auth.uid);
+      return signedIn()
+        && exists(membershipPath)
+        && get(membershipPath).data.householdId == householdId;
+    }
+
+    function isHouseholdOwner(householdId) {
+      let membershipPath = /databases/$(database)/documents/householdMemberships/$(request.auth.uid);
+      let householdPath = /databases/$(database)/documents/households/$(householdId);
+      return myHouseholdMembership(householdId)
+        && get(membershipPath).data.role == 'owner'
+        && exists(householdPath)
+        && get(householdPath).data.ownerUid == request.auth.uid;
+    }
+
     function validLocationSnapshot(data) {
       return data.keys().hasOnly([
           'latitude',
@@ -133,6 +149,41 @@ service cloud.firestore {
 
     match /sharedTasks/{taskId} {
       allow get, list: if isSharedTaskMember(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    // Canonical Household identity is server-managed. A user may read the one
+    // membership record belonging to their account, but cannot enumerate or
+    // mutate membership documents directly.
+    match /householdMemberships/{uid} {
+      allow get: if isSelf(uid);
+      allow list, create, update, delete: if false;
+    }
+
+    // Household documents are readable only by current members whose canonical
+    // membership record points at that Household. Client mutations remain
+    // blocked; App-Check-protected Functions own create/invite/role changes.
+    match /households/{householdId} {
+      allow get, list: if signedIn()
+        && resource.data.memberUids is list
+        && resource.data.memberUids.hasAny([request.auth.uid])
+        && myHouseholdMembership(householdId);
+      allow create, update, delete: if false;
+
+      match /members/{memberUid} {
+        allow get, list: if myHouseholdMembership(householdId);
+        allow create, update, delete: if false;
+      }
+    }
+
+    // Invitees can read invitations addressed to them. The current Household
+    // owner can read invitations issued for that Household. Invitation writes
+    // remain server-only so seats and membership cannot be forged by clients.
+    match /householdInvites/{inviteId} {
+      allow get, list: if signedIn()
+        && (resource.data.inviteeUid == request.auth.uid
+          || (resource.data.inviterUid == request.auth.uid
+            && isHouseholdOwner(resource.data.householdId)));
       allow create, update, delete: if false;
     }
 

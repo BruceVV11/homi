@@ -1,7 +1,7 @@
 # Homi+ commercial and entitlement contract
 
 Date: 2026-09-11
-Applies from source line: `0.10.0+14`
+Applies from source line: `0.11.0+15`
 
 This document is the product and engineering source of truth for Homi's first paid model. Pricing may change before public sale, but code must not silently invent different seat or privacy rules.
 
@@ -11,7 +11,7 @@ This document is the product and engineering source of truth for Homi's first pa
 
 The five viewers do not have to be members of the same Household and do not need a paid plan merely to receive the sender's location.
 
-Connections, relationship labels and Household membership are not substitutes for the explicit per-person location-sharing grant.
+Connections, relationship labels and canonical Household membership are not substitutes for the explicit per-person location-sharing grant.
 
 ## Plans
 
@@ -47,11 +47,26 @@ Duo is two sender entitlements paid by one purchaser. It does not create a share
 
 ### Homi+ Household — R49.99/month or R499.99/year
 
-- up to four members in one shared Homi Household;
+- up to four members in one canonical shared Homi Household;
 - each covered member receives continuous-location sender entitlement with up to five viewers;
 - full Household cloud synchronization is the differentiating paid value: shared Home, Tasks, Routines, Supplies, assignments and supported Household history/state.
 
 Trusted friends outside the Household do not consume Household member seats merely because a Household member shares location with them.
+
+## Canonical Household status in 0.11
+
+Homi 0.11 implements the real Household identity/membership layer before billing:
+
+- one canonical Household per account at a time;
+- owner/member roles;
+- four occupied/reserved seats;
+- explicit invitations that require an accepted trusted connection;
+- invite accept/decline/cancel;
+- member removal/leave;
+- ownership transfer;
+- server-owned Firestore membership and invitation writes.
+
+This identity layer does **not** itself grant Homi+ entitlement and does not yet synchronize all Home/Routine/Supply data. It exists so future shared data and paid entitlement can attach to a stable `householdId` rather than trying to infer a Household from per-person relationship labels.
 
 ## Privacy and safety are never paywalled
 
@@ -62,6 +77,7 @@ Payment state must never prevent a user from:
 - disabling arrival monitoring/check-ins;
 - revoking exact Home/Work visibility;
 - disconnecting another person;
+- leaving a Household where the user is not the owner;
 - erasing local data;
 - deleting an account;
 - opening emergency-number shortcuts.
@@ -72,7 +88,7 @@ If a subscription expires, existing data is not immediately destroyed. Paid crea
 
 The first paid model assumes continuous location remains a latest-state feature, not route history.
 
-Source/runtime boundaries from 0.10.0:
+Source/runtime boundaries from 0.10.0 onward:
 
 - Android asks for background positions at roughly two-minute intervals with a 100 m movement filter;
 - Homi's client cloud-write guard is 90 seconds;
@@ -85,7 +101,7 @@ These controls are business-protection and privacy controls as well as technical
 
 ## Billing architecture — required before paid enforcement
 
-The plan definitions in source are commercial contracts only. They do not yet grant a paid entitlement.
+The plan definitions and canonical Household records are commercial/product contracts only. They do not yet grant a paid entitlement.
 
 Paid enforcement must be activated only after all of the following exist:
 
@@ -102,7 +118,7 @@ The client must never unlock Homi+ only because a local purchase callback says a
 
 ## Entitlement model target
 
-The backend should ultimately answer capability questions, not scatter `isPaid` checks through Flutter.
+The backend should answer capability questions centrally rather than scattering `isPaid` checks through Flutter.
 
 Examples:
 
@@ -111,7 +127,23 @@ Examples:
 - `householdMemberLimit`
 - `maxTrustedLiveViewers`
 
-A Duo subscription should identify the purchaser plus one assigned Homi account. Household should identify one shared Household and its covered members. Store purchase ownership and Homi entitlement membership are separate concepts.
+A Duo subscription should identify the purchaser plus one assigned Homi account. Household should identify one canonical `householdId` and its covered members. Store purchase ownership and Homi entitlement membership are separate concepts.
+
+The authoritative future entitlement record must be server-written. Firestore/Functions must enforce paid mutations independently of Flutter UI visibility.
+
+## Shared-data sequencing
+
+Before activating Household billing, migrate selected shared data domains onto the canonical Household with an explicit first-sync/merge strategy. Existing local data must not be silently overwritten or uploaded merely because somebody creates or joins a Household.
+
+Recommended implementation order:
+
+1. canonical Household identity/membership — implemented in 0.11 source;
+2. shared Household Tasks/Routines/Supplies/Home data plane with merge/conflict behavior;
+3. centralized capability/entitlement service;
+4. Google Play Billing client + backend verification;
+5. RTDN/Pub/Sub lifecycle handling;
+6. Internal Testing proof;
+7. paid enforcement.
 
 ## Annual pricing
 

@@ -9,14 +9,17 @@ Status markers: **DONE**, **VERIFY**, **OPEN**, **BLOCKER**.
 
 - **DONE (0.9.2)** Google Places dependency migrated to maintained `google_places_sdk_plus`; Windows dependency resolution succeeded.
 - **DONE (0.9.2)** Windows analyzer clean and 32 Flutter tests passed after the Places migration.
-- **VERIFY (0.10.0)** `flutter pub get` on Bruce's Windows toolchain.
-- **VERIFY (0.10.0)** `flutter analyze` clean.
-- **VERIFY (0.10.0)** all Flutter tests, including new commercial/emergency guardrails.
+- **DONE (0.10.0)** `flutter pub get` succeeded on Bruce's Windows toolchain.
+- **DONE (0.10.0 initial candidate)** `flutter test` passed 41/41 on `9ee7fe0e2d18f185e53b0ad210c703bdd1510c29`.
+- **VERIFY (0.10.0 corrected candidate)** `flutter analyze` clean after the emergency-region null-safety/import correction.
+- **VERIFY (0.10.0 corrected candidate)** rerun all 41+ Flutter tests on the exact corrected head before backend deployment.
 - **VERIFY** S25 Ultra launch/regression after 0.10.0.
 - **OPEN** fresh-install and returning-user paths.
 - **OPEN** background/resume/swipe-away/reopen/network-loss recovery.
 - **OPEN** keyboard/safe-area/Android navigation insets.
 - **OPEN** screen-off/several-hours/process recreation/reboot/Samsung power-saving tests.
+
+The first 0.10 analyzer run found only four client static-analysis findings in the new emergency-region code: one unused import, two nullable accesses caused by mutable-local promotion loss inside a sheet closure, and one redundant import. The source correction changes no backend/rules behavior. The local gate showed no tracked source drift; only established untracked local Android/assets/store/PSD/logcat material was present.
 
 ## Gate 2 — People/location/safety
 
@@ -136,8 +139,8 @@ Permanent package: `za.co.theconceptlab.homi`.
 
 ## Immediate sequence
 
-1. Pull 0.10.0 candidate on Windows.
-2. `flutter pub get`, `flutter analyze`, `flutter test`.
+1. Pull the corrected 0.10.0 candidate on Windows.
+2. Run `flutter analyze` and `flutter test` on the exact corrected head.
 3. If clean, run the governed Cloud Shell backend helper; it must pass the updated Firestore emulator gate before deploying rules/Functions.
 4. S25 Ultra device acceptance for emergency regions, Places, People and viewer cap.
 5. Then begin Shared Household + Google Play Billing/entitlement implementation.

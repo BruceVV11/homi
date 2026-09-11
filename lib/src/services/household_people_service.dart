@@ -9,9 +9,8 @@ import 'trusted_people_service.dart';
 /// accepted connection must also be a current member of the same canonical
 /// Household.
 class HouseholdPeopleService extends TrustedPeopleService {
-  HouseholdPeopleService({required bool firebaseReady})
-      : _householdService = HouseholdService(firebaseReady: firebaseReady),
-        super(firebaseReady: firebaseReady);
+  HouseholdPeopleService({required super.firebaseReady})
+      : _householdService = HouseholdService(firebaseReady: firebaseReady);
 
   final HouseholdService _householdService;
 

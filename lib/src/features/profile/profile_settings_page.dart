@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/google_provider_mark.dart';
+import 'household_settings_route.dart';
 
 class ProfileSettingsPage extends StatefulWidget {
   const ProfileSettingsPage({
@@ -137,6 +138,14 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _openHousehold() {
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const HouseholdSettingsRoute(),
+      ),
+    );
   }
 
   @override
@@ -289,6 +298,30 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                 ),
               ),
             ],
+            const SizedBox(height: 22),
+            Text('Household', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 10),
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 7,
+                ),
+                leading: const Icon(
+                  Icons.home_work_outlined,
+                  color: HomiColors.coral,
+                ),
+                title: const Text(
+                  'Shared Household',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                subtitle: const Text(
+                  'Create, join and manage the people who share this Homi Household.',
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _busy ? null : _openHousehold,
+              ),
+            ),
             if (password) ...[
               const SizedBox(height: 22),
               Text(

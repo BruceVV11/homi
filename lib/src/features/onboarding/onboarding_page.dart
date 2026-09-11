@@ -5,6 +5,7 @@ import '../../services/emergency_region_service.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/emergency_region_picker.dart';
 import '../../widgets/homi_brand.dart';
+import '../../widgets/homi_country_flag.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({
@@ -269,22 +270,22 @@ class _EmergencyStep extends StatelessWidget {
               padding: const EdgeInsets.all(17),
               child: Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: HomiColors.peach.withValues(alpha: 0.20),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      region?.isoCode ?? '--',
-                      style: const TextStyle(
-                        color: HomiColors.coral,
-                        fontWeight: FontWeight.w900,
+                  if (region == null)
+                    Container(
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: HomiColors.peach.withValues(alpha: 0.20),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                    ),
-                  ),
+                      child: const Icon(
+                        Icons.public_rounded,
+                        color: HomiColors.coral,
+                      ),
+                    )
+                  else
+                    HomiCountryFlag(isoCode: region.isoCode, size: 48),
                   const SizedBox(width: 13),
                   Expanded(
                     child: Column(

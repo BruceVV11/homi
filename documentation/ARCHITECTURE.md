@@ -1,7 +1,7 @@
 # Homi Architecture
 
 Date: 2026-09-11
-Current source candidate: **0.11.0+15**
+Current source candidate: **0.12.0+16**
 
 ## Permanent identifiers
 
@@ -22,7 +22,7 @@ The deleted project `homi-508000` is not part of Homi and must never be reused.
 - Android minimum SDK 24
 - SharedPreferences for version-tolerant local-first household records and local feature preferences
 - Firebase Authentication for optional identity and protected collaboration
-- Cloud Firestore for narrowly scoped shared state
+- Cloud Firestore for narrowly scoped shared state and canonical Household synchronization
 - Firebase Cloud Functions 2nd gen in `africa-south1`
 - Firebase Cloud Messaging for remote push delivery
 - Firebase App Check: debug provider during development, Play Integrity for release
@@ -44,22 +44,32 @@ People remains the approved **map-first** experience. Relationship editing, live
 
 ## Local-first household data
 
-These areas remain local-first unless a specific feature explicitly states otherwise:
+Homi keeps local persistence as the immediate device layer. Cloud synchronization is additive rather than a replacement for the local app.
+
+These remain device-local by definition unless a specific feature says otherwise:
 
 - onboarding/home name/type;
-- private one-off Tasks;
-- recurring Routines;
-- Supplies and quantities/status/expiry;
-- Home Things, maintenance/repair history and utility readings;
+- private **Me** one-off Tasks;
+- quick items;
 - cached current-device location;
 - local notification preferences/schedules;
 - local Home/Work arrival configuration, radius, recipients and arrival state.
+
+When a signed-in user belongs to a canonical Shared Household, 0.12 can additionally mirror these Household domains through the shared data plane:
+
+- recurring Routines;
+- Supplies and quantities/status/expiry;
+- Home Things;
+- maintenance/repair events;
+- utility readings.
+
+The controller still saves these records to SharedPreferences first. Cloud snapshot application persists the synchronized result locally without echoing it back as another cloud write.
 
 Model changes must preserve existing data through safe defaults/migrations rather than destructive resets.
 
 ## Canonical shared Household identity
 
-0.11.0 introduces the first real shared-Household identity layer. It deliberately separates **being a trusted person** from **being a member of one shared Household**.
+0.11.0 introduced the first real shared-Household identity layer. It deliberately separates **being a trusted person** from **being a member of one shared Household**.
 
 Canonical server-owned collections are:
 
@@ -68,13 +78,72 @@ Canonical server-owned collections are:
 - `householdMemberships/{uid}` — one-per-account pointer to the Household and role;
 - `householdInvites/{householdId}_{inviteeUid}` — pending invitation state.
 
-A Homi account can belong to at most one canonical Household at a time. The first implementation supports up to four occupied or reserved seats, matching the approved Homi+ Household contract. Inviting a person requires an existing accepted trusted-person connection; the invitee must accept separately. Connection acceptance does not silently join a Household.
+A Homi account can belong to at most one canonical Household at a time. The implementation supports up to four occupied or reserved seats, matching the approved Homi+ Household contract. Inviting a person requires an existing accepted trusted-person connection; the invitee must accept separately. Connection acceptance does not silently join a Household.
 
-Household mutations are App-Check-protected server callables. Clients can read only their own membership, a Household they currently belong to, that Household's member directory, and invitations they are entitled to see. Clients cannot manufacture membership, ownership or invitations directly in Firestore.
+Household identity mutations are App-Check-protected server callables. Clients can read only their own membership, a Household they currently belong to, that Household's member directory, and invitations they are entitled to see. Clients cannot manufacture membership, ownership or invitations directly in Firestore.
 
 The Household owner can rename the Household, invite connected people, cancel pending invitations, remove members, transfer ownership and delete an empty/sole-member Household. A non-owner can leave. Ownership transfer also rebinds pending invitation ownership to the new owner so management access does not become stale.
 
-The management UI is available from **Homi & account -> profile -> Shared Household**. It uses the existing local home name only as the default name when creating a new shared Household; creating or joining does not delete or replace local-first Home data.
+The management UI is available from **Homi & account -> profile -> Shared Household**. It uses the existing local home name only as the default name when creating a new shared Household.
+
+## 0.12 shared Household data plane
+
+The first synchronized Household records live at:
+
+`households/{householdId}/data/{domain--itemId}`
+
+The outer record envelope is:
+
+- `domain`
+- `itemId`
+- `payload`
+- `schemaVersion`
+- `updatedByUid`
+- `updatedAt`
+
+Supported 0.12 domains are `routine`, `supply`, `homeThing`, `homeEvent` and `utilityReading`.
+
+The document ID is deterministic and must equal `domain--itemId`. Firestore allows access only when the caller's `householdMemberships/{uid}` pointer references that Household **and** the server-owned Household `memberUids` still contains that UID. A forged/stale half of the membership relationship is insufficient.
+
+Create/update rules additionally require the reviewed domain, matching payload/item identity, schema version 1, authenticated `updatedByUid` and a server request-time timestamp.
+
+### First synchronization
+
+Homi does not infer that every record already on a device belongs to whatever Household the account joins next.
+
+If the current user is the owner, this device has never synchronized another Household, and an **authoritative non-cache** Firestore snapshot proves the new Household has no shared data, 0.12 imports the existing local Routines, Supplies and Home records once. This is the migration path from the pre-0.12 single-device model.
+
+Otherwise, local record IDs not already known in the current Household are classified as private legacy records. They stay on the device and are not silently uploaded. New records created after Household classification synchronize normally. A later explicit merge/import UX can promote private legacy records when the user deliberately chooses to do so.
+
+### Conflict behavior
+
+The data plane is record-based. Different IDs merge. If two devices edit the same record, the last Firestore write acknowledged by the server becomes the shared version and is then persisted by listening devices.
+
+Leaving/removal from a Household revokes cloud access but does not erase the local copy already stored on that phone.
+
+### Household deletion
+
+Deleting a Firestore document does not recursively delete its subcollections. `onHomiHouseholdDeletedDataCleanup` therefore removes nested Household data in bounded batches after the canonical Household parent is deleted. It also removes new shared Task documents carrying that Household ID.
+
+## People, Household scope and connection codes
+
+Connection, relationship label, canonical Household membership, current-location sharing, arrival-recipient selection and exact Home/Work visibility remain independent choices.
+
+A relationship label such as Partner, Friend or Roommate remains editable. The old People **Household / Friend** scope is no longer a user-controlled authorization switch. People displays Household only when the other UID is in the same canonical Household. The edit sheet keeps the type visible but disabled and directs membership changes to Shared Household settings.
+
+The protected `setTrustedPersonPreference` callable retains its deployed name for client compatibility but derives scope server-side. Caller-provided scope can no longer manufacture Household status.
+
+Each signed-in account has one reusable six-character Homi code. The populated People page keeps **My code** available alongside **Connect**, and code loading/error state is independent of the connections refresh so an identity failure cannot silently hide the code.
+
+People Firestore subscriptions now start immediately; cached GPS loading, passive location refresh and continuous-sharing resume happen in parallel rather than blocking the connection list.
+
+## Tasks
+
+Private **Me** Tasks remain local-only.
+
+Shared Tasks continue using `sharedTasks`, but the existing callable names `createSharedTask`, `toggleSharedTask` and `removeSharedTask` are overridden by canonical implementations. New shared Tasks derive `householdId` and `memberUids` from the creator's canonical Household. A People preference cannot manufacture task access or make a non-member assignable.
+
+The UI source for Household assignees is likewise canonical Household membership rather than `peoplePreferences.scope`.
 
 ## Current cloud collaboration
 
@@ -82,19 +151,18 @@ Homi currently shares narrowly defined collaboration state:
 
 - `users/{uid}` and device registrations;
 - Homi connection codes and accepted connections;
-- private relationship/scope preferences;
+- private relationship-label preferences;
 - canonical Household identity, member directory and invitations;
+- canonical shared Household Routines, Supplies and Home records;
 - specifically shared one-off Tasks;
 - owner-to-viewer location-share grants;
 - one latest location document per sender;
 - optional explicitly shared Home/Work places;
 - notification/developer-admin state and server rate limits.
 
-0.11.0 establishes the canonical Household that future paid synchronization can attach to. It does **not** falsely claim that recurring Routines, Supplies, all Home records or local history are already synchronized across Household devices. Those data-domain migrations are a later implementation layer and must include explicit merge/conflict behavior rather than silently overwriting local records.
+No canonical Household membership silently enables location sharing or exact Home/Work visibility.
 
 ## People, location and privacy
-
-Connection, relationship label, canonical Household membership, current-location sharing, arrival-recipient selection and exact Home/Work visibility remain independent choices.
 
 Live location uses one latest-state document at `locations/{uid}`. Homi does not create route history by default.
 
@@ -139,7 +207,7 @@ Approved first plan structure:
 - Free: R0, no continuous sender seat after billing enforcement activates;
 - Personal: R19.99/month, 1 sender seat;
 - Duo: R34.99/month, 2 sender seats under one payer;
-- Household: R49.99/month or R499.99/year, up to 4 canonical Household members plus the future fully synchronized Household product.
+- Household: R49.99/month or R499.99/year, up to 4 canonical Household members plus the synchronized Household product.
 
 Duo members do not need to live together. Household value is the shared household platform, not an arbitrary restriction on who can receive a location.
 
@@ -171,11 +239,13 @@ The catalog is source-controlled and must be release-reviewed against ITU-T E.12
 
 ## Authentication and protected mutations
 
-Homi supports email/password and Google sign-in. Sensitive sharing requires Auth + App Check; password-provider sensitive sharing additionally requires verified email.
+Homi supports email/password and Google sign-in. Sensitive sharing requires Auth + App Check where the operation uses a callable; password-provider sensitive callable sharing additionally requires verified email.
 
 `HomiCloudActions` is the typed client boundary for protected callable mutations. A stale `unauthenticated` response gets one forced Firebase ID token + App Check refresh and one retry. Raw backend codes must not reach the UI.
 
-Sensitive server mutations include connection lifecycle, relationship/scope, canonical Household membership/ownership/invitations, location-share grants, shared Tasks, hearts, arrival delivery, exact saved-place sharing, device registration, developer notifications and account deletion.
+Sensitive server mutations include connection lifecycle, relationship labels/canonical derived scope, canonical Household membership/ownership/invitations, location-share grants, shared Tasks, hearts, arrival delivery, exact saved-place sharing, device registration, developer notifications and account deletion.
+
+The 0.12 Household data plane uses authenticated Firestore offline-capable writes under the canonical Household rule boundary rather than a callable for each local-first record edit.
 
 ## Notifications
 
@@ -185,4 +255,6 @@ Operational notification preferences remain category-based. Arrival/People notif
 
 GitHub `main` is the tracked source of truth. `android/` remains intentionally local/untracked because Android/Firebase/signing configuration contains machine-specific or private values.
 
-A source change is not considered compiled/device-accepted until Bruce's Windows Flutter toolchain and S25 Ultra prove it. Backend/rules changes require the governed Node 22 / Firestore emulator / batched Functions deployment helper after the Flutter gate passes.
+0.12 currently exists only on `homi-0.12-shared-data-plane` and is not production state until governed validation/merge/deployment completes.
+
+A source change is not considered compiled/device-accepted until Bruce's Windows Flutter toolchain and S25 Ultra prove it. Backend/rules changes require the governed Node 22 / Firestore emulator / batched Functions deployment helper after the Flutter gate passes. The 0.12 backend source surface is governed at exactly **36** Function exports.

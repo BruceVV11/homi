@@ -48,7 +48,7 @@ The code directory is client-inaccessible. Six-character codes are claimed trans
 
 Connection, Household/Friend scope, current-location sharing, arrival-recipient selection and precise saved-place visibility are distinct permissions.
 
-Changing Household→Friend removes household Task-derived membership. Removing a connection removes location-share/preference/heart metadata and shared Task-derived access. The replacement `onTrustedConnectionDeleted` trigger now also strips the disconnected UID from any `sharedPlaces` Home/Work viewer lists so a future reconnect cannot revive an old precise-place grant.
+Changing Household→Friend removes household Task-derived membership. Removing a connection removes location-share/preference/heart metadata and shared Task-derived access. `onTrustedConnectionDeleted` also strips the disconnected UID from any `sharedPlaces` Home/Work viewer lists so a future reconnect cannot revive an old precise-place grant.
 
 The stale historical HTTPS `onConnectionDeleted` export must not be restored.
 
@@ -70,6 +70,8 @@ The owner's full arrival configuration remains local-first and includes Home/Wor
 
 Google Places autocomplete is only a setup source. The app fetches the minimal Place ID/address/location fields needed for Homi. The private Android-restricted Places credential is provided outside source and must not be logged/committed.
 
+The current Flutter client uses maintained `google_places_sdk_plus 1.1.0`, which keeps native Android Places SDK use. This replaced the original plugin after its published Android implementation failed compilation and its advertised replacement proved unavailable. The credential model remains Android package/SHA restricted.
+
 `sendArrivalCheckIn` remains App-Check/auth protected and:
 
 - requires verified email for password-provider accounts;
@@ -84,7 +86,7 @@ Google Places autocomplete is only a setup source. The app fetches the minimal P
 
 ## Exact Home/Work sharing
 
-0.9.2 introduces the optional server-controlled collection:
+0.9.2 uses the optional server-controlled collection:
 
 `sharedPlaces/{ownerUid}/places/{home|work}`
 
@@ -130,7 +132,7 @@ Emergency shortcuts use external `tel:` handoff only. Homi does not request dire
 
 ## Notifications and abuse/cost controls
 
-Existing server limits remain, including People heart cooldowns, arrival limits, connection attempt limits, shared Task limits, developer campaign limits and bounded Function instances. New precise-place mutation limits are 120/hour and 400/day per owner.
+Existing server limits remain, including People heart cooldowns, arrival limits, connection attempt limits, shared Task limits, developer campaign limits and bounded Function instances. Precise-place mutation limits are 120/hour and 400/day per owner.
 
 Invalid push tokens are disabled. `serverRateLimits` remains server-only.
 
@@ -150,11 +152,11 @@ Cloud Functions run as:
 
 The runtime identity must not receive Owner/Editor. Instance caps remain bounded with zero warm minimum where configured.
 
-## Automated security gate
+## Automated security gate — proven for 0.9.2
 
 `bash scripts/test-firestore-security.sh` runs Firestore rules in the emulator and blocks governed deployment on failure.
 
-0.9.2 expands the suite to assert that shared Home/Work:
+The 0.9.2 suite asserts that shared Home/Work:
 
 - is owner-readable;
 - is denied to a selected viewer without an accepted connection;
@@ -163,25 +165,27 @@ The runtime identity must not receive Owner/Editor. Instance caps remain bounded
 - remains denied to an unrelated account;
 - cannot be directly created/updated/deleted by clients.
 
-The actual expanded pass count must be recorded only after Bruce's Cloud Shell run proves it.
+Bruce's governed Cloud Shell run on 2026-09-11 passed **13/13 tests** before deploying the rules and Functions. The same run deployed all 24 Functions and created `setSharedArrivalPlace` and `onHomiUserSharedPlacesDeleted`, finishing with `PASS` / `Homi backend deployment completed.`
+
+The later Google Places Flutter dependency migration is client-only and requires no repeat backend/security deployment.
 
 ## Data deletion
 
-`deleteHomiAccountData` remains App-Check protected, rate-limited and recent-auth protected. Owned precise Home/Work cloud copies are removed by the new server cleanup trigger when the user document is deleted.
+`deleteHomiAccountData` remains App-Check protected, rate-limited and recent-auth protected. Owned precise Home/Work cloud copies are removed by the server cleanup trigger when the user document is deleted.
 
 **Erase data from this phone** clears local arrival settings and attempts to clear owned exact-place cloud copies. If the cloud is temporarily unreachable, a non-sensitive local pending-clear marker is retained for the next signed-in session. Firestore authorization still requires the connection and active current-location share in the meantime.
 
 An external account-deletion web resource remains required before Play production submission.
 
-## Validation gates for 0.9.2
+## Current validation gates for 0.9.2
 
-Before treating 0.9.2 as accepted:
+Backend security/deployment is complete. Before treating 0.9.2 as device-accepted:
 
-1. `flutter pub get`, `flutter analyze` and `flutter test` on Bruce's Windows toolchain.
-2. Governed backend helper after Flutter validation; it must syntax-check Functions and pass the expanded Firestore emulator suite before deploying rules/new Functions.
-3. Configure the existing private Android-restricted Places key for the debug run without committing it.
-4. S25 Ultra regression: People auth/recovery, map SOS, Google address autocomplete, check-in toggle UI, recipient photos, self Home/Work details.
+1. Resolve the maintained `google_places_sdk_plus 1.1.0` dependency graph on Bruce's Windows Flutter 3.41.5 / Dart 3.11.3 toolchain and regenerate `pubspec.lock`.
+2. Prove `flutter analyze` and `flutter test` remain green after that client migration.
+3. Configure the existing private Android-restricted Places key for the debug run without committing or exposing it.
+4. S25 Ultra regression: People auth/recovery, map SOS, Google address autocomplete, check-in toggle UI, recipient photos and self Home/Work details.
 5. Second-account/device proof: precise-place grant, no-grant denial, location-share-off denial, disconnect revocation and arrival delivery.
 6. Later production: Play Integrity, Firestore enforcement after metrics, background-location policy/evidence, cloud alerts, legal URLs/Data Safety and production signing.
 
-Never weaken collection-wide rules merely to resolve one failing operation. Fix the specific contract, rerun the security gate, then deploy.
+Never weaken collection-wide rules merely to resolve one failing operation. Fix the specific contract, rerun the security gate only when server/rule source actually changes, then deploy.

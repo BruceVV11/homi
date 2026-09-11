@@ -114,6 +114,8 @@ Implemented source contracts:
 - **DONE in source** deterministic record IDs and versioned envelope.
 - **DONE in source** parent Household deletion has a bounded cleanup trigger for nested shared data and canonical new shared Tasks.
 - **DONE in source** shared Task creation/toggle/removal are bound to canonical Household membership while retaining their deployed callable names.
+- **DONE in source** `onHouseholdTaskMembershipChanged` keeps new 0.12 shared Task `memberUids` aligned with current Household membership and strips removed assignee/completion UIDs.
+- **DONE in source** pre-0.12 Tasks without `householdId` are not silently widened to a newer Household audience.
 
 Validation required:
 
@@ -140,8 +142,9 @@ Established backend identity:
 - **DONE in source** `setTrustedPersonPreference` keeps the public name but derives Household/Friend scope server-side.
 - **DONE in source** `createSharedTask`, `toggleSharedTask`, `removeSharedTask` keep public names but use canonical Household membership.
 - **DONE in source** `onHomiHouseholdDeletedDataCleanup` adds bounded orphan-data cleanup.
+- **DONE in source** `onHouseholdTaskMembershipChanged` reconciles new canonical shared Task membership after Household changes.
 - **DONE in source** deployment helper source-completeness list updated.
-- **DONE in source** exact Functions export guard changed from 35 to **36** because only the cleanup trigger is a new exported name; the preference/task modules override existing names.
+- **DONE in source** exact Functions export guard changed from 35 to **37**: the two new trigger names are cleanup + Task-membership sync; the preference/task modules override existing callable names.
 - **DONE static only** new standalone JavaScript modules pass Node 22 syntax checks. This is not a Functions runtime or emulator pass.
 
 Firestore 0.12 boundary:
@@ -155,10 +158,10 @@ Firestore 0.12 boundary:
 Governed backend gate still required before deployment:
 
 - **VERIFY** Node 22 dependency install/lint.
-- **VERIFY** exactly **36** entrypoint exports.
+- **VERIFY** exactly **37** entrypoint exports.
 - **VERIFY** Firestore emulator suite expected **21/21**: original 13 + eight Household tests.
 - **VERIFY** Firestore rules/index deploy.
-- **VERIFY** all 36 Functions deploy in controlled batches.
+- **VERIFY** all 37 Functions deploy in controlled batches.
 - **VERIFY** final exact-SHA/worktree status ends PASS.
 - **BLOCKER before public release** Play Integrity App Check and deliberately staged Firestore App Check enforcement after valid-client metrics.
 - **BLOCKER before public release** Cloud Billing budgets/alerts/spend controls.
@@ -177,7 +180,7 @@ Governed backend gate still required before deployment:
 - **DONE in source** no emergency-dispatch/crash-detection/proof-of-safety claims.
 - **DONE in source** Household membership does not silently enable location or exact-place sharing.
 - **DONE in 0.12 source** local-only mode prevents the new Household data sync from activating from a cached Firebase identity.
-- **OPEN** update final public notices/Data Safety to reflect optional canonical shared Household Routines/Supplies/Home records.
+- **DONE in source draft** privacy/account-deletion documentation now distinguishes synchronized Household records from private/device-only data and records the non-retroactive local-copy limitation.
 - **BLOCKER** public Privacy Policy URL.
 - **BLOCKER** public Terms URL.
 - **BLOCKER** external account-deletion page/process.
@@ -224,5 +227,5 @@ Permanent package: `za.co.theconceptlab.homi`.
 2. Record the exact final branch SHA and open/refresh the focused PR against `main`.
 3. Bruce pulls that exact candidate on Windows and runs one Flutter validation gate: dependency resolution, analyzer and full tests.
 4. If green, run the candidate on the S25 Ultra and check People immediate load, permanent My code access, canonical disabled connection type, preserved local data and normal Home/Routines/Supplies behavior.
-5. Only after the exact app candidate passes, run the governed Node 22 / 36-export / expected-21-test Firebase gate and deploy the affected backend/rules surfaces from the accepted exact SHA.
+5. Only after the exact app candidate passes, run the governed Node 22 / 37-export / expected-21-test Firebase gate and deploy the affected backend/rules surfaces from the accepted exact SHA.
 6. After 0.12 acceptance, build the centralized capability/entitlement layer, then Google Play Billing + server verification + RTDN/Pub/Sub before any paid enforcement.

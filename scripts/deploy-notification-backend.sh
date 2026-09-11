@@ -7,6 +7,7 @@ FUNCTION_REGION="africa-south1"
 LEGACY_CONNECTION_DELETE_FUNCTION="onConnectionDeleted"
 REPLACEMENT_CONNECTION_DELETE_FUNCTION="onTrustedConnectionDeleted"
 FUNCTION_BATCH_SIZE=5
+EXPECTED_FUNCTION_COUNT=24
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FUNCTIONS_DIR="${REPO_ROOT}/functions"
@@ -74,29 +75,43 @@ run_firebase() {
   fi
 }
 
+FUNCTION_NAMES=()
+load_function_exports() {
+  local function_name
+
+  mapfile -t FUNCTION_NAMES < <(
+    node -e 'const exported = require("./functions/entrypoint.js"); Object.keys(exported).sort().forEach((name) => console.log(name));'
+  )
+
+  if [ "${#FUNCTION_NAMES[@]}" -ne "${EXPECTED_FUNCTION_COUNT}" ]; then
+    echo "Expected ${EXPECTED_FUNCTION_COUNT} Homi Function exports; found ${#FUNCTION_NAMES[@]}. Refusing to deploy." >&2
+    exit 1
+  fi
+
+  for function_name in "${FUNCTION_NAMES[@]}"; do
+    if [[ ! "${function_name}" =~ ^[A-Za-z0-9_-]+$ ]]; then
+      echo "Unexpected Function export name '${function_name}'; refusing to deploy." >&2
+      exit 1
+    fi
+  done
+
+  echo "==> Verified ${#FUNCTION_NAMES[@]} Homi Function exports"
+  printf '    %s\n' "${FUNCTION_NAMES[@]}"
+}
+
 deploy_function_batches() {
-  local -a function_names=()
   local -a batch=()
   local function_name
   local selector
   local batch_number=0
 
-  mapfile -t function_names < <(
-    node -e 'const exported = require("./functions/entrypoint.js"); Object.keys(exported).sort().forEach((name) => console.log(name));'
-  )
-
-  if [ "${#function_names[@]}" -eq 0 ]; then
-    echo "No Homi Functions exports were found; refusing to deploy." >&2
+  if [ "${#FUNCTION_NAMES[@]}" -ne "${EXPECTED_FUNCTION_COUNT}" ]; then
+    echo "Homi Function export preflight is missing or stale; refusing to deploy." >&2
     exit 1
   fi
 
-  echo "==> Deploying ${#function_names[@]} Homi Functions in batches of ${FUNCTION_BATCH_SIZE}"
-  for function_name in "${function_names[@]}"; do
-    if [[ ! "${function_name}" =~ ^[A-Za-z0-9_-]+$ ]]; then
-      echo "Unexpected Function export name '${function_name}'; refusing to deploy." >&2
-      exit 1
-    fi
-
+  echo "==> Deploying ${#FUNCTION_NAMES[@]} Homi Functions in batches of ${FUNCTION_BATCH_SIZE}"
+  for function_name in "${FUNCTION_NAMES[@]}"; do
     batch+=("functions:${function_name}")
     if [ "${#batch[@]}" -ge "${FUNCTION_BATCH_SIZE}" ]; then
       batch_number=$((batch_number + 1))
@@ -142,6 +157,12 @@ npm ci \
   --no-audit \
   --no-fund
 npm run lint --prefix functions
+
+# Load and validate the exact export surface only after dependencies exist, but
+# before security tests or any Firebase deployment begins. This prevents a
+# Cloud Shell with a clean/disposable node_modules directory from failing its
+# preflight merely because firebase-functions has not been installed yet.
+load_function_exports
 
 if [ -f scripts/test-firestore-security.sh ]; then
   echo "==> Running Homi Firestore security gate"

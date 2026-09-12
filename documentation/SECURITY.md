@@ -1,6 +1,6 @@
 # Homi security architecture
 
-Date: 2026-09-11
+Date: 2026-09-12
 Current source candidate: `0.12.0+16`
 Development branch: `homi-0.12-shared-data-plane`
 
@@ -25,7 +25,7 @@ Homi handles trusted relationships, device push tokens, shared Household records
 
 Sensitive collaboration writes continue to use App-Check-protected callable Functions for:
 
-- identity/code issuance;
+- identity/code issuance or repair;
 - connection lifecycle;
 - relationship-label updates;
 - canonical Household membership/ownership/invitations;
@@ -37,6 +37,8 @@ Sensitive collaboration writes continue to use App-Check-protected callable Func
 - developer campaigns;
 - device registration; and
 - account deletion.
+
+Reading an already-issued Homi code is not a sensitive mutation. `users/{uid}` is self-readable under Firestore rules, and the server writes the user's valid `homiCode` plus its lookup index atomically when provisioning identity. 0.12 therefore reads that established self profile first for display and only falls back to the protected `ensureHomiIdentity` callable when the profile is new/incomplete or needs repair. This prevents a transient Auth/App Check callable-proof problem from unnecessarily hiding a code the account already owns without weakening code issuance or connection lookup security.
 
 0.12 keeps the historic callable name `setTrustedPersonPreference`, but the server no longer trusts caller-supplied Household/Friend scope. The callable derives `household` only when both accounts currently share the same canonical Household; otherwise it stores `friend`.
 
@@ -122,7 +124,7 @@ The new callable implementation also verifies canonical Household access before 
 
 `onHouseholdTaskMembershipChanged` keeps new Tasks carrying the canonical `householdId` aligned when the Household member list changes. Removed assignee UIDs are cleared, and removed completion UIDs are stripped. This prevents the authorization list on a new shared Task from becoming stale merely because membership changed after task creation.
 
-Pre-0.12 Tasks without `householdId` are deliberately not broadened by this trigger. Automatically adding a newer Household audience to a task that was originally shared under the older preference-era model would itself create a privacy regression.
+Pre-0.12 Tasks are governed by the deployment migration. A safely mappable legacy Task receives the creator's current canonical Household and only the intersection of its historical recipients and current members. It is marked `audienceVersion: 0`, so the canonical audience synchronizer does not widen it to newer members. Unmappable Tasks remain stored but fail closed under the 0.12 read rule.
 
 `sharedTasks` remains a separate compatibility collection in 0.12 rather than being destructively migrated into the generic data plane during the same release.
 
@@ -132,7 +134,7 @@ Firestore parent deletion does not recursively delete subcollections. 0.12 adds 
 
 The trigger deletes nested `data` documents in bounded batches and removes new shared Tasks that carry the deleted `householdId`. This prevents an intentionally deleted Household from leaving unreachable synchronized data indefinitely.
 
-The Functions export surface is therefore exactly **37** in the 0.12 deployment contract: one new Household-data cleanup trigger plus one new Task-membership synchronizer. The preference/task implementation modules override existing callable names rather than adding further public names.
+The Functions export surface is exactly **37** in the 0.12 deployment contract: one new Household-data cleanup trigger plus one new Task-membership synchronizer. The preference/task implementation modules override existing callable names rather than adding further public names.
 
 ## Continuous-location abuse/cost controls
 
@@ -165,7 +167,9 @@ Canonical Household membership does **not** satisfy or replace these location pe
 
 `PeopleHubPage` recreates auth-scoped People state when Firebase identity changes/restores. `HomiCloudActions` retries one `unauthenticated` protected call after forced Firebase Auth + App Check refresh, then surfaces product language rather than raw codes.
 
-0.12 separates Homi-code provisioning from the connection stream so a temporary identity-code error cannot silently hide the existing People list, and a successful People refresh cannot erase the separate code error state.
+0.12 separates Homi-code display from mandatory callable provisioning. The client first attempts the signed-in user's permitted `users/{uid}` profile read and reuses a valid established code. Only a missing/invalid profile code needs the protected provisioning fallback. Connection streams remain independent, so identity-code errors cannot hide trusted People.
+
+This is a usability/recovery path, not a trust-boundary change: another account still cannot read `users/{uid}`, clients still cannot write profile/code records directly, and connecting with a code still uses the protected server lookup/mutation path.
 
 ## Emergency-region safety
 
@@ -190,11 +194,15 @@ Permanent backend identity remains:
 
 `scripts/test-firestore-security.sh` runs the Firestore emulator security suite serially.
 
-For 0.12 the expected suite is **21 tests** once executed: the original 13 server-boundary tests plus eight Household tests. The Household suite now covers identity/invite boundaries as well as valid member data access, outsider denial, deterministic record identity, forged actor/domain denial and the two-sided membership requirement.
+For the final 0.12 candidate the expected suite is **23 tests**:
 
-The governed Functions helper requires Node 22, the immutable project number, exact source files, dependency lint and exactly **37** exports before it reaches any deployment. Firestore security tests run before Firestore/Functions deployment.
+- 13 established server-boundary tests;
+- 8 canonical Household identity/data-plane tests;
+- 2 canonical shared-Task query/fail-closed tests.
 
-The standalone new JavaScript modules have been syntax-checked under Node 22 during source development. This is not a substitute for the governed dependency/export/emulator gate.
+The governed Functions helper requires Node 22, the immutable project number, exact source files, dependency lint and exactly **37** exports before it reaches deployment. The legacy shared-Task migration is dry-run/apply/stability governed, and Firestore security tests must pass before the stricter rules/indexes and remaining Functions deployment continue.
+
+Standalone new JavaScript modules have received source-level Node 22 syntax checks where recorded. This is not a substitute for the governed dependency/export/emulator gate.
 
 Do not weaken collection-wide rules to make a client test pass. Fix the intended contract, inspect dependent query behavior, rerun the exact security gate, then deploy.
 
@@ -210,9 +218,9 @@ Privacy, current-location revoke, exact-place revoke, local erase and account de
 
 ## Production gates still required
 
-- exact 0.12 Windows analyzer/full Flutter test pass;
-- S25 Ultra acceptance of the affected People/Household/data flows;
-- governed Node 22 / **37-export** / expected **21-test** backend pass before 0.12 deployment;
+- final exact 0.12 Windows analyzer/full Flutter test pass after the 2026-09-12 device-feedback source changes;
+- S25 Ultra acceptance of the affected People/Household/data flows, including established Homi-code display and graceful Add-person empty state;
+- governed Node 22 / **37-export** / **23-test** backend pass before 0.12 deployment;
 - permanent release signing / Play App Signing fingerprints;
 - Play-installed Google Sign-In;
 - production Maps/Places key restrictions;

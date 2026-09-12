@@ -14,7 +14,7 @@ void main() {
     expect(entitlement.maxTrustedLiveViewers, 0);
   });
 
-  test('active grace and canceled paid-term states keep capabilities', () {
+  test('active grace and unexpired canceled states keep capabilities', () {
     final active = HomiEntitlement.fromMap(<String, dynamic>{
       'plan': 'household',
       'state': 'active',
@@ -26,6 +26,7 @@ void main() {
     final canceled = HomiEntitlement.fromMap(<String, dynamic>{
       'plan': 'household',
       'state': 'canceled',
+      'validUntil': '2099-01-01T00:00:00Z',
       'continuousLocationSender': true,
       'sharedHousehold': true,
       'maxTrustedLiveViewers': 5,
@@ -46,6 +47,22 @@ void main() {
     expect(canceled.canUseSharedHousehold, isTrue);
     expect(held.canSendContinuousLocation, isFalse);
     expect(held.canUseSharedHousehold, isFalse);
+  });
+
+  test('stale canceled paid term fails closed even before RTDN refresh', () {
+    final entitlement = HomiEntitlement.fromMap(<String, dynamic>{
+      'plan': 'household',
+      'state': 'canceled',
+      'validUntil': '2020-01-01T00:00:00Z',
+      'continuousLocationSender': true,
+      'sharedHousehold': true,
+      'maxTrustedLiveViewers': 5,
+      'householdMemberLimit': 4,
+    });
+
+    expect(entitlement.state, HomiBillingState.expired);
+    expect(entitlement.canSendContinuousLocation, isFalse);
+    expect(entitlement.canUseSharedHousehold, isFalse);
   });
 
   test('Play catalog is intentionally disabled until durable IDs are verified', () {

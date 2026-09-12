@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_android/billing_client_wrappers.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 
 import '../domain/homi_billing_catalog.dart';
@@ -151,10 +152,6 @@ class HomiBillingService {
       final basePlanId = _basePlanId(details);
       if (basePlanId == null) continue;
 
-      // Homi may deliberately use one Google Play subscription product with
-      // separate base plans for Personal, Duo and Household. Match the base
-      // plan as well as the product ID so the same product can safely map to
-      // different Homi entitlements.
       final productRef = catalog.products
           .where(
             (item) =>
@@ -198,12 +195,50 @@ class HomiBillingService {
   Future<bool> purchase(HomiStoreOffer offer) async {
     final user = _requireUser();
     start();
+
+    // Personal, Duo and Household have different benefits, so they are separate
+    // Play subscription products. If Play reports an existing active Homi+
+    // purchase, pass it as the old subscription so this becomes a governed
+    // upgrade/downgrade instead of accidentally selling a second concurrent
+    // Homi+ subscription. Time proration applies the new tier immediately and
+    // credits remaining value from the old tier.
+    final oldSubscription = await _currentHomiSubscription(user.uid);
     final parameter = GooglePlayPurchaseParam(
       productDetails: offer.productDetails,
       applicationUserName: obfuscatedAccountId(user.uid),
       offerToken: offer.offerToken,
+      changeSubscriptionParam: oldSubscription == null
+          ? null
+          : ChangeSubscriptionParam(
+              oldPurchaseDetails: oldSubscription,
+              replacementMode: ReplacementMode.withTimeProration,
+            ),
     );
     return _inAppPurchase.buyNonConsumable(purchaseParam: parameter);
+  }
+
+  Future<GooglePlayPurchaseDetails?> _currentHomiSubscription(String uid) async {
+    final android = _inAppPurchase
+        .getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
+    final response = await android.queryPastPurchases(
+      applicationUserName: obfuscatedAccountId(uid),
+    );
+    if (response.error != null) {
+      throw StateError(
+        response.error!.message.isEmpty
+            ? 'Google Play could not check your current Homi+ subscription.'
+            : response.error!.message,
+      );
+    }
+
+    for (final purchase in response.pastPurchases) {
+      if (!catalog.productIds.contains(purchase.productID)) continue;
+      if (purchase.status == PurchaseStatus.purchased ||
+          purchase.status == PurchaseStatus.restored) {
+        return purchase;
+      }
+    }
+    return null;
   }
 
   Future<void> restorePurchases() async {

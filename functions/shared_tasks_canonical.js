@@ -1,11 +1,15 @@
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore");
+const {
+  CANONICAL_AUDIENCE_VERSION,
+  canReopenTask,
+  canRemoveBeforeHistoryExpires,
+} = require("./household_task_policy");
 
 const db = getFirestore();
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const COMPLETED_TASK_RETENTION_MS = 48 * HOUR_MS;
-const CANONICAL_AUDIENCE_VERSION = 1;
 
 function requireVerifiedCloudAccount(request) {
   if (!request.auth) {
@@ -254,9 +258,7 @@ exports.toggleSharedTask = onCall(
       const isHouseholdOwner = household.data.ownerUid === auth.uid;
 
       if (data.completedAt) {
-        if (data.createdByUid !== auth.uid &&
-            data.completedByUid !== auth.uid &&
-            !isHouseholdOwner) {
+        if (!canReopenTask(data, auth.uid, isHouseholdOwner)) {
           throw new HttpsError(
               "permission-denied",
               "Only the person who completed this task, its creator, or the Household owner can reopen it.",
@@ -315,8 +317,7 @@ exports.removeSharedTask = onCall(
       const purgeAtMs = data.purgeAt &&
           typeof data.purgeAt.toMillis === "function" ?
         data.purgeAt.toMillis() : 0;
-      if (data.createdByUid !== auth.uid &&
-          !isHouseholdOwner &&
+      if (!canRemoveBeforeHistoryExpires(data, auth.uid, isHouseholdOwner) &&
           (!purgeAtMs || purgeAtMs > Date.now())) {
         throw new HttpsError(
             "permission-denied",

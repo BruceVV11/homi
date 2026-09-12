@@ -60,6 +60,12 @@ class HomiPlayBillingCatalog {
     ),
   );
 
+  // This is the one client-side switch used by the billing UI. It deliberately
+  // remains disabled until the exact Play product/base-plan IDs have been
+  // created and checked in Play Console. Once verified, replace this alias with
+  // the source-controlled live catalog rather than scattering IDs through UI.
+  static const current = unconfigured;
+
   List<HomiPlayProductRef> get products => <HomiPlayProductRef>[
         personal,
         duo,

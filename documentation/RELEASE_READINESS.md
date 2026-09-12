@@ -132,7 +132,7 @@ Approved contract:
 - Play-localized price display once products exist;
 - explicit purchase confirmation and Play subscription-management handoff;
 - Google Play cross-product subscription replacement for Homi+ tier changes;
-- server-written entitlement reader that fails closed to Free and treats a stale canceled entitlement as expired after its known paid term;
+- server-written entitlement reader that fails closed to Free and treats active/grace/canceled state as expired when its verified paid-through timestamp is missing or no longer in the future;
 - Duo seat management UI/service;
 - client never grants itself entitlement from local purchase state.
 
@@ -161,15 +161,20 @@ Personal, Duo and Household are different subscription benefits; their base plan
 - current canonical Household derives Household coverage;
 - accepted trusted connection derives the Duo second seat;
 - Duo cooldown cannot be reset by unassign/disconnect;
-- paid-term expiry normalization prevents known canceled/stale paid state from remaining entitled after its verified term;
+- paid-term expiry normalization requires a future verified paid-through timestamp before active/grace/canceled state can grant capability;
 - Play `linkedPurchaseToken` lineage is required before a new token can replace another still-entitled canonical purchase;
 - an already-superseded token cannot retake canonical authority;
-- Homi account deletion removes Homi billing mappings/coverage without pretending to cancel Google Play billing.
+- account deletion cleans every historical purchaser-linked Homi billing record, strips raw stored purchase tokens/Homi purchaser identity, removes coverage/account links, and does not pretend to cancel Google Play billing;
+- pure policy source preflight has a fail-closed declared-test-count guard for the exact expected suite.
 
-0.13 backend expected gates:
+Source-level evidence already obtained in this development pass:
 
-- **VERIFY** Node 22 dependency install/lint;
-- **VERIFY** pure Functions policy suite **16/16**: 5 shared-task + 11 billing;
+- **DONE source-only** Node 22 pure Functions policy run: **16/16 passed** (5 shared-task + 11 billing). This does **not** replace the governed dependency-loaded Functions/export/emulator gate.
+
+0.13 backend expected governed gates:
+
+- **VERIFY** Node 22 dependency install/lint, including the exact current `billing.js` source;
+- **VERIFY** pure Functions policy suite **16/16** under the governed dependency-loaded worker;
 - **VERIFY** exact **43** Function exports;
 - **VERIFY** Firestore emulator **25/25**: existing 23 + 2 billing boundary tests;
 - **BLOCKER** source-controlled Play catalog IDs are currently blank;
@@ -188,6 +193,7 @@ Internal Testing must prove:
 - server acknowledgement succeeds within the Play requirement;
 - entitlement appears after verification and survives reinstall/restore;
 - voluntary cancellation retains access through the paid term then expires;
+- active/grace/canceled state with missing or elapsed verified paid-through time fails closed;
 - grace period keeps access while hold/paused/expired states do not;
 - RTDN causes authoritative state refresh;
 - Personal/Duo/Household upgrades and downgrades use Play replacement and produce the expected linked-token lineage;
@@ -197,7 +203,7 @@ Internal Testing must prove:
 - Duo assign/unassign/reassign cooldown behavior;
 - Household join/remove/leave causes coverage reconciliation;
 - an account with multiple coverage sources retains the surviving source when one expires;
-- Homi account deletion does not misrepresent Google Play subscription cancellation.
+- Homi account deletion severs all Homi-side historical billing mappings/tokens while leaving Google Play cancellation as a separate user action.
 
 **BLOCKER** until all above have real Internal Testing evidence.
 
@@ -211,19 +217,19 @@ Do not gate continuous location or Shared Household mutation merely because the 
 
 Implemented:
 
-- email/password + Google sign-in;
-- verification/reset/provider-aware controls;
-- recent reauthentication for account deletion;
-- local erase/sign-out/account deletion are separate;
-- canonical Household deletion/transfer rules;
-- 0.13 billing cleanup backstops are present in source.
+- **DONE** email/password + Google sign-in;
+- **DONE** verification/reset/provider-aware controls;
+- **DONE** recent reauthentication for account deletion;
+- **DONE** local erase/sign-out/account deletion are separate;
+- **DONE** canonical Household deletion/transfer rules;
+- **DONE in 0.13 source / VERIFY UX** the account-deletion card and both destructive confirmations explicitly say deleting Homi does **not** cancel a Google Play Homi+ subscription and direct the user to **Profile settings → Homi+ → Plans & billing → Manage subscription** first when they also want billing canceled;
+- **DONE in 0.13 source / VERIFY governed runtime** billing cleanup backstops cover all historical purchaser-linked records rather than only the current active token.
 
 Production blockers:
 
 - **BLOCKER** live Privacy Policy URL;
 - **BLOCKER** live Terms URL;
 - **BLOCKER** external account-deletion page/process;
-- **BLOCKER** account-deletion UI must clearly state that deleting Homi does not cancel a Google Play subscription and give a Play management path;
 - **OPEN** POPIA/privacy wording professional review.
 
 ## Gate 10 — Android/store production readiness
@@ -251,13 +257,12 @@ Permanent package: `za.co.theconceptlab.homi`.
 
 ## Immediate sequence
 
-1. Finish 0.13 repository/document/security preflight without asking Bruce to use a rerun as diagnosis.
-2. Resolve/update the tracked `pubspec.lock` from Bruce's real Flutter 3.41.5 toolchain because the Play Billing dependencies are new.
-3. Close the final exact 0.12 validation/merge/governed Firebase deployment before any billing deployment mutates production.
-4. Create the three real Homi+ subscription products/base plans in Play Console and record the exact permanent IDs.
-5. Populate the governed client/server catalogs with those IDs; configure Android Publisher API access and RTDN Pub/Sub.
-6. Run exact-head 0.13 Windows/Node/security gates, then S25 Ultra regression.
-7. Merge/deploy 0.13 billing backend only after provider prerequisites are present.
-8. Upload/store-install the Internal Testing AAB and prove purchase, cross-tier replacement and the complete billing lifecycle.
-9. Activate paid enforcement only after that proof.
-10. Close the remaining signing/App Check/legal/background-location/Data Safety/store-listing gates, then move to production rollout.
+1. Resolve/update the tracked `pubspec.lock` from Bruce's real Flutter 3.41.5 toolchain because the Play Billing dependencies are new; this is the next unresolved source-validation dependency, not a diagnostic rerun.
+2. Close the final exact 0.12 validation/merge/governed Firebase deployment before any billing deployment mutates production.
+3. Create the three real Homi+ subscription products/base plans in Play Console and record the exact permanent IDs.
+4. Populate the governed client/server catalogs with those IDs; configure Android Publisher API access and RTDN Pub/Sub.
+5. Run exact-head 0.13 Windows/Node/security gates, then S25 Ultra regression.
+6. Merge/deploy 0.13 billing backend only after provider prerequisites are present.
+7. Upload/store-install the Internal Testing AAB and prove purchase, cross-tier replacement and the complete billing lifecycle.
+8. Activate paid enforcement only after that proof.
+9. Close the remaining signing/App Check/legal/background-location/Data Safety/store-listing gates, then move to production rollout.

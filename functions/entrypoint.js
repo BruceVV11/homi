@@ -13,6 +13,10 @@ const trustedPeoplePreferences = require("./trusted_people_preferences");
 const sharedTasksCanonical = require("./shared_tasks_canonical");
 const householdDataCleanup = require("./household_data_cleanup");
 const householdTaskMembershipSync = require("./household_task_membership_sync");
+// Public Play product/base-plan IDs are exact release infrastructure. Load the
+// source-controlled catalog before billing.js reads its environment-shaped
+// policy input. Blank IDs keep billing fail-closed until Play Console setup.
+require("./billing_catalog");
 const billing = require("./billing");
 
 // A stale deployed HTTPS function already owned the historical

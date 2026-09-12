@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   normalizePlayState,
+  effectivePlayState,
   grantsPaidAccess,
   entitlementCapabilities,
   projectEntitlementSources,
@@ -11,7 +12,7 @@ const {
   productFor,
 } = require("./billing_policy");
 
-test("only active and grace-period Play states grant paid access", () => {
+test("active grace and unexpired canceled states grant paid access", () => {
   assert.equal(normalizePlayState("SUBSCRIPTION_STATE_ACTIVE"), "active");
   assert.equal(
       normalizePlayState("SUBSCRIPTION_STATE_IN_GRACE_PERIOD"),
@@ -19,8 +20,21 @@ test("only active and grace-period Play states grant paid access", () => {
   );
   assert.equal(grantsPaidAccess("active"), true);
   assert.equal(grantsPaidAccess("grace_period"), true);
+  assert.equal(grantsPaidAccess("canceled"), true);
   assert.equal(grantsPaidAccess("on_hold"), false);
   assert.equal(grantsPaidAccess("expired"), false);
+});
+
+test("canceled state becomes expired when its paid term is already over", () => {
+  const now = Date.parse("2026-09-12T00:00:00Z");
+  assert.equal(
+      effectivePlayState("canceled", "2026-09-13T00:00:00Z", now),
+      "canceled",
+  );
+  assert.equal(
+      effectivePlayState("canceled", "2026-09-11T00:00:00Z", now),
+      "expired",
+  );
 });
 
 test("privacy exits are not represented as paid capabilities", () => {

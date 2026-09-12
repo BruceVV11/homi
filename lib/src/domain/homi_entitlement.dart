@@ -25,8 +25,13 @@ enum HomiBillingState {
     };
   }
 
+  // Google Play reports a voluntarily canceled subscription as canceled while
+  // the user remains entitled through the already-paid billing term. The
+  // backend moves the record to expired when Play reports that term ended.
   bool get grantsPaidAccess =>
-      this == HomiBillingState.active || this == HomiBillingState.gracePeriod;
+      this == HomiBillingState.active ||
+      this == HomiBillingState.gracePeriod ||
+      this == HomiBillingState.canceled;
 }
 
 class HomiEntitlement {

@@ -14,14 +14,14 @@ Established accepted baselines:
 - **DONE (0.10.0)** Windows `flutter analyze` clean and **41/41** Flutter tests passed on the accepted 0.10 app/runtime source.
 - **DONE (0.10.0)** governed Firebase deployment passed Node 22, project-number guard, Firestore emulator **13/13**, and deployed 24 Functions/rules.
 - **DONE (0.11 operator/device review)** Bruce reported the governed backend deployed and confirmed on the S25 Ultra that the emergency-sheet overflow was resolved, country flags displayed, Shared Household creation worked and a connected person could be invited. True second-device invitation acceptance/realtime propagation remains unproven because no second physical device is currently available.
-- **DONE as historical 0.12 evidence only** Bruce's Windows Flutter gate passed the exact earlier 0.12 head `6ac25b464fe5ee25d940416783148b88bb6cdc78`. The subsequent S25 Ultra review found the Add-person empty-state UX and established Homi-code loading issue. Source has changed to address those findings, so the old pass cannot validate the final head.
+- **DONE as historical 0.12 evidence only** Bruce's Windows Flutter gate passed the exact earlier 0.12 head `6ac25b464fe5ee25d940416783148b88bb6cdc78`. Subsequent S25 Ultra review drove the Add-person empty-state and Homi-code recovery fixes. A later S25 review confirmed the established Homi code loads and the revised Connections controls work; Bruce then approved the screen with one final cosmetic request: remove the persistent code card and keep the code behind **My code**.
 
 Required for the final exact 0.12 candidate:
 
 - **VERIFY** Windows `flutter pub get` on the final PR head.
 - **VERIFY** Windows `flutter analyze` clean on the final PR head.
 - **VERIFY** full Flutter test suite including `household_data_sync_controller_test.dart` on the final PR head.
-- **VERIFY** S25 Ultra focused People/Household regression after the device-feedback fixes.
+- **VERIFY** one focused S25 Ultra cosmetic check that the persistent code card is gone and **My code** still opens/copies the established code.
 - **OPEN** broader fresh-install/returning-user/background/reboot/Samsung-power tests before store release.
 
 No 0.12 source is production state until the final branch passes the exact-SHA gates, is merged deliberately and the affected Firebase surfaces are deployed from the accepted merge SHA.
@@ -41,17 +41,16 @@ Previously implemented and preserved:
 
 0.12 source changes:
 
-- **DONE in source / partially observed on device / VERIFY final head** People connection/preference streams bind immediately instead of waiting for location startup and identity provisioning.
-- **DONE in source / VERIFY final head** **My code** remains available in the populated Connections state. An already-provisioned account now reads its valid code from the signed-in user's self-readable `users/{uid}` profile before falling back to the protected `ensureHomiIdentity` callable. A fresh Auth/App Check callable is therefore not required merely to display an established code.
+- **DONE in source / observed on device / VERIFY final exact head** People connection/preference streams bind immediately instead of waiting for location startup and identity provisioning.
+- **DONE in source / established on device before final cosmetic patch / VERIFY final exact head** **My code** remains available in the populated Connections state. An already-provisioned account reads its valid code from the signed-in user's self-readable `users/{uid}` profile before falling back to the protected `ensureHomiIdentity` callable. A fresh Auth/App Check callable is therefore not required merely to display an established code.
+- **DONE in final source / VERIFY final exact head** the reusable code is no longer duplicated in a persistent orange Connections card. **My code** is the deliberate on-demand access point; a genuine loading failure is surfaced in the branded information-sheet pattern.
 - **DONE in source / observed UI / VERIFY final head** Household/Friend connection type is no longer user-selectable; it is displayed from canonical Household membership and the edit sheet explains how to create/invite/join a Household.
 - **DONE in source** shared-task assignee discovery uses canonical Household membership rather than the old editable preference scope.
 
 Still required before production:
 
-- **VERIFY** established Homi code renders on Bruce's S25 Ultra without the previous protected-session error.
-- **VERIFY** **My code** sheet/copy and **Connect** remain healthy.
-- **VERIFY** People list appears without the previous structural 1–2 second dependency on location startup.
-- **VERIFY** existing live location, Places, check-ins, hearts and share/revoke behavior remains healthy.
+- **VERIFY** final exact-head **My code** sheet/copy and **Connect** remain healthy after the persistent-card removal.
+- **VERIFY** existing live location, Places, check-ins, hearts and share/revoke behavior remains healthy if the final cosmetic check exposes any regression; otherwise prior device evidence stands for unchanged flows.
 - **VERIFY** true two-account/two-device current-location and Household propagation when hardware/test setup permits.
 - **BLOCKER** Google Play background-location declaration/prominent disclosure/review evidence.
 
@@ -82,7 +81,7 @@ Still required before production:
 
 0.12 removes the old authorization ambiguity: a People preference can no longer manufacture Household status. The protected relationship callable derives scope from canonical membership and the client displays the same canonical state.
 
-The S25 Ultra review also exposed an interaction-quality issue when the owner tapped **Add person** but no additional accepted trusted connection was eligible. The old implementation injected a low-visibility inline notice after the tap. The final source now uses the branded informational bottom-sheet pattern and distinguishes a full Household, existing member/pending invite, and the need to connect another person first.
+The S25 Ultra review also exposed an interaction-quality issue when the owner tapped **Add person** but no additional accepted trusted connection was eligible. The old implementation injected a low-visibility inline notice after the tap. The final source uses the branded informational bottom-sheet pattern and distinguishes a full Household, existing member/pending invite, and the need to connect another person first.
 
 - **DONE in source** canonical scope derivation.
 - **DONE in source / VERIFY final head** graceful Add-person informational sheet when no candidate exists or connections cannot be loaded.
@@ -232,13 +231,10 @@ Permanent package: `za.co.theconceptlab.homi`.
 
 ## Immediate sequence
 
-1. Re-fetch the final focused PR head after all 2026-09-12 device-feedback/backend-contract patches and finish repository-wide source/document preflight.
-2. Bruce fast-forwards the local `homi-0.12-shared-data-plane` branch to that exact head and runs one final Windows gate: dependency resolution, analyzer, full Flutter tests, final SHA/worktree check.
-3. If green, run that same exact source on the S25 Ultra and verify:
-   - **Add person** with no eligible extra connection opens the custom informational bottom sheet without page-jump/inline-error behaviour;
-   - the already-established reusable Homi code loads from the account profile and **My code** opens/copies it;
-   - People immediate load, canonical disabled connection type, preserved local data and normal Home/Routines/Supplies behavior remain healthy.
-4. Re-fetch the PR and merge only the exact Windows/device-accepted head using expected-head protection.
-5. Run the governed refresh-safe Cloud Shell backend worker against the exact merge SHA. Required evidence includes Node 22, Functions policy **5/5**, project-number guard, exactly 37 exports, Firestore **23/23**, legacy Function drift reconciliation and safe legacy Task migration before the stricter rules/remaining Functions deployment proceeds.
-6. After backend deployment passes, re-test the affected Household data-plane flows and record the exact deployed SHA in release docs.
-7. After 0.12 acceptance, build the centralized capability/entitlement layer, then Google Play Billing + server verification + RTDN/Pub/Sub before any paid enforcement.
+1. Bruce fast-forwards the local `homi-0.12-shared-data-plane` branch to the final exact PR head and runs one final Windows gate: dependency resolution, analyzer, full Flutter tests, final SHA/worktree check.
+2. If green, run that same exact source on the S25 Ultra and verify only the final cosmetic delta: the persistent orange Homi-code card is gone, while **My code** still opens and copies the established reusable code. Repeat broader flows only if this check exposes a regression.
+3. Re-fetch the PR and merge only the exact Windows/device-accepted head using expected-head protection.
+4. Run the governed refresh-safe Cloud Shell backend worker against the exact merge SHA. Required evidence includes Node 22, Functions policy **5/5**, project-number guard, exactly 37 exports, Firestore **23/23**, legacy Function drift reconciliation and safe legacy Task migration before the stricter rules/remaining Functions deployment proceeds.
+5. After backend deployment passes, re-test the affected Household data-plane flows and record the exact deployed SHA in release docs.
+6. Start the next focused release for centralized capability/entitlement state, Google Play Billing, server-side purchase verification/acknowledgement, RTDN/Pub/Sub lifecycle handling and Internal Testing subscription proof.
+7. Only after the paid lifecycle and the remaining store/compliance/signing gates are proven may Homi move to production rollout.

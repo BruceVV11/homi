@@ -13,6 +13,7 @@ const trustedPeoplePreferences = require("./trusted_people_preferences");
 const sharedTasksCanonical = require("./shared_tasks_canonical");
 const householdDataCleanup = require("./household_data_cleanup");
 const householdTaskMembershipSync = require("./household_task_membership_sync");
+const billing = require("./billing");
 
 // A stale deployed HTTPS function already owned the historical
 // `onConnectionDeleted` name. Do not export that obsolete endpoint from the
@@ -43,4 +44,8 @@ module.exports = {
   ...sharedTasksCanonical,
   ...householdDataCleanup,
   ...householdTaskMembershipSync,
+  // Homi+ purchase verification, lifecycle reconciliation and server-written
+  // entitlement state. These exports fail closed until the durable Play
+  // product/base-plan IDs and Android Publisher access are configured.
+  ...billing,
 };

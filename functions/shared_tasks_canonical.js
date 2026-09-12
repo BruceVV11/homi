@@ -101,22 +101,21 @@ async function canonicalHouseholdFor(uid) {
   };
 }
 
-async function canAccessSharedTask(uid, data) {
+async function sharedTaskAccessContext(uid, data) {
   if (!data || !Array.isArray(data.memberUids) || !data.memberUids.includes(uid)) {
-    return false;
+    return null;
   }
-  const creatorUid = data.createdByUid;
   const storedHouseholdId = typeof data.householdId === "string" ?
     data.householdId.trim() : "";
-  if (!creatorUid || !storedHouseholdId) return false;
+  if (!storedHouseholdId) return null;
 
-  const [actorHousehold, creatorHousehold] = await Promise.all([
-    canonicalHouseholdFor(uid),
-    canonicalHouseholdFor(creatorUid),
-  ]);
-  return Boolean(actorHousehold && creatorHousehold &&
-    actorHousehold.id === storedHouseholdId &&
-    creatorHousehold.id === storedHouseholdId);
+  // A shared Task belongs to the canonical Household, not permanently to the
+  // account that happened to create it. This keeps a Task usable by its safe
+  // remaining audience after the creator leaves while still requiring the
+  // acting account to be a current canonical member of that exact Household.
+  const actorHousehold = await canonicalHouseholdFor(uid);
+  if (!actorHousehold || actorHousehold.id !== storedHouseholdId) return null;
+  return actorHousehold;
 }
 
 // Keep the historic callable names so existing app clients continue to work.
@@ -245,18 +244,22 @@ exports.toggleSharedTask = onCall(
         );
       }
       const data = snapshot.data();
-      if (!await canAccessSharedTask(auth.uid, data)) {
+      const household = await sharedTaskAccessContext(auth.uid, data);
+      if (!household) {
         throw new HttpsError(
             "permission-denied",
             "That household task is not available to your account.",
         );
       }
+      const isHouseholdOwner = household.data.ownerUid === auth.uid;
 
       if (data.completedAt) {
-        if (data.createdByUid !== auth.uid && data.completedByUid !== auth.uid) {
+        if (data.createdByUid !== auth.uid &&
+            data.completedByUid !== auth.uid &&
+            !isHouseholdOwner) {
           throw new HttpsError(
               "permission-denied",
-              "Only the person who completed this task or its creator can reopen it.",
+              "Only the person who completed this task, its creator, or the Household owner can reopen it.",
           );
         }
         await ref.update({
@@ -301,20 +304,23 @@ exports.removeSharedTask = onCall(
       const snapshot = await ref.get();
       if (!snapshot.exists) return {removed: true};
       const data = snapshot.data();
-      if (!await canAccessSharedTask(auth.uid, data)) {
+      const household = await sharedTaskAccessContext(auth.uid, data);
+      if (!household) {
         throw new HttpsError(
             "permission-denied",
             "That household task is not available to your account.",
         );
       }
+      const isHouseholdOwner = household.data.ownerUid === auth.uid;
       const purgeAtMs = data.purgeAt &&
           typeof data.purgeAt.toMillis === "function" ?
         data.purgeAt.toMillis() : 0;
       if (data.createdByUid !== auth.uid &&
+          !isHouseholdOwner &&
           (!purgeAtMs || purgeAtMs > Date.now())) {
         throw new HttpsError(
             "permission-denied",
-            "Only the person who created this task can remove it before its completed-history period ends.",
+            "Only the person who created this task or the Household owner can remove it before its completed-history period ends.",
         );
       }
       await ref.delete();

@@ -496,7 +496,7 @@ async function persistVerifiedPurchase({
       purchaserUid,
       packageName: PACKAGE_NAME,
       productId: identity.productId,
-      basePlanId,
+      basePlanId: identity.basePlanId,
       plan: identity.plan,
       state,
       validUntil: identity.validUntil,

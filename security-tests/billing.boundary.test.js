@@ -62,9 +62,17 @@ test("purchase tokens and billing account mappings are never client-readable", a
     activePurchaseTokenHash: "tokenhash",
   });
   await seed("billingAccountLinks/account-hash", {uid: "alice"});
+  await seed("billingCoverage/tokenhash_alicehash", {
+    recipientUid: "alice",
+    purchaserUid: "alice",
+    sourcePurchaseTokenHash: "tokenhash",
+    plan: "personal",
+    state: "active",
+  });
 
   const alice = env.authenticatedContext("alice").firestore();
   await assertFails(getDoc(doc(alice, "billingPurchases/tokenhash")));
   await assertFails(getDoc(doc(alice, "billingAccounts/alice")));
   await assertFails(getDoc(doc(alice, "billingAccountLinks/account-hash")));
+  await assertFails(getDoc(doc(alice, "billingCoverage/tokenhash_alicehash")));
 });

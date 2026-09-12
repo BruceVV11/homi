@@ -38,6 +38,27 @@ function obfuscatedAccountId(uid) {
   return sha256(`homi:${uid}`);
 }
 
+function playAccountId(playPurchase) {
+  const direct = playPurchase.externalAccountIdentifiers || {};
+  const directId = String(direct.obfuscatedExternalAccountId || "").trim();
+  if (directId) return directId;
+
+  // Google Play out-of-app resubscriptions can carry the previous account
+  // association inside outOfAppPurchaseContext instead of the top-level
+  // externalAccountIdentifiers object. Reusing that verified prior identifier
+  // lets RTDN reconnect a legitimate resubscribe to the existing Homi account.
+  const context = playPurchase.outOfAppPurchaseContext || {};
+  const expired = context.expiredExternalAccountIdentifiers || {};
+  return String(expired.obfuscatedExternalAccountId || "").trim();
+}
+
+function playLinkedPurchaseToken(playPurchase) {
+  const direct = String(playPurchase.linkedPurchaseToken || "").trim();
+  if (direct) return direct;
+  const context = playPurchase.outOfAppPurchaseContext || {};
+  return String(context.expiredPurchaseToken || "").trim();
+}
+
 function coverageDocId(purchaseTokenHash, uid) {
   return `${purchaseTokenHash}_${sha256(uid).slice(0, 24)}`;
 }
@@ -175,8 +196,7 @@ function purchaseIdentity(playPurchase, expectedProductId = null) {
 }
 
 async function resolveUidFromPlay(playPurchase) {
-  const external = playPurchase.externalAccountIdentifiers || {};
-  const accountId = String(external.obfuscatedExternalAccountId || "").trim();
+  const accountId = playAccountId(playPurchase);
   if (!accountId) return null;
   const link = await db.collection("billingAccountLinks").doc(accountId).get();
   if (!link.exists) return null;
@@ -421,11 +441,10 @@ async function persistVerifiedPurchase({
       normalizePlayState(playPurchase.subscriptionState),
       identity.validUntil,
   );
-  const linkedPurchaseToken = String(playPurchase.linkedPurchaseToken || "").trim();
+  const linkedPurchaseToken = playLinkedPurchaseToken(playPurchase);
   const linkedTokenHash = linkedPurchaseToken ? sha256(linkedPurchaseToken) : null;
   const expectedAccountId = obfuscatedAccountId(purchaserUid);
-  const external = playPurchase.externalAccountIdentifiers || {};
-  const actualAccountId = String(external.obfuscatedExternalAccountId || "").trim();
+  const actualAccountId = playAccountId(playPurchase);
   if (!actualAccountId || actualAccountId !== expectedAccountId) {
     throw new HttpsError(
         "permission-denied",

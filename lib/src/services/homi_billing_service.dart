@@ -72,9 +72,10 @@ class HomiBillingNotice {
 /// Google Play purchase boundary for Homi+.
 ///
 /// A local purchase callback never grants Homi+ access. Purchased/restored
-/// tokens are sent to the App-Check-protected backend, and the transaction is
-/// completed only after the backend confirms Google Play verification. The app
-/// consumes paid capability exclusively from server-written entitlement docs.
+/// tokens are sent to the App-Check-protected backend. That backend verifies
+/// Google Play, writes entitlement state and acknowledges a new subscription
+/// when Play says acknowledgement is pending. Flutter consumes paid capability
+/// exclusively from the server-written entitlement document.
 class HomiBillingService {
   HomiBillingService({
     required this.firebaseReady,
@@ -214,7 +215,7 @@ class HomiBillingService {
           );
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
-          await _verifyAndComplete(purchase);
+          await _verifyPurchase(purchase);
         case PurchaseStatus.canceled:
           _emit(
             HomiBillingNoticeType.canceled,
@@ -231,7 +232,7 @@ class HomiBillingService {
     }
   }
 
-  Future<void> _verifyAndComplete(PurchaseDetails purchase) async {
+  Future<void> _verifyPurchase(PurchaseDetails purchase) async {
     final user = _user;
     if (user == null) {
       _emit(
@@ -272,9 +273,9 @@ class HomiBillingService {
         throw StateError('Google Play could not verify this subscription.');
       }
 
-      if (purchase.pendingCompletePurchase) {
-        await _inAppPurchase.completePurchase(purchase);
-      }
+      // The backend uses the Android Publisher API to acknowledge the purchase
+      // only when Google reports ACKNOWLEDGEMENT_STATE_PENDING. Do not issue a
+      // second client acknowledgement against a stale local PurchaseDetails.
       _emit(
         purchase.status == PurchaseStatus.restored
             ? HomiBillingNoticeType.restored
@@ -285,8 +286,8 @@ class HomiBillingService {
         productId: purchase.productID,
       );
     } catch (_) {
-      // Do not complete/acknowledge locally after a failed server verification.
-      // The backend remains the only authority allowed to grant Homi+.
+      // The backend remains the only authority allowed to grant or acknowledge
+      // Homi+. Failed server verification therefore leaves paid access locked.
       _emit(
         HomiBillingNoticeType.error,
         'Homi could not verify this purchase securely. No paid access was granted.',

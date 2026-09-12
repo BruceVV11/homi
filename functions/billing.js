@@ -496,7 +496,7 @@ async function persistVerifiedPurchase({
       purchaserUid,
       packageName: PACKAGE_NAME,
       productId: identity.productId,
-      basePlanId: identity.basePlanId,
+      basePlanId,
       plan: identity.plan,
       state,
       validUntil: identity.validUntil,
@@ -519,6 +519,21 @@ async function persistVerifiedPurchase({
     }
   });
 
+  const finalSnapshot = await purchaseRef.get();
+  await reconcilePurchaseEntitlements({
+    ref: purchaseRef,
+    tokenHash: purchaseTokenHash,
+    data: finalSnapshot.data(),
+  });
+
+  if (previousTokenHash && previousTokenHash !== purchaseTokenHash) {
+    await removePurchaseCoverage(previousTokenHash);
+  }
+
+  // Entitlement is based on authoritative verified Play state. Acknowledgement
+  // is the next server action, not the authority for the purchase itself. Doing
+  // coverage reconciliation first also prevents a failed acknowledgement call
+  // from leaving a superseded higher-tier purchase as the visible Homi grant.
   if (
     grantsPaidAccess(state) &&
     playPurchase.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING"
@@ -529,17 +544,6 @@ async function persistVerifiedPurchase({
       acknowledgedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }, {merge: true});
-  }
-
-  const finalSnapshot = await purchaseRef.get();
-  await reconcilePurchaseEntitlements({
-    ref: purchaseRef,
-    tokenHash: purchaseTokenHash,
-    data: finalSnapshot.data(),
-  });
-
-  if (previousTokenHash && previousTokenHash !== purchaseTokenHash) {
-    await removePurchaseCoverage(previousTokenHash);
   }
 
   return {
@@ -814,18 +818,25 @@ exports.onHomiPlusUserDeleted = onDocumentDeleted(
       const uid = event.params.uid;
       const accountId = obfuscatedAccountId(uid);
       const accountRef = db.collection("billingAccounts").doc(uid);
-      const account = await accountRef.get();
-      const activeTokenHash = account.exists ?
-        String(account.data().activePurchaseTokenHash || "").trim() : "";
 
-      if (activeTokenHash) {
-        await removePurchaseCoverage(activeTokenHash);
-        await db.collection("billingPurchases").doc(activeTokenHash).set({
+      // One Homi account can accumulate historical purchase-token documents
+      // across plan replacements. Account deletion must remove the account link
+      // and every Homi-side purchase association, not just today's active token.
+      const ownedPurchases = await db.collection("billingPurchases")
+          .where("purchaserUid", "==", uid).get();
+      for (const purchase of ownedPurchases.docs) {
+        await removePurchaseCoverage(purchase.id);
+        await purchase.ref.set({
+          purchaseToken: FieldValue.delete(),
           purchaserUid: FieldValue.delete(),
+          coveredUids: [],
           accountDeletedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         }, {merge: true});
       }
+
+      // Also remove coverage this user received from somebody else's Homi+
+      // purchase. That does not alter the other payer's remaining recipients.
       await removeRecipientCoverage(uid);
 
       const secondaryAssignments = await db.collection("billingAccounts")

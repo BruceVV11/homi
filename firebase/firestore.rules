@@ -162,6 +162,27 @@ service cloud.firestore {
       }
     }
 
+    // Homi+ capability is a server-written projection of Google Play state.
+    // A signed-in user may read only their own entitlement; Flutter can never
+    // manufacture, extend or transfer paid access directly.
+    match /entitlements/{uid} {
+      allow get: if isSelf(uid);
+      allow list, create, update, delete: if false;
+    }
+
+    // Purchase tokens, Play account links and payer/seat bookkeeping are
+    // backend-only even for the purchaser. User-facing status is deliberately
+    // projected into the narrower entitlements/{uid} document above.
+    match /billingPurchases/{purchaseId} {
+      allow read, write: if false;
+    }
+    match /billingAccounts/{uid} {
+      allow read, write: if false;
+    }
+    match /billingAccountLinks/{accountId} {
+      allow read, write: if false;
+    }
+
     match /developerAdmins/{uid} {
       allow get: if isSelf(uid);
       allow list, create, update, delete: if false;

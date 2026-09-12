@@ -11,15 +11,32 @@ class HouseholdService {
   final bool firebaseReady;
   final HomiCloudActions _cloudActions;
 
+  Stream<HomiHousehold?>? _currentHouseholdStream;
+  Stream<List<HomiHouseholdInvite>>? _incomingInvitesStream;
+  Stream<List<HomiHouseholdInvite>>? _outgoingInvitesStream;
+  final Map<String, Stream<List<HomiHouseholdMember>>> _memberStreams =
+      <String, Stream<List<HomiHouseholdMember>>>{};
+  String? _streamOwnerUid;
+
   FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
   User? get currentUser =>
       firebaseReady ? FirebaseAuth.instance.currentUser : null;
 
+  void _ensureStreamOwner(String uid) {
+    if (_streamOwnerUid == uid) return;
+    _streamOwnerUid = uid;
+    _currentHouseholdStream = null;
+    _incomingInvitesStream = null;
+    _outgoingInvitesStream = null;
+    _memberStreams.clear();
+  }
+
   Stream<HomiHousehold?> watchCurrentHousehold() {
     final user = currentUser;
     if (user == null) return Stream.value(null);
-    return _firestore
+    _ensureStreamOwner(user.uid);
+    return _currentHouseholdStream ??= _firestore
         .collection('households')
         .where('memberUids', arrayContains: user.uid)
         .limit(1)
@@ -32,28 +49,33 @@ class HouseholdService {
 
   Stream<List<HomiHouseholdMember>> watchMembers(String householdId) {
     final user = currentUser;
-    if (user == null || householdId.trim().isEmpty) {
+    final cleanHouseholdId = householdId.trim();
+    if (user == null || cleanHouseholdId.isEmpty) {
       return Stream.value(const <HomiHouseholdMember>[]);
     }
-    return _firestore
-        .collection('households')
-        .doc(householdId)
-        .collection('members')
-        .snapshots()
-        .map((snapshot) {
-      final members = snapshot.docs
-          .map(_memberFromDocument)
-          .toList(growable: false);
-      members.sort((a, b) {
-        if (a.role != b.role) {
-          return a.role == HomiHouseholdRole.owner ? -1 : 1;
-        }
-        return a.displayName
-            .toLowerCase()
-            .compareTo(b.displayName.toLowerCase());
-      });
-      return members;
-    });
+    _ensureStreamOwner(user.uid);
+    return _memberStreams.putIfAbsent(
+      cleanHouseholdId,
+      () => _firestore
+          .collection('households')
+          .doc(cleanHouseholdId)
+          .collection('members')
+          .snapshots()
+          .map((snapshot) {
+        final members = snapshot.docs
+            .map(_memberFromDocument)
+            .toList(growable: false);
+        members.sort((a, b) {
+          if (a.role != b.role) {
+            return a.role == HomiHouseholdRole.owner ? -1 : 1;
+          }
+          return a.displayName
+              .toLowerCase()
+              .compareTo(b.displayName.toLowerCase());
+        });
+        return members;
+      }),
+    );
   }
 
   Stream<List<HomiHouseholdInvite>> watchIncomingInvites() {
@@ -61,7 +83,8 @@ class HouseholdService {
     if (user == null) {
       return Stream.value(const <HomiHouseholdInvite>[]);
     }
-    return _firestore
+    _ensureStreamOwner(user.uid);
+    return _incomingInvitesStream ??= _firestore
         .collection('householdInvites')
         .where('inviteeUid', isEqualTo: user.uid)
         .snapshots()
@@ -83,7 +106,8 @@ class HouseholdService {
     if (user == null) {
       return Stream.value(const <HomiHouseholdInvite>[]);
     }
-    return _firestore
+    _ensureStreamOwner(user.uid);
+    return _outgoingInvitesStream ??= _firestore
         .collection('householdInvites')
         .where('inviterUid', isEqualTo: user.uid)
         .snapshots()

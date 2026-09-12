@@ -59,10 +59,20 @@ function effectivePlayState(state, validUntil, nowMs = Date.now()) {
   // Google Play reports a voluntarily canceled subscription as CANCELED while
   // the user remains entitled until the current paid term expires. If expiry
   // is already past, fail closed immediately instead of waiting for the next
-  // EXPIRED RTDN. This follows the Play subscription lifecycle contract.
-  if (state !== "canceled") return state;
+  // EXPIRED RTDN. Active/grace records with an already-past expiry are also
+  // treated as expired if stale lifecycle state is ever replayed.
   const expiryMs = timestampMillis(validUntil);
-  return expiryMs != null && expiryMs > nowMs ? "canceled" : "expired";
+  if (state === "canceled") {
+    return expiryMs != null && expiryMs > nowMs ? "canceled" : "expired";
+  }
+  if (
+    (state === "active" || state === "grace_period") &&
+    expiryMs != null &&
+    expiryMs <= nowMs
+  ) {
+    return "expired";
+  }
+  return state;
 }
 
 function grantsPaidAccess(state) {
@@ -113,9 +123,14 @@ function _sourcePriority(source) {
     (STATE_PRIORITY[source.state] || 0);
 }
 
-function projectEntitlementSources(rawSources) {
+function projectEntitlementSources(rawSources, nowMs = Date.now()) {
   const sources = Array.isArray(rawSources) ?
-    rawSources.filter((source) => source && typeof source === "object") : [];
+    rawSources
+        .filter((source) => source && typeof source === "object")
+        .map((source) => ({
+          ...source,
+          state: effectivePlayState(source.state, source.validUntil, nowMs),
+        })) : [];
   if (sources.length === 0) return null;
 
   const paidSources = sources.filter((source) => grantsPaidAccess(source.state));
@@ -156,6 +171,40 @@ function projectEntitlementSources(rawSources) {
     sourceCount: sources.length,
     ...capabilities,
   };
+}
+
+function canAdoptCanonicalPurchase({
+  currentTokenHash,
+  incomingTokenHash,
+  linkedTokenHash,
+  currentPurchaseKnown,
+  currentState,
+  currentValidUntil,
+  incomingSupersededByTokenHash,
+  nowMs = Date.now(),
+}) {
+  // Once Homi has marked a token as superseded, replaying that old token may
+  // refresh historical state but must never make it canonical again.
+  if (incomingSupersededByTokenHash) return false;
+
+  if (!currentTokenHash || currentTokenHash === incomingTokenHash) return true;
+
+  // Play issues a new token for an in-app upgrade/downgrade/resubscribe before
+  // expiry and links it to the replaced purchase. Require that linkage while
+  // the currently canonical purchase is still entitled so an unrelated second
+  // subscription cannot silently displace it.
+  if (linkedTokenHash && linkedTokenHash === currentTokenHash) return true;
+
+  // A dangling account pointer is an integrity problem, not permission to let a
+  // new unlinked token take over. Fail closed until the server state is repaired.
+  if (!currentPurchaseKnown) return false;
+
+  const currentEffectiveState = effectivePlayState(
+      currentState,
+      currentValidUntil,
+      nowMs,
+  );
+  return !grantsPaidAccess(currentEffectiveState);
 }
 
 function configuredCatalog(env) {
@@ -204,6 +253,7 @@ module.exports = {
   grantsPaidAccess,
   entitlementCapabilities,
   projectEntitlementSources,
+  canAdoptCanonicalPurchase,
   configuredCatalog,
   productFor,
 };

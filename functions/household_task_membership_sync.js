@@ -1,10 +1,12 @@
 const {onDocumentUpdated} = require("firebase-functions/v2/firestore");
 const logger = require("firebase-functions/logger");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
+const {
+  planCanonicalMembershipUpdate,
+} = require("./household_task_policy");
 
 const db = getFirestore();
 const BATCH_SIZE = 400;
-const CANONICAL_AUDIENCE_VERSION = 1;
 
 function cleanUids(value) {
   if (!Array.isArray(value)) return [];
@@ -39,36 +41,25 @@ exports.onHouseholdTaskMembershipChanged = onDocumentUpdated(
         const tasks = await db.collection("sharedTasks")
             .where("householdId", "==", householdId)
             .get();
-        const canonicalTasks = tasks.docs.filter(
-            (document) =>
-              Number(document.data().audienceVersion) ===
-                CANONICAL_AUDIENCE_VERSION,
-        );
-        if (canonicalTasks.length === 0) return;
+        const planned = tasks.docs
+            .map((document) => ({
+              document,
+              update: planCanonicalMembershipUpdate(
+                  document.data(),
+                  nextMembers,
+              ),
+            }))
+            .filter((item) => item.update !== null);
+        if (planned.length === 0) return;
 
-        for (let start = 0; start < canonicalTasks.length; start += BATCH_SIZE) {
+        for (let start = 0; start < planned.length; start += BATCH_SIZE) {
           const batch = db.batch();
-          canonicalTasks.slice(start, start + BATCH_SIZE)
-              .forEach((document) => {
-                const data = document.data();
-                const update = {
-                  memberUids: nextMembers,
-                  updatedAt: FieldValue.serverTimestamp(),
-                };
-
-                if (data.assigneeUid &&
-                    !nextMembers.includes(data.assigneeUid)) {
-                  update.assigneeUid = null;
-                  update.assigneeName = "Unassigned";
-                }
-                if (data.completedByUid &&
-                    !nextMembers.includes(data.completedByUid)) {
-                  update.completedByUid = null;
-                  update.completedByName = "Former Household member";
-                }
-
-                batch.update(document.ref, update);
-              });
+          planned.slice(start, start + BATCH_SIZE).forEach((item) => {
+            batch.update(item.document.ref, {
+              ...item.update,
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+          });
           await batch.commit();
         }
       } catch (error) {

@@ -1,249 +1,211 @@
 # Homi privacy, legal and launch compliance draft
 
-Date: 2026-09-11
-Status: internal working product/legal draft for source `0.12.0+16`. Obtain professional South African legal review before public production release.
+Date: 2026-09-12
+Status: internal working product/legal draft for `0.13.0+17`. Obtain professional South African legal review before public production release.
 
 ## Product position
 
-Homi is a household operating system with optional shared-Household collaboration, trusted-person location sharing, user-configured arrival check-ins and separately optional exact Home/Work sharing. The app remains local-first where practical and does not require an account for local-only household use or emergency-number shortcuts.
+Homi is a household operating system with local-first household tools, optional Shared Household synchronization, trusted-person location sharing, user-configured arrival check-ins, separately optional exact Home/Work sharing and optional Homi+ subscriptions through Google Play.
 
-Homi must not be presented as an emergency dispatch service, covert tracker, proof that somebody is safe, crash detection, medical/child-safety guarantee or guaranteed check-in delivery system.
+Local household use and emergency-number shortcuts do not require an account. Homi must not be represented as emergency dispatch, covert tracking, proof that somebody is safe, crash detection, medical/child-safety guarantee or guaranteed check-in delivery.
 
-Initial account eligibility should remain adults (18+) until any minor-specific use case has undergone separate privacy/consent/Google Play Families/legal review.
+Initial account eligibility should remain adults (18+) until any minor-specific use case receives separate privacy/consent/Google Play Families/legal review.
 
 ## South African privacy baseline
 
-Homi is developed in South Africa and must be assessed against the Protection of Personal Information Act 4 of 2013 (POPIA), including appropriate reasonable technical and organisational safeguards.
+Homi is developed in South Africa and must be assessed against POPIA, including appropriate reasonable technical and organisational safeguards.
 
-Official source: https://www.justice.gov.za/legislation/acts/2013-004.pdf
-
-Before launch, the final notice must identify the legally correct responsible party/operator details, required contact details, information-officer process and data-subject request channel. Do not guess those particulars in code.
+Before launch, the final notice must identify the legally correct responsible party/operator details, contact details, information-officer process and data-subject request channel. Do not invent these values in code.
 
 ## Local/device data
 
-Local records can include:
+Depending on features used, Homi can store locally:
 
 - home name/type;
-- private and shared-view Tasks plus completion attribution;
-- Routines and bounded completion attribution;
-- Supplies and expiry/status/quantity;
-- Home Things, maintenance/repair and utility readings;
+- private/shared Tasks and attribution;
+- Routines;
+- Supplies;
+- Home Things, maintenance/repair history and utility readings;
 - cached current-device location/battery;
-- live/background location preference state;
-- Home/Work arrival coordinates, readable address, optional Google Place ID, radius, selected arrival recipients, exact-place sharing preference and local cooldown timestamp;
-- notification preferences/schedules;
-- installation identifier used for push registration;
-- local synchronization lineage identifying which Household record IDs have previously been synchronized on that phone.
+- background location preference state;
+- Home/Work arrival coordinates, readable address, optional Place ID, radius, recipients, exact-place sharing preference and cooldown state;
+- notification preferences;
+- installation/push registration context;
+- local Shared Household synchronization lineage.
 
-SharedPreferences remains Homi's immediate local-first persistence layer. From 0.12, a signed-in member of a canonical Shared Household can additionally synchronize selected Household domains to Firestore. Local-only mode does not start this Household synchronizer even if Firebase still has a cached signed-in identity.
+SharedPreferences remains the immediate local-first persistence layer. From 0.12, selected canonical Shared Household domains can also synchronize to Firestore.
 
-Pre-existing local records are not silently uploaded merely because an account joins a Household. The narrow automatic first-import case is restricted to the owner on a device that has never synchronized another Household when an authoritative server read confirms the Household data collection is empty. Otherwise older unmatched records stay device-private until a future explicit import/merge choice.
+Local-only mode does not start Shared Household synchronization merely because Firebase still has a cached identity.
 
-## Google Places processing
-
-For Home/Work setup, Homi uses Google Places API (New) through the native Places SDK wrapper.
-
-Homi sends the user's autocomplete query to Google Places and, after selection, requests only the Place ID, formatted address and coordinate required to save the place. Google's attribution is displayed with results.
-
-**Set from here** remains a separate route using current device location and reverse geocoding where available.
-
-The Google Places credential is an Android package/SHA-restricted client credential and must not be committed to source or logged. The final privacy notice should accurately describe Google Maps/Places processing and link relevant provider policy where appropriate.
+Pre-existing unmatched device records are not silently uploaded merely because somebody joins a Household. The narrow automatic first-import case requires the first owner, a device that has not synchronized another Household and an authoritative server read confirming an empty Household data collection. Otherwise older unmatched records remain device-private until an explicit future import/merge choice.
 
 ## Cloud/account data
 
-When the user signs in and activates relevant features, Firebase/Google Cloud can process:
+When the user signs in and enables relevant features, Firebase/Google Cloud can process:
 
 - Firebase UID/account/profile metadata;
 - reusable Homi connection code;
-- trusted connection records;
-- private relationship-label preferences;
-- canonical Household identity, membership, ownership and invitations;
-- canonical Household Routines, Supplies, Home Things, maintenance/repair events and utility readings when Household sync is active;
-- narrowly shared one-off Tasks and their assignment/completion attribution;
+- trusted connection records and private relationship labels;
+- canonical Household identity/membership/ownership/invitations;
+- Shared Household Routines, Supplies, Home Things, maintenance/repair and utility records;
+- shared one-off Tasks and assignment/completion attribution;
 - per-person current-location authorization;
-- latest shared latitude/longitude, accuracy, battery, charging state, update time/source;
-- FCM device registration and notification preferences;
-- developer campaign metadata for authorised developer accounts;
-- server rate-limit records;
-- optional exact Home/Work cloud copies only when the owner separately enables that per-place control.
+- latest shared latitude/longitude, accuracy, battery, charging state, source/update time;
+- FCM device registration/notification preferences;
+- rate-limit/cooldown metadata;
+- optional exact Home/Work cloud copies when explicitly enabled;
+- Homi+ entitlement/billing metadata described below.
 
-The canonical Household shared-data path is:
+Shared Household records use:
 
 `households/{householdId}/data/{domain--itemId}`
 
-Each record contains a versioned outer envelope plus the domain payload and server update metadata. Access requires the caller to remain a current member of that exact Household through both the membership pointer and parent Household member list.
+Access requires the signed-in account to remain a current canonical member through both the membership pointer and parent Household member list.
 
-For an arrival notification, `sendArrivalCheckIn` receives only `home`/`work` plus selected trusted recipient UIDs. It does **not** receive the saved address/coordinate.
+## Homi+ / Google Play billing data
 
-### Optional exact Home/Work cloud copy
+0.13 introduces Google Play subscription processing. Homi does **not** collect card/bank details. Google Play handles checkout/payment method/tax/customer transaction processing according to Google's terms.
 
-If the owner enables **Show this place to selected people**, Homi stores a minimal document at:
+Homi processes only the subscription information required to associate and verify Homi+ access, including:
 
-`sharedPlaces/{ownerUid}/places/{home|work}`
+- Google Play subscription product/base-plan identifier;
+- purchase token received from the Play Billing client and stored only in backend-restricted Homi billing state;
+- SHA-256-derived token hash/internal lookup identifiers;
+- Google Play order/lifecycle/acknowledgement metadata returned by Android Publisher;
+- a SHA-256-derived opaque Homi account identifier used as Play's obfuscated external account identifier rather than the raw Firebase UID;
+- Homi purchaser UID inside server-restricted billing records;
+- Homi+ plan/state/capability projection;
+- Duo secondary-seat account where applicable;
+- canonical Household identifier/members covered by Household Homi+ where applicable;
+- subscription validity/expiry metadata;
+- Pub/Sub/RTDN processing metadata needed to refresh lifecycle state.
 
-containing:
+Client Firestore access is restricted to the signed-in user's own narrow `entitlements/{uid}` projection. Raw purchase tokens, purchaser mapping, billing-account links and per-source coverage are backend-only.
 
-- owner UID;
-- Home/Work kind;
-- precise latitude/longitude;
-- readable address;
-- explicitly selected viewer UIDs;
-- server update timestamp.
+The Homi client never grants paid access merely because a device reports a successful purchase. The backend verifies current state against Google Play and acknowledges the purchase where required before authoritative entitlement is projected.
 
-This is separate from arrival delivery and separate from Shared Household data sync. It is off by default, including after migration from older builds.
+RTDN notifications are treated as change signals; Homi re-fetches authoritative state from Android Publisher rather than treating the notification payload itself as entitlement truth.
 
-A viewer can read the document only if they are explicitly listed, the Homi connection remains accepted and the owner currently has location sharing active to that viewer. Direct client mutation is denied; a protected callable validates/grants/revokes the server copy.
+A person may have multiple entitlement sources, such as their own Personal subscription plus coverage from another purchaser's Household plan. Backend-only coverage records are reduced into one entitlement projection so ending one source does not erase a separate still-valid source.
 
-Turning the per-place sharing switch off removes the cloud copy. Disconnect cleanup strips stale viewers. Account deletion removes owned shared-place copies. Local erase attempts to revoke owned copies and retains only a non-sensitive pending-clear marker if temporary connectivity prevents immediate cloud cleanup.
+### Account deletion and subscriptions
+
+Deleting a Homi account and canceling a Google Play subscription are separate operations. Homi deletion removes Homi-side billing mappings/coverage but does not silently cancel the Play subscription. User-facing deletion UI and the public account-deletion page must state this clearly and provide Google Play subscription-management guidance.
+
+## Google Places processing
+
+For Home/Work setup, Homi can use Google Places API (New) through the native Places SDK wrapper. Homi sends the user's autocomplete query to Google Places and, after selection, requests only the Place ID, formatted address and coordinate required to save the place. Google's attribution is displayed with results.
+
+**Set from here** remains a separate route using current device location/reverse geocoding where available.
+
+The Maps/Places Android credential is package/SHA restricted and must not be committed or logged.
 
 ## Third-party processors/platforms
 
-Current technical providers include:
+Current providers/features include:
 
-- Google Firebase / Google Cloud for Auth, Firestore, Cloud Functions and FCM;
-- Google Maps Platform including Maps SDK for Android and Places API (New);
+- Google Firebase / Google Cloud: Auth, Firestore, Cloud Functions, FCM and Pub/Sub;
+- Google Maps Platform: Maps SDK and Places API (New);
 - Android/device location/geocoding services;
-- the user's telephone/network provider for emergency phone calls opened by Homi;
-- Google Play for Android distribution and later paid Android digital products if Homi+ launches.
+- user's telephone/network provider for emergency calls opened externally;
+- Google Play: Android distribution, Play Billing, subscription lifecycle, Android Publisher API and RTDN if Homi+ is activated.
 
-Final privacy/Data Safety disclosures must match the exact release SDKs and actual feature configuration.
+Final privacy/Data Safety declarations must match the exact release binary and enabled provider configuration.
 
 ## Household membership and consent separation
 
 The product keeps these distinct:
 
-1. connecting two Homi accounts;
-2. editing a private relationship label such as Partner/Friend/Roommate;
-3. creating/joining the canonical Shared Household through a separate invitation/acceptance flow;
-4. synchronizing supported Household records while current canonical membership exists;
-5. enabling current-location visibility for an individual;
-6. enabling background current-location updates on the tracked device;
-7. selecting a person as an arrival recipient for Home/Work;
+1. connecting Homi accounts;
+2. editing a private relationship label;
+3. creating/joining canonical Shared Household through invite/accept;
+4. synchronizing supported Household data;
+5. granting current-location visibility to a person;
+6. enabling background live updates;
+7. choosing arrival recipients;
 8. enabling arrival monitoring;
-9. separately allowing selected recipients to see the exact saved Home/Work.
+9. separately sharing exact Home/Work;
+10. purchasing/receiving Homi+ entitlement.
 
-A connection or relationship label never grants Household data access. Household membership never enables any location capability by itself. From 0.12, the old Household/Friend People scope is displayed from canonical membership rather than being a user-editable authorization control.
+A connection label never grants Household access. Household membership never turns on location sharing. Homi+ must not convert one permission into another.
 
 ## Household synchronization and retention
 
-Routines, Supplies and supported Home records remain locally persisted even while cloud-synchronized. This supports Homi's local-first/offline behavior.
+Shared data remains locally persisted while synchronized. Different IDs merge naturally; same-record conflicts settle to the last server-acknowledged Firestore value and listening devices persist that value.
 
-Different record IDs merge. If two synchronized clients update the same record, the last server-acknowledged Firestore write becomes the shared value and listening devices persist that value locally.
+Removing/leaving a Household revokes future cloud access but cannot reliably erase copies previously delivered to another device. Public wording must not promise retroactive endpoint erasure.
 
-Removing a person from a Household or leaving it revokes future cloud access but does not remotely erase the copy of records already stored on that person's device. This limitation must be accurately disclosed because a system cannot reliably revoke data already delivered to another endpoint. Sensitive information should therefore not be placed in shared household records under an assumption of retroactive device erasure.
+Deleting a canonical Household triggers bounded cleanup of nested shared data plus newer canonical shared Tasks, but device-local copies may remain until separately erased.
 
-Deleting a canonical Household deletes the shared Household identity and triggers bounded cleanup of its nested synchronized data plus newer shared Tasks carrying that Household ID. Individual devices may still retain previously synchronized local copies until the user erases/reinstalls/overwrites them through normal device controls.
+## Arrival check-in minimisation
 
-## Arrival check-in data minimisation
+Arrival detection runs locally against the saved Home/Work boundary.
 
-The arrival detector runs locally against the device location and locally saved Home/Work boundary.
-
-- initial inside/outside state primes without sending;
-- only outside→inside produces an arrival;
-- hysteresis/cooldown reduces edge duplicates;
-- the arrival callable/push contains no saved precise coordinate/address;
-- no route history is created;
-- selected arrival recipients are revalidated as accepted connections server-side.
-
-Arrival recipients need not receive exact Home/Work visibility; that requires the separate switch described above.
+- initial state primes without sending;
+- only outside→inside triggers arrival;
+- hysteresis/cooldown reduces duplicates;
+- arrival callable/push contains no saved precise address/coordinate;
+- no default route history is created;
+- recipients are revalidated as accepted trusted connections.
 
 ## Background location disclosure
 
-Before production background permission, clearly explain:
+Before production background-location permission, Homi must clearly explain:
 
-- why background access is needed for user-selected Live updates/check-ins;
-- who may see location or receive arrivals;
-- that Android shows a persistent foreground-service notification;
-- how to stop Live updates/check-ins and revoke a person;
-- how exact Home/Work sharing is separately controlled;
-- that device/network/power conditions can delay/invalidate location;
-- that force-stop can interrupt background operation until Homi reopens.
+- why background access is needed for user-selected live updates/check-ins;
+- who can see location/receive arrivals;
+- persistent Android foreground-service notification;
+- how to stop/revoke sharing and check-ins;
+- separate exact Home/Work sharing control;
+- device/network/power/force-stop limitations.
 
-Disclosure must appear contextually before the sensitive permission request, not only in the privacy policy.
+This prominent disclosure must be contextual before the sensitive permission flow, not only in a privacy policy.
 
 ## Emergency shortcuts
 
-Emergency-region data is bundled locally and only reviewed/supported regions are offered. Tapping a control hands the selected number to the external phone application. Homi does not silently place the call, request direct-call permission, dispatch responders, automatically transmit location or claim the call was connected/acted upon.
-
-## Location retention
-
-Default location architecture is latest state, not long-term route history.
-
-The owner's full Home/Work check-in configuration remains local. Only the explicitly shared minimal precise-place copy described above can be stored in Firestore, and only while that owner sharing choice remains enabled. The arrival backend still does not receive the precise place merely to deliver a check-in.
-
-Any future breadcrumb/history feature requires a defined purpose, bounded retention, explicit user control, deletion coverage and refreshed Play/privacy disclosures before release.
+Emergency-region data is bundled local data. Only verified/supported regions should be offered publicly. Tapping hands the number to the external phone app; Homi does not silently place calls, dispatch responders, automatically send location or promise successful emergency action.
 
 ## Notifications
 
-Fresh-install operational categories remain enabled by default in Homi preferences:
+Operational notification categories remain distinct from product announcements. Homi Updates stays off by default. Arrival notifications may show sender name and Home/Work label but not precise saved address/coordinate on the lock screen.
 
-- Household attention;
-- Tasks & routines;
-- People;
-- Service & security.
-
-Homi Updates/product announcements remain off by default. Android retains actual notification-permission control and existing persisted user choices remain authoritative.
-
-Arrival notifications may show sender name and Home/Work label because those are the chosen event details, but must not include precise addresses/coordinates on the lock screen.
-
-The foreground-service notification used for active background location is operational platform disclosure and separate from optional notification categories.
+The foreground-service notification for active background location is platform disclosure, not an optional marketing notification.
 
 ## Data minimisation principles
 
-- no precise coordinates/addresses/household notes/Task text in analytics/general logs;
-- no saved Home/Work coordinate/address in `sendArrivalCheckIn` merely to generate a message;
-- no contact-book collection just to discover Homi users when reusable Homi codes suffice;
-- no stored raw passwords;
+- no precise coordinates/addresses/Household notes/Task text in analytics/general logs;
+- no raw passwords;
 - no hidden route history;
-- no automatic Household conversion merely to enable location/check-ins;
-- no upload of unmatched pre-existing local Household records solely because a user joined a different Household;
-- no privacy, stop-sharing, saved-place revoke or deletion paywall;
+- no contact-book collection merely to discover users when Homi codes suffice;
+- no automatic Household conversion for location/check-ins;
+- no automatic upload of unmatched old Household records merely because a user joins another Household;
+- no client-readable raw Google Play purchase tokens;
+- no raw Firebase UID sent to Play as obfuscated account ID;
+- no privacy/revoke/delete paywall;
 - remove/disable dead push tokens;
-- developer notifications remain category-controlled, not a marketing backdoor.
+- RTDN is reverified, not trusted directly.
 
 ## User-facing controls
 
-Homi & account provides Why Homi exists, Household, Notifications, Help, Privacy & your data, Location & safety, Terms, About, Erase data from this phone and Delete Homi account.
+Homi & account provides Household, Notifications, Help, Privacy & your data, Location & safety, Terms, About, local erase and account deletion. Profile Settings in 0.13 also exposes **Homi+ → Plans & billing** for subscription/coverage management.
 
-People remains map-first. Connections expose **My code** and **Connect** separately. Relationship labels remain editable, while Household membership is managed only through Shared Household. The full map keeps quick emergency access in reach.
-
-User-facing wording must remain finished-product copy. Internal documents may identify unverified/release-blocked state.
-
-## Account deletion
-
-Google Play requires an app supporting account creation to provide a discoverable in-app account deletion path and an external web resource for account/data deletion requests.
-
-Official reference: https://support.google.com/googleplay/android-developer/answer/13327111
-
-Homi's protected deletion server flow removes account-linked collaboration state and then the Firebase Authentication account after successful cleanup. Canonical Household handling depends on the deleting user's role:
-
-- a non-owner is removed from the Household while the Household and shared Household data remain for current members;
-- an owner with another current member transfers ownership according to the governed deletion flow rather than deleting everybody else's Household;
-- an owner with no remaining member may cause the empty Household parent to be deleted, which triggers cleanup of its shared data.
-
-The current phone then clears local Homi/arrival data according to the deletion flow. Previously synchronized copies on other members' devices cannot be guaranteed to be remotely erased.
-
-The external deletion page remains a production blocker and must be real/functional before entering it into Play Console.
-
-## Local erase semantics with shared data
-
-**Erase data from this phone** is not the same as deleting the Shared Household from the cloud. It clears device-local/private records and cached location. If the user remains signed in to an active Shared Household, cloud-authoritative shared records may synchronize to the phone again. The final user-facing copy must make this distinction explicit rather than promising permanent deletion of cloud-shared records from one device.
+People remains map-first. Connections expose **My code** and **Connect** on demand. Household membership is managed only through Shared Household.
 
 ## Play Data Safety preparation
 
-Before public release, reconcile the form against the exact build, including:
+Before public release, reconcile Play Data Safety against the exact submitted build, including:
 
 - precise/background location;
-- optional cloud-stored precise Home/Work when explicitly shared;
-- Google Places search/selected place processing;
-- account/user IDs, email/name/profile photo;
-- trusted relationships and canonical Household membership/invites;
-- arrival-recipient/viewer selections;
-- push device identifiers/FCM processing;
-- cloud-synchronized Household Routines, Supplies, Home Things, maintenance/repair and utility data;
-- shared Task text/assignment/completion attribution;
-- encryption in transit and account deletion;
-- optional vs required collection and service-provider sharing.
+- optional exact Home/Work cloud storage;
+- Maps/Places processing;
+- account IDs, email/name/profile photo;
+- connections/Household membership/invites;
+- push identifiers;
+- Shared Household content and shared Tasks;
+- Google Play billing/subscription verification metadata;
+- encryption in transit;
+- account deletion and external deletion request path;
+- optional/required collection and service-provider processing.
 
 Do not copy another app's Data Safety answers.
 
@@ -251,18 +213,15 @@ Do not copy another app's Data Safety answers.
 
 Before production:
 
-- App Check valid traffic confirmed and production enforcement deliberately staged;
-- Firestore App Check enforcement staged only after valid release-client traffic is visible;
-- release signing/Play signing SHA credentials registered;
-- Firestore allow/deny rules proven including canonical Household data and sharedPlaces;
-- protected Functions tested with valid/invalid users and App Check;
-- exact Home/Work grant/revoke/location-share-off/disconnect/account-delete behaviour verified;
-- Shared Household join/remove/leave/delete/account-delete retention behavior verified;
-- first-owner Household migration and non-owner/private-legacy non-upload behavior verified;
-- Home/Work absent from arrival notification payload/logs;
-- external deletion page published;
-- stable Privacy Policy/Terms URLs published;
-- background-location disclosure and Play declaration reviewed;
-- Data Safety completed from actual release build;
-- cloud billing/monitoring configured;
-- final POPIA/privacy documents professionally reviewed.
+- final 0.12 Shared Household backend accepted;
+- final 0.13 billing lifecycle accepted from a Play Internal Testing install;
+- Play Integrity App Check valid traffic proven, with Firestore enforcement staged deliberately;
+- release/Play signing fingerprints registered;
+- Maps/Places restrictions verified;
+- external account-deletion page published;
+- stable Privacy Policy and Terms URLs published;
+- account-deletion UI explicitly separates Homi deletion from Play subscription cancellation;
+- background-location disclosure/declaration/review evidence accepted;
+- Data Safety completed from the actual release binary;
+- Cloud Billing budgets/alerts/monitoring active;
+- final POPIA/privacy wording professionally reviewed.

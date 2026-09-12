@@ -6,6 +6,7 @@ const {
   normalizePlayState,
   grantsPaidAccess,
   entitlementCapabilities,
+  projectEntitlementSources,
   configuredCatalog,
   productFor,
 } = require("./billing_policy");
@@ -49,6 +50,75 @@ test("Household grants four-member shared capability", () => {
   assert.equal(household.sharedHousehold, true);
   assert.equal(household.maxTrustedLiveViewers, 5);
   assert.equal(household.householdMemberLimit, 4);
+});
+
+test("multiple subscription sources combine without one purchase deleting another", () => {
+  const projected = projectEntitlementSources([
+    {
+      plan: "personal",
+      state: "active",
+      purchaserUid: "alice",
+      sourcePurchaseTokenHash: "personal-token",
+      seatRole: "purchaser",
+    },
+    {
+      plan: "household",
+      state: "grace_period",
+      purchaserUid: "bob",
+      sourcePurchaseTokenHash: "household-token",
+      seatRole: "household_member",
+      householdId: "home1",
+    },
+  ]);
+
+  assert.equal(projected.plan, "household");
+  assert.equal(projected.state, "grace_period");
+  assert.equal(projected.continuousLocationSender, true);
+  assert.equal(projected.sharedHousehold, true);
+  assert.equal(projected.maxTrustedLiveViewers, 5);
+  assert.equal(projected.householdMemberLimit, 4);
+  assert.equal(projected.sourceCount, 2);
+});
+
+test("inactive coverage cannot override a separate active subscription", () => {
+  const projected = projectEntitlementSources([
+    {
+      plan: "household",
+      state: "expired",
+      purchaserUid: "bob",
+      sourcePurchaseTokenHash: "expired-household",
+      seatRole: "household_member",
+    },
+    {
+      plan: "personal",
+      state: "active",
+      purchaserUid: "alice",
+      sourcePurchaseTokenHash: "active-personal",
+      seatRole: "purchaser",
+    },
+  ]);
+
+  assert.equal(projected.plan, "personal");
+  assert.equal(projected.state, "active");
+  assert.equal(projected.continuousLocationSender, true);
+  assert.equal(projected.sharedHousehold, false);
+});
+
+test("an expired purchaser still receives status without paid capability", () => {
+  const projected = projectEntitlementSources([
+    {
+      plan: "duo",
+      state: "expired",
+      purchaserUid: "alice",
+      sourcePurchaseTokenHash: "expired-duo",
+      seatRole: "purchaser",
+    },
+  ]);
+
+  assert.equal(projected.plan, "duo");
+  assert.equal(projected.state, "expired");
+  assert.equal(projected.continuousLocationSender, false);
+  assert.equal(projected.sharedHousehold, false);
 });
 
 test("billing catalog fails closed until every durable Play id exists", () => {

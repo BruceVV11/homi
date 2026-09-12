@@ -80,7 +80,12 @@ class HomiEntitlement {
   factory HomiEntitlement.fromMap(Map<String, dynamic>? data) {
     if (data == null) return free;
     final definition = HomiPlusPlans.fromSlug(data['plan']?.toString());
-    final state = HomiBillingState.fromValue(data['state']);
+    final validUntil = _dateFrom(data['validUntil']);
+    final reportedState = HomiBillingState.fromValue(data['state']);
+    final state = reportedState == HomiBillingState.canceled &&
+            (validUntil == null || !validUntil.isAfter(DateTime.now()))
+        ? HomiBillingState.expired
+        : reportedState;
     if (definition == null || !state.grantsPaidAccess) {
       return HomiEntitlement(
         plan: definition?.plan ?? HomiPlusPlan.free,
@@ -95,7 +100,7 @@ class HomiEntitlement {
         householdId: _cleanString(data['householdId']),
         seatRole: _cleanString(data['seatRole']),
         duoSeatAssigneeUid: _cleanString(data['duoSeatAssigneeUid']),
-        validUntil: _dateFrom(data['validUntil']),
+        validUntil: validUntil,
       );
     }
 
@@ -112,7 +117,7 @@ class HomiEntitlement {
       householdId: _cleanString(data['householdId']),
       seatRole: _cleanString(data['seatRole']),
       duoSeatAssigneeUid: _cleanString(data['duoSeatAssigneeUid']),
-      validUntil: _dateFrom(data['validUntil']),
+      validUntil: validUntil,
     );
   }
 

@@ -1,233 +1,232 @@
 # Homi security architecture
 
 Date: 2026-09-12
-Current source candidate: `0.12.0+16`
-Development branch: `homi-0.12-shared-data-plane`
+Current development candidate: `0.13.0+17`
+Branch: `homi-0.13-billing-entitlements`
+Stacked base: exact 0.12 candidate `233c6ab16caa3a9c5951251d7805f57a68ca440c`
 
-Homi handles trusted relationships, device push tokens, shared Household records and precise location. A modified client is treated as hostile. UI checks are convenience only; authorization belongs in Firebase Authentication, App Check, Cloud Functions, Firestore rules and IAM.
+Homi handles trusted relationships, precise location, Shared Household records and now Google Play subscription state. A modified client is treated as hostile. UI visibility and local purchase callbacks are convenience state only; authorization belongs in Firebase Authentication, App Check, Cloud Functions, Firestore rules, Google Play verification and least-privilege IAM.
 
-## Security goals
+## Core security goals
 
-- no private Household/location read without the required server-owned authorization state;
-- clients cannot forge identity, canonical Household membership, ownership, completion attribution or developer role;
-- a People relationship label cannot grant Household data access;
-- connection, Household membership, location sharing and exact Home/Work visibility remain separate permissions;
-- removal/reclassification/revocation removes the corresponding derived access;
-- arrival delivery cannot become an arbitrary-recipient notification primitive;
-- arrival notifications contain no saved Home/Work address/coordinate;
-- check-in-only samples do not silently update cloud latest location;
-- high-frequency writes and fan-out remain bounded where applicable;
-- local-only mode does not activate Household data synchronization merely because Firebase still has a cached authenticated user;
-- privacy exits remain available regardless of plan/payment state;
-- destructive account operations require recent authentication and remove/account for Homi-managed cloud data according to Household ownership rules.
+- no private Household/location read without server-owned authorization;
+- clients cannot forge identity, Household membership/ownership, shared-task audience or Homi+ entitlement;
+- connection, Household membership, current-location sharing and exact Home/Work visibility remain separate permissions;
+- Google Play purchase success on-device never grants paid capability by itself;
+- purchase tokens never become client-readable cloud records;
+- billing lifecycle changes are re-verified against Google Play rather than trusted from RTDN payload contents;
+- multiple subscription/coverage sources cannot overwrite each other accidentally;
+- account deletion removes Homi-side billing mappings without falsely representing Play subscription cancellation;
+- privacy exits remain available regardless of paid state;
+- high-frequency/location/billing mutation surfaces retain server-side abuse bounds;
+- release scripts fail closed on wrong project/runtime/export/test/provider identity.
+
+## Permanent backend identity
+
+- project: `homi-ee80a`
+- project number: `883068189841`
+- region: `africa-south1`
+- Functions runtime: Node 22
+- canonical runtime identity: `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`
+- Android package: `za.co.theconceptlab.homi`
+
+Do not replace the canonical runtime/deployment identity merely to work around a missing Play or GCP permission. Provider access is repaired on the existing identity with the minimum required role/Play Console permission.
 
 ## Protected callable mutation boundary
 
-Sensitive collaboration writes continue to use App-Check-protected callable Functions for:
+Sensitive writes use App-Check-protected callables where appropriate, including:
 
-- identity/code issuance or repair;
-- connection lifecycle;
-- relationship-label updates;
-- canonical Household membership/ownership/invitations;
+- identity/code issuance/repair;
+- trusted connection lifecycle;
+- relationship-label update;
+- Household identity/membership/invitations;
 - per-viewer location authorization;
 - shared one-off Tasks;
-- People hearts;
-- arrival delivery;
-- exact saved-place sharing;
-- developer campaigns;
-- device registration; and
-- account deletion.
+- People hearts and arrival delivery;
+- exact saved-place grant/revoke;
+- device registration/developer campaigns;
+- account deletion;
+- Google Play purchase verification; and
+- Homi+ Duo seat assignment.
 
-Reading an already-issued Homi code is not a sensitive mutation. `users/{uid}` is self-readable under Firestore rules, and the server writes the user's valid `homiCode` plus its lookup index atomically when provisioning identity. 0.12 therefore reads that established self profile first for display and only falls back to the protected `ensureHomiIdentity` callable when the profile is new/incomplete or needs repair. This prevents a transient Auth/App Check callable-proof problem from unnecessarily hiding a code the account already owns without weakening code issuance or connection lookup security.
-
-0.12 keeps the historic callable name `setTrustedPersonPreference`, but the server no longer trusts caller-supplied Household/Friend scope. The callable derives `household` only when both accounts currently share the same canonical Household; otherwise it stores `friend`.
-
-The historic shared-task callable names also remain stable. `createSharedTask`, `toggleSharedTask` and `removeSharedTask` are overridden by a canonical implementation that derives authorization from current Household membership rather than a user-editable People preference.
+Reading an already-issued Homi code is a self-profile read, not a new identity mutation. Another user still cannot read/write that profile/code.
 
 ## Canonical Household authorization
 
-The server-owned identity relationship is:
+The canonical relationship remains:
 
-- `households/{householdId}` with `memberUids` and `ownerUid`;
+- `households/{householdId}`;
 - `households/{householdId}/members/{uid}`;
 - `householdMemberships/{uid}`;
 - `householdInvites/{householdId}_{inviteeUid}`.
 
-A shared-data caller must satisfy **both** halves of membership:
+Shared Household data requires both:
 
-1. `householdMemberships/{auth.uid}.householdId == householdId`; and
-2. the parent Household's server-owned `memberUids` still contains `auth.uid`.
+1. the caller's membership pointer references that Household; and
+2. the parent Household's server-owned `memberUids` contains the caller.
 
-A forged/stale membership pointer alone is insufficient, and a stale parent member list alone is insufficient after the membership pointer is removed.
+A People label cannot manufacture Household access. Household membership also does not imply any location authorization.
 
-Household identity/membership/invite mutations remain server-only callables. Clients cannot directly promote themselves to owner/member or manufacture an invitation.
-
-## 0.12 Household data plane
-
-Shared Household domain records are nested under the exact canonical Household:
+0.12 synchronized Household records live at:
 
 `households/{householdId}/data/{domain--itemId}`
 
-Allowed domains are deliberately fixed to:
+Allowed domains are `routine`, `supply`, `homeThing`, `homeEvent`, and `utilityReading`. Rules enforce deterministic document identity, a fixed/versioned envelope, authenticated actor and server request timestamp.
 
-- `routine`;
-- `supply`;
-- `homeThing`;
-- `homeEvent`;
-- `utilityReading`.
-
-Create/update requires a fixed outer envelope with only the reviewed fields:
-
-- `domain`;
-- `itemId`;
-- `payload`;
-- `schemaVersion`;
-- `updatedByUid`;
-- `updatedAt`.
-
-Rules require:
-
-- `recordId == domain + '--' + itemId`;
-- non-empty bounded `itemId`;
-- map payload whose `id` matches the outer item ID;
-- `schemaVersion == 1`;
-- `updatedByUid == request.auth.uid`; and
-- `updatedAt == request.time`.
-
-The domain payload remains versioned app data. A malformed record is ignored by the client rather than blocking the rest of the Household snapshot. Firestore's document-size limit still provides the outer storage bound.
-
-Unlike high-risk identity/permission mutations, this data plane uses authenticated Firestore writes so the existing local-first app can retain Firestore's offline queue. The authorization boundary is therefore the canonical Household rules, not a client boolean. Production Firestore App Check enforcement remains a staged release requirement after valid-client traffic is proven.
-
-## Local-first migration/privacy boundary
-
-The local controller writes SharedPreferences first. Household synchronization is additive.
-
-0.12 never treats an empty Firestore cache as proof that a server Household has no data. Initial migration waits for an authoritative non-cache snapshot.
-
-Automatic legacy import is limited to the narrow safe case where:
-
-- this device has never synchronized another canonical Household;
-- the signed-in user is the owner; and
-- the authoritative Household data collection is empty.
-
-Otherwise pre-existing local records that are not already known shared records remain device-private legacy records and are not silently uploaded. New records created after Household classification may synchronize normally.
-
-If Homi is in explicit local-only mode, the Household synchronizer does not start even when a Firebase account happens to remain cached on the device.
+The safe first-sync strategy remains unchanged: an authoritative non-cache empty server collection is required for the narrow first-owner import; unmatched data on a member joining another/existing Household remains private legacy data rather than being silently uploaded. Explicit local-only mode suppresses this synchronizer.
 
 ## Shared one-off Tasks
 
-Personal **Me** Tasks remain local/private.
+Personal **Me** Tasks remain local/private. Shared Tasks retain the compatibility collection, but access now requires both the safe stored audience and current canonical Household membership.
 
-For a new 0.12 shared Task, the server derives `householdId` and `memberUids` from the creator's current canonical Household. A caller cannot manufacture task visibility by setting a People scope. An assignee must be a current member of the same Household.
-
-Callable access requires the acting UID to be present in the Task's safe `memberUids` audience and still be a current canonical member of the Task's stored `householdId`. The original creator does **not** have to remain in the Household for remaining legitimate recipients to keep using the Task. For audience-version-1 Tasks, the current Household owner can perform owner-level reopen/remove recovery when the original creator/completer is no longer available.
-
-`onHouseholdTaskMembershipChanged` updates only `audienceVersion: 1` Tasks when the canonical Household member list changes. Removed assignee UIDs are cleared and removed completion UIDs are stripped. The version check is deliberate: migrated historical Tasks are never widened merely because somebody new joins later.
-
-Pre-0.12 Tasks are governed by the deployment migration. A safely mappable legacy Task receives the creator's current canonical Household and only the intersection of its historical recipients and current members. It is marked `audienceVersion: 0`, so the canonical audience synchronizer ignores it. Unmappable Tasks remain stored but fail closed under the 0.12 read rule.
-
-`sharedTasks` remains a separate compatibility collection in 0.12 rather than being destructively migrated into the generic data plane during the same release.
-
-## Household deletion/orphan cleanup
-
-Firestore parent deletion does not recursively delete subcollections. 0.12 adds `onHomiHouseholdDeletedDataCleanup` on `households/{householdId}` deletion.
-
-The trigger deletes nested `data` documents in bounded batches and removes new shared Tasks that carry the deleted `householdId`. This prevents an intentionally deleted Household from leaving unreachable synchronized data indefinitely.
-
-The Functions export surface is exactly **37** in the 0.12 deployment contract: one new Household-data cleanup trigger plus one new Task-membership synchronizer. The preference/task implementation modules override existing callable names rather than adding further public names.
+New canonical tasks follow current membership. Removed assignee/completion UIDs are stripped. Pre-0.12 tasks are migrated only to the intersection of their historical audience and current canonical Household, marked with the historical audience version, and are never widened when a new member joins later.
 
 ## Continuous-location abuse/cost controls
 
-The established controls remain:
+Existing controls remain:
 
-1. Firestore rejects an update to `locations/{uid}` if the previous server timestamp is less than 90 seconds old.
-2. The protected `setLocationShare` callable allows at most five active outbound viewers for one sender.
+- Firestore enforces at least 90 seconds between direct latest-location updates;
+- the client independently uses the same cloud-write gap;
+- Android requests background positions roughly every two minutes with a 100 m movement filter;
+- one sender can authorize at most five active trusted viewers;
+- stopping/revoking sharing is never blocked by a paid state or viewer limit;
+- default location storage is latest state, not route history.
 
-The client independently uses the same 90-second cloud gap and Android requests roughly two-minute / 100 m movement updates.
+Exact Home/Work sharing remains an independent explicit grant requiring an accepted connection and active owner-to-viewer current-location share.
 
-The five-viewer limit applies to active outgoing live authorization, not total trusted connections or Household seats.
+## Homi+ trust model
 
-`setLocationShare(active:false)` is deliberately not blocked by activation limits. A user must always be able to stop sharing.
+### Client catalog and purchase flow
 
-## Location reads
+The client has one source-controlled `HomiPlayBillingCatalog.current`. It is deliberately blank/unconfigured until the real Play product/base-plan IDs exist. An unconfigured catalog cannot start a purchase.
 
-A user writes only their own `locations/{uid}`. Rules validate exact schema, coordinate/accuracy/battery bounds, allowed source and server timestamp.
+The client uses the maintained Flutter `in_app_purchase` integration. Homi sends Google Play a SHA-256-derived opaque account identifier rather than the raw Firebase UID.
 
-A viewer reads another user's latest location only with both an accepted connection and active owner-to-viewer share.
+The purchase stream can initiate verification but cannot grant capability. The app consumes paid state only from its own server-written `entitlements/{uid}` projection.
 
-Optional precise `sharedPlaces` reads require explicit viewer selection, accepted connection and active owner-to-viewer current-location share. Clients cannot mutate `sharedPlaces` directly.
+### Google Play verification
 
-Canonical Household membership does **not** satisfy or replace these location permissions.
+`verifyGooglePlaySubscription` requires Firebase Auth + App Check, applies a server rate limit, then verifies the purchase token against the Android Publisher API for the permanent Homi package.
 
-## Arrival check-ins
+The backend requires Google Play's `obfuscatedExternalAccountId` to equal the expected opaque identifier for the signed-in Homi account. A purchase already claimed by another Homi account cannot be reassigned by changing client input.
 
-`sendArrivalCheckIn` remains Auth/App-Check protected and validates recipients/server limits. It receives no saved Home/Work coordinate/address. Recipients are revalidated as accepted trusted connections and notification preferences are respected.
+The backend maps the **verified Play product + base-plan ID** to a Homi+ tier. Product/base-plan IDs are public but durable release infrastructure and are source-controlled after Play Console creation; they are not guessed at runtime.
 
-## Authentication recovery
+### Purchase token storage and acknowledgement
 
-`PeopleHubPage` recreates auth-scoped People state when Firebase identity changes/restores. `HomiCloudActions` retries one `unauthenticated` protected call after forced Firebase Auth + App Check refresh, then surfaces product language rather than raw codes.
+Raw purchase tokens exist only in backend-only `billingPurchases`; clients cannot read them through Firestore rules.
 
-0.12 separates Homi-code display from mandatory callable provisioning. The client first attempts the signed-in user's permitted `users/{uid}` profile read and reuses a valid established code. Only a missing/invalid profile code needs the protected provisioning fallback. Connection streams remain independent, so identity-code errors cannot hide trusted People.
+After successful verification, when Google reports acknowledgement pending, the backend acknowledges the subscription through Android Publisher. The client does not issue a second acknowledgement based on stale local state.
 
-This is a usability/recovery path, not a trust-boundary change: another account still cannot read `users/{uid}`, clients still cannot write profile/code records directly, and connecting with a code still uses the protected server lookup/mutation path.
+The governed Internal Testing gate must prove acknowledgement/lifecycle behavior; source alone is not acceptance evidence.
 
-## Emergency-region safety
+### Server-only billing collections
 
-Emergency numbers are source-controlled local data, not writable server authorization state. Homi fails closed for unsupported regions rather than inventing a fallback number.
+- `billingPurchases/{purchaseTokenHash}` — verified Play lifecycle/token metadata;
+- `billingAccounts/{purchaserUid}` — canonical active token and Duo seat bookkeeping;
+- `billingAccountLinks/{obfuscatedAccountId}` — server-side account resolution for RTDN;
+- `billingCoverage/{purchaseTokenHash_recipientHash}` — backend-only per-source coverage;
+- `entitlements/{uid}` — narrow self-readable projection only.
 
-Release governance requires every country offered publicly to be verified against ITU-T E.129 and/or an official national emergency source. Leading-zero numbers are strings.
+Clients may `get` only their own `entitlements/{uid}` and cannot list/write/delete it. All other billing collections are backend-only.
 
-Emergency taps only hand off to the system phone app with `tel:`. They do not silently place calls or transmit location.
+### Multi-source entitlement projection
 
-## IAM and backend runtime
+A person may be covered by more than one source, for example their own Personal subscription plus another payer's Household plan. Therefore a single purchase document is never allowed to directly overwrite/delete all entitlement state.
 
-Functions run as `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`. The runtime identity must not receive Owner/Editor. Global bounded defaults remain max 5 instances, min 0, 256 MiB unless a smaller Function-specific cap is defined.
+Each verified purchase projects backend-only coverage records. `entitlements/{uid}` is recomputed across current sources. If one source expires while another stays valid, the remaining source continues to grant its capabilities.
 
-Permanent backend identity remains:
+### Duo seat safety
 
-- project `homi-ee80a`;
-- project number `883068189841`;
-- region `africa-south1`;
-- Node 22.
+- purchaser is the first seat;
+- second seat must be an accepted trusted Homi connection;
+- server chooses the entitlement recipient;
+- reassignment cooldown is seven days;
+- unassigning or disconnecting the person does not reset the existing cooldown and cannot be used to bypass it.
 
-## Automated gates
+### Household coverage safety
 
-`scripts/test-firestore-security.sh` runs all three Firestore emulator suites serially and refuses to run if their declared test count is not exactly **23**:
+Household coverage is derived from the purchaser's **current canonical Household**, never a client-supplied arbitrary Household ID. Only current canonical members are covered, with the product cap of four members.
+
+Membership changes trigger entitlement reconciliation. Losing Household coverage does not remove another valid subscription source that the user owns/receives separately.
+
+### Subscription lifecycle and RTDN
+
+`onGooglePlayBillingNotification` listens on governed Pub/Sub topic `homi-google-play-rtdn`. RTDN payload contents are treated only as a change signal; the backend re-fetches authoritative state from Android Publisher before changing entitlement.
+
+Expected capability behavior:
+
+- `active` — paid capabilities enabled;
+- `grace_period` — enabled while Play attempts payment recovery;
+- `canceled` — enabled through the already-paid term until expiration;
+- `on_hold`, `paused`, `pending`, `expired` — paid capabilities disabled.
+
+Superseded purchase tokens cannot regain authority after a newer token becomes canonical for a plan change.
+
+## Account deletion + billing
+
+Deleting a Homi account and canceling Google Play billing are separate actions.
+
+Homi account deletion/backstops remove Homi-side billing links and coverage, plus the self entitlement projection. They do **not** silently call Google Play to cancel the subscription. The user must be given a clear Google Play subscription-management route before deletion/public release.
+
+Privacy/location revoke/local erase/Household leave where permitted remain independent and free.
+
+## Firestore security gates
+
+0.13 adds two billing boundary tests to the existing 23. The governed emulator suite is expected to contain exactly **25/25** tests:
 
 - 13 established server-boundary tests;
-- 8 canonical Household identity/data-plane tests;
-- 2 canonical shared-Task query/fail-closed tests.
+- 8 canonical Household/data-plane tests;
+- 2 canonical shared-task query tests;
+- 2 Homi+ billing tests.
 
-The older server-boundary shared-Task assertions were updated to the canonical 0.12 contract rather than left expecting the pre-0.12 member-list-only rule.
+The billing tests prove:
 
-`functions/household_task_policy.test.js` adds **5 pure Node policy tests** proving that migrated audience-version-0 Tasks are not widened, canonical version-1 Tasks follow membership, invalid assignee/completer attribution is stripped, and Household-owner recovery permissions remain explicit. The governed backend helper runs these tests after Functions lint and before export/security/deployment work.
+- a user can read only their own server-written entitlement and cannot mutate it;
+- purchase-token/account-link/coverage state cannot be read from a client.
 
-The governed Functions helper requires Node 22, the immutable project number, exact source files, dependency lint, the 5 policy tests and exactly **37** exports before it reaches any production mutation. It then runs Firestore 23/23, dry-runs the legacy shared-Task migration, deploys/proves the canonical shared-Task writers, applies the safe migration, asserts migration stability, and only then deploys the stricter Firestore rules/indexes and remaining bounded Function batches.
+## Functions policy/export gates
 
-Standalone new JavaScript modules have received source-level Node 22 syntax checks where recorded. The pure task policy tests were additionally run against Node 22 during source preflight, but neither result substitutes for the governed dependency-loaded/export/emulator gate in Cloud Shell.
+The dependency-loaded pure Node policy suite is expected to contain **14/14** tests:
 
-Do not weaken collection-wide rules to make a client test pass. Fix the intended contract, inspect dependent query behavior, rerun the exact security gate, then deploy.
+- 5 Household/shared-task policy tests;
+- 9 billing policy tests covering state/capability semantics, canceled paid-term behavior, multi-source reduction and fail-closed catalog mapping.
 
-## Homi+ entitlement security target
+0.13 adds six billing exports to the 0.12 expected 37, giving an exact expected Functions surface of **43**.
 
-`lib/src/domain/homi_plus_plan.dart` records commercial plan definitions only. It is not trusted authorization state.
+The deploy helper refuses billing deployment until it proves:
 
-Paid enforcement must not activate until Google Play purchases are performed through Play Billing, verified server-side using the Google Play Developer API, represented by authoritative server entitlement state, maintained through RTDN/Pub/Sub, and tested through Play Internal Testing lifecycle states.
+- Node 22;
+- immutable project number;
+- complete billing source;
+- Functions lint + 14 policy tests;
+- exactly 43 exports;
+- Firestore 25/25;
+- source-controlled Play catalog is configured;
+- Android Publisher API is enabled;
+- RTDN Pub/Sub topic exists;
+- Google Play's notification service account can publish to the topic;
+- known legacy Function/task migration gates are handled before stricter runtime deployment.
 
-A local purchase callback, cached boolean or editable client record must never grant Homi+ by itself.
+Actual Play Console API authorization for the canonical runtime identity still requires an Internal Testing purchase verification; GCP state alone does not prove Play app access.
 
-Privacy, current-location revoke, exact-place revoke, local erase and account deletion must never be trapped behind entitlement state.
+## Paid enforcement remains disabled
 
-## Production gates still required
+The 0.13 source builds authoritative purchase/entitlement state, but existing continuous-location and Shared-Household capabilities are not yet paywalled. This is deliberate.
 
-- final exact 0.12 Windows analyzer/full Flutter test pass after the 2026-09-12 device-feedback source changes;
-- S25 Ultra acceptance of the affected People/Household/data flows, including established Homi-code display and graceful Add-person empty state;
-- governed Node 22 / **5 policy tests** / **37-export** / **23 Firestore tests** backend pass before 0.12 deployment;
+Enforcement must not activate until real Play Internal Testing proves purchase, acknowledgement, restore/reinstall, cancellation, grace, hold, expiry, RTDN, plan changes, Duo/Household coverage and privacy exits. Final enforcement must be server-authoritative rather than a scattered Flutter `isPaid` check.
+
+## Production security/compliance gates still required
+
+- 0.12 exact-head merge/governed Firebase deployment and runtime acceptance;
+- final 0.13 Windows analyzer/tests plus Node 22 / 14 policy / 43-export / Firestore 25 gates;
+- real Play product/base-plan catalog and Play API access;
+- RTDN Pub/Sub setup;
+- store-installed billing lifecycle proof;
 - permanent release signing / Play App Signing fingerprints;
 - Play-installed Google Sign-In;
-- production Maps/Places key restrictions;
-- Play Integrity App Check and later Firestore App Check enforcement after valid traffic metrics;
-- billing alerts/spend/monitoring;
-- public Privacy Policy/Terms/account-deletion URL;
-- Google Play Data Safety and background-location declarations;
-- authoritative Play Billing verification before Homi+ gating.
+- production Maps/Places restrictions;
+- Play Integrity App Check and staged Firestore App Check enforcement after valid release-client metrics;
+- Cloud Billing budgets/alerts/monitoring;
+- public Privacy Policy, Terms and external account-deletion resources;
+- Google Play Data Safety and background-location disclosure/declaration/review evidence.

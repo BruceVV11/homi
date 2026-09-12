@@ -14,10 +14,10 @@ const PLAN_PRIORITY = Object.freeze({
 const STATE_PRIORITY = Object.freeze({
   unknown: 0,
   expired: 1,
-  canceled: 2,
-  paused: 3,
-  on_hold: 4,
-  pending: 5,
+  paused: 2,
+  on_hold: 3,
+  pending: 4,
+  canceled: 5,
   grace_period: 6,
   active: 7,
 });
@@ -43,8 +43,32 @@ function normalizePlayState(value) {
   }
 }
 
+function timestampMillis(value) {
+  if (value == null) return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof value.toMillis === "function") return value.toMillis();
+  return null;
+}
+
+function effectivePlayState(state, validUntil, nowMs = Date.now()) {
+  // Google Play reports a voluntarily canceled subscription as CANCELED while
+  // the user remains entitled until the current paid term expires. If expiry
+  // is already past, fail closed immediately instead of waiting for the next
+  // EXPIRED RTDN. This follows the Play subscription lifecycle contract.
+  if (state !== "canceled") return state;
+  const expiryMs = timestampMillis(validUntil);
+  return expiryMs != null && expiryMs > nowMs ? "canceled" : "expired";
+}
+
 function grantsPaidAccess(state) {
-  return state === "active" || state === "grace_period";
+  return state === "active" ||
+    state === "grace_period" ||
+    state === "canceled";
 }
 
 function entitlementCapabilities(plan, state) {
@@ -176,6 +200,7 @@ module.exports = {
   HOUSEHOLD_MEMBER_LIMIT,
   DUO_REASSIGNMENT_COOLDOWN_DAYS,
   normalizePlayState,
+  effectivePlayState,
   grantsPaidAccess,
   entitlementCapabilities,
   projectEntitlementSources,

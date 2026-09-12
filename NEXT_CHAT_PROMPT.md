@@ -67,8 +67,8 @@ Bruce then reported two final minor Household UX issues and explicitly asked tha
 
 0.13 source addresses both:
 
-- `HouseholdService` now reuses stable current-Household/member/incoming/outgoing Firestore streams per authenticated UID, so `_busy` rebuilds no longer manufacture a new stream/loading state. This fixes the root pattern across cancel, rename, invite, remove, transfer and delete actions.
-- `_InviteMemberSheet` now ends with a compact sage privacy/context panel explaining that Household membership never turns on location sharing. This adds useful visual balance rather than empty filler.
+- `HouseholdService` reuses stable current-Household/member/incoming/outgoing Firestore streams per authenticated UID, so `_busy` rebuilds no longer manufacture a new stream/loading state. This fixes the root pattern across cancel, rename, invite, remove, transfer and delete actions.
+- `_InviteMemberSheet` ends with a compact sage privacy/context panel explaining that Household membership never turns on location sharing. This adds useful visual balance rather than empty filler.
 
 These changes are source-only until Bruce's real Flutter/device gate proves them.
 
@@ -125,7 +125,7 @@ Added:
 - Profile Settings → **Homi+ → Plans & billing**
 - `test/homi_entitlement_test.dart`
 
-`pubspec.yaml` is now `0.13.0+17` and adds:
+`pubspec.yaml` is `0.13.0+17` and adds:
 
 - `crypto: ^3.0.6`
 - `in_app_purchase: ^3.3.0`
@@ -141,25 +141,30 @@ The client:
 
 - queries Play product/base-plan details;
 - displays Play-localized prices;
-- can launch purchase/restore once catalog exists;
+- launches purchase/restore once catalog exists;
+- uses Google Play subscription replacement when moving between Homi+ products;
 - uses SHA-256(`homi:<uid>`) as opaque Play account identifier rather than raw UID;
 - sends purchase token to the protected backend;
 - never grants itself paid capability from local purchase state;
 - reads server-written `entitlements/{uid}`;
+- defensively treats a canceled entitlement as expired if its known paid-through time is already past;
 - provides Play subscription-management handoff;
 - provides Duo second-seat UI.
 
-### Recommended Play catalog
+### Permanent Play catalog direction
 
-Use **one Google Play subscription product** for the Homi+ family:
+Personal, Duo and Household are materially different subscription benefits and therefore use separate Google Play subscription products:
 
-- product: `homi_plus`
-- base plan: `personal-monthly`
-- base plan: `duo-monthly`
-- base plan: `household-monthly`
-- base plan: `household-annual`
+- product `homi_plus_personal`
+  - base plan `monthly`
+- product `homi_plus_duo`
+  - base plan `monthly`
+- product `homi_plus_household`
+  - base plans `monthly`, `annual`
 
 Do not populate source catalogs until these exact IDs have actually been created and verified in Play Console. Do not invent duplicate/temporary store products to recover from setup mistakes.
+
+For a tier change, `HomiBillingService` supplies the existing configured Homi+ purchase through `ChangeSubscriptionParam` and currently requests `ReplacementMode.withTimeProration`. This exact upgrade/downgrade behavior must be proven with license testers before public sale.
 
 ### Backend
 
@@ -195,7 +200,10 @@ Backend behavior:
 - multiple coverage sources are safe: ending one source does not delete another active source;
 - Duo second seat must be an accepted trusted connection and cannot bypass seven-day cooldown through unassign/disconnect;
 - Household coverage derives from purchaser's current canonical Household and caps at four;
-- superseded purchase tokens cannot retake authority after plan change;
+- known paid-term expiry is normalized during reconciliation so stale canceled/active/grace state cannot remain entitled after a verified term is already past;
+- a new token replacing another still-entitled canonical purchase must be linked by Play's `linkedPurchaseToken`;
+- an already-superseded token cannot retake canonical authority;
+- a fresh verified token may become canonical after the prior purchase is no longer entitled;
 - account deletion removes Homi mappings/coverage but does not cancel Play billing.
 
 ### Billing Firestore boundary
@@ -211,11 +219,11 @@ Backend-only:
 
 Two new emulator tests raise final 0.13 Firestore expected count to **25/25**.
 
-Pure Functions policy suite expected count: **14/14** = existing 5 shared-task + 9 billing policy tests.
+Pure Functions policy suite expected count: **16/16** = existing 5 shared-task + 11 billing policy tests.
 
 ## 0.13 provider prerequisites
 
-The governed backend helper now expects exactly 43 Functions and refuses billing deployment until:
+The governed backend helper expects exactly 43 Functions and refuses billing deployment until:
 
 - source-controlled Play catalog is populated;
 - Android Publisher API is enabled on `homi-ee80a`;
@@ -239,7 +247,8 @@ Do not gate continuous location or Shared Household capabilities merely because 
 - grace;
 - hold/paused/expiry;
 - RTDN refresh;
-- plan changes/superseded token behavior;
+- Personal/Duo/Household upgrade/downgrade replacement and linked-token lineage;
+- superseded-token replay resistance;
 - Duo/Household coverage;
 - multi-source entitlement safety;
 - privacy exits without entitlement.
@@ -251,12 +260,12 @@ Then activate final server-authoritative capability enforcement in the launch ca
 1. Re-fetch `homi-0.13-billing-entitlements` and finish source/document preflight before asking Bruce to validate.
 2. Resolve the tracked `pubspec.lock` using Bruce's real Flutter 3.41.5 toolchain; do not treat the expected lock change as an unexplained dirty worktree.
 3. Close final 0.12 exact-head validation/merge/governed Firebase deployment before any 0.13 billing deployment reaches production.
-4. Create the real Homi+ subscription/base plans in Play Console and record exact IDs.
+4. Create the three permanent Homi+ subscription products/base plans in Play Console and record exact IDs.
 5. Populate both client/backend governed catalogs with those IDs.
 6. Configure Android Publisher API, Play Console API access and RTDN Pub/Sub.
-7. Run exact-head 0.13 Windows Flutter gate, Node 22 lint/policy **14/14**, exact **43** exports and Firestore **25/25**; then S25 Ultra regression.
+7. Run exact-head 0.13 Windows Flutter gate, Node 22 lint/policy **16/16**, exact **43** exports and Firestore **25/25**; then S25 Ultra regression.
 8. Merge/deploy exact accepted 0.13 billing source.
-9. Upload/store-install an Internal Testing AAB and prove complete billing lifecycle.
+9. Upload/store-install an Internal Testing AAB and prove complete billing lifecycle, including cross-tier replacement and token-lineage behavior.
 10. Activate paid enforcement only after lifecycle proof.
 11. Complete release signing/Play App Signing fingerprints, store-installed Google Sign-In, Play Integrity App Check, budgets, Privacy Policy, Terms, external deletion page, Data Safety, background-location approval evidence, listing/assets and any account-specific closed-testing requirement before production.
 

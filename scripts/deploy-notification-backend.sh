@@ -6,8 +6,10 @@ EXPECTED_PROJECT_NUMBER="883068189841"
 FUNCTION_REGION="africa-south1"
 LEGACY_CONNECTION_DELETE_FUNCTION="onConnectionDeleted"
 REPLACEMENT_CONNECTION_DELETE_FUNCTION="onTrustedConnectionDeleted"
+BILLING_RT_TOPIC="homi-google-play-rtdn"
+PLAY_NOTIFICATION_PUBLISHER="google-play-developer-notifications@system.gserviceaccount.com"
 FUNCTION_BATCH_SIZE=5
-EXPECTED_FUNCTION_COUNT=37
+EXPECTED_FUNCTION_COUNT=43
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FUNCTIONS_DIR="${REPO_ROOT}/functions"
@@ -44,7 +46,11 @@ if [ ! -f functions/package.json ] || \
    [ ! -f functions/shared_tasks_canonical.js ] || \
    [ ! -f functions/household_data_cleanup.js ] || \
    [ ! -f functions/household_task_membership_sync.js ] || \
-   [ ! -f functions/migrate_legacy_shared_tasks.js ]; then
+   [ ! -f functions/migrate_legacy_shared_tasks.js ] || \
+   [ ! -f functions/billing_catalog.js ] || \
+   [ ! -f functions/billing_policy.js ] || \
+   [ ! -f functions/billing_policy.test.js ] || \
+   [ ! -f functions/billing.js ]; then
   echo "Homi Functions source is incomplete." >&2
   exit 1
 fi
@@ -53,10 +59,6 @@ fi
 # uploads untracked files from the Functions source directory, and Cloud Build
 # uses npm ci whenever a package-lock is present. A stale local lock therefore
 # makes Cloud Build fail even when the local npm install succeeded.
-#
-# Preserve the old smooth deployment behaviour by generating a lock that
-# matches package.json before every upload, while keeping npm cache/dependency
-# storage disposable so Cloud Shell's small persistent home disk stays clean.
 LOCKFILE_TRACKED=false
 if git ls-files --error-unmatch functions/package-lock.json >/dev/null 2>&1; then
   LOCKFILE_TRACKED=true
@@ -124,6 +126,45 @@ verify_active_v2_function() {
   fi
 }
 
+verify_billing_provider_prerequisites() {
+  echo "==> Verifying governed Homi+ Play catalog"
+  node - <<'NODE'
+require("./functions/billing_catalog");
+const {configuredCatalog} = require("./functions/billing_policy");
+if (!configuredCatalog(process.env).configured) {
+  console.error("Homi+ Play product/base-plan IDs are still unconfigured; refusing to deploy billing runtime.");
+  process.exit(1);
+}
+NODE
+
+  if ! gcloud services list \
+      --enabled \
+      --project "${PROJECT_ID}" \
+      --filter='config.name:androidpublisher.googleapis.com' \
+      --format='value(config.name)' | grep -qx 'androidpublisher.googleapis.com'; then
+    echo "Google Play Android Developer API is not enabled for ${PROJECT_ID}; refusing billing deployment." >&2
+    exit 1
+  fi
+
+  if ! gcloud pubsub topics describe "${BILLING_RT_TOPIC}" \
+      --project "${PROJECT_ID}" >/dev/null 2>&1; then
+    echo "Homi+ RTDN topic ${BILLING_RT_TOPIC} does not exist; refusing billing deployment." >&2
+    exit 1
+  fi
+
+  if ! gcloud pubsub topics get-iam-policy "${BILLING_RT_TOPIC}" \
+      --project "${PROJECT_ID}" \
+      --flatten='bindings[].members' \
+      --filter="bindings.role:roles/pubsub.publisher AND bindings.members:serviceAccount:${PLAY_NOTIFICATION_PUBLISHER}" \
+      --format='value(bindings.members)' | grep -q "${PLAY_NOTIFICATION_PUBLISHER}"; then
+    echo "Google Play RTDN publisher does not have roles/pubsub.publisher on ${BILLING_RT_TOPIC}; refusing billing deployment." >&2
+    exit 1
+  fi
+
+  echo "==> Homi+ GCP billing prerequisites are present"
+  echo "    Play Console API access for the canonical runtime identity must still be proven by Internal Testing purchase verification."
+}
+
 reconcile_legacy_connection_delete() {
   local legacy_present=false
 
@@ -143,10 +184,6 @@ reconcile_legacy_connection_delete() {
     return
   fi
 
-  # Firebase cannot change an existing Function from HTTPS to an event trigger
-  # in place. Deploy/prove the renamed Firestore trigger before deleting only
-  # the exact stale name/region. This reconciliation runs before any 0.12
-  # Function deployment so stale codebase drift cannot block later batches.
   echo "==> Migrating legacy Homi connection-delete trigger"
   run_firebase deploy \
     --only "functions:${REPLACEMENT_CONNECTION_DELETE_FUNCTION}" \
@@ -247,17 +284,22 @@ else
   exit 1
 fi
 
+# The 0.13 deployment helper must never create a half-connected billing runtime.
+# Product IDs are source-controlled once verified; GCP API/topic/IAM must also
+# exist before any production mutation starts.
+verify_billing_provider_prerequisites
+
 # Inspect the legacy production task data without changing it before any 0.12
 # task boundary reaches production.
 echo "==> Dry-running Homi legacy shared-task migration"
 node functions/migrate_legacy_shared_tasks.js
 
-# Resolve the only known stale Function migration before any new 0.12 Function
+# Resolve the only known stale Function migration before any new Function
 # deployment. This prevents codebase reconciliation from turning a known legacy
 # resource into a non-interactive deployment surprise.
 reconcile_legacy_connection_delete
 
-# 0.12 tightens shared-task reads around canonical Household identity. Deploy
+# 0.12 tightened shared-task reads around canonical Household identity. Deploy
 # only the canonical task writers/membership synchronizer first so no new
 # preference-era task can appear during the migration window. Then apply the
 # safe intersection-only migration and prove no safely migratable task remains
@@ -273,11 +315,15 @@ node functions/migrate_legacy_shared_tasks.js --assert-stable
 # Rules/indexes are one deployment surface. Functions are intentionally batched
 # because Firebase documents that large simultaneous Function deployments can
 # hit provider deployment limits and recommends groups of 10 or fewer. Five at
-# a time keeps Homi comfortably below that boundary while remaining resumable:
-# already-updated functions are simply skipped on a later batch/retry.
+# a time keeps Homi comfortably below that boundary while remaining resumable.
 echo "==> Deploying Homi Firestore rules and indexes"
 run_firebase deploy --only firestore --project "${PROJECT_ID}"
 
 deploy_function_batches
+
+echo "==> Verifying all ${EXPECTED_FUNCTION_COUNT} deployed Homi Functions are ACTIVE"
+for function_name in "${FUNCTION_NAMES[@]}"; do
+  verify_active_v2_function "${function_name}"
+done
 
 echo "Homi backend deployment completed."

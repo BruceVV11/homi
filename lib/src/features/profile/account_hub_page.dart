@@ -163,7 +163,7 @@ class _AccountHubPageState extends State<AccountHubPage> {
       context,
       title: 'Permanently delete your Homi account?',
       message:
-          'This cannot be undone. Homi deletes your account identity, connection code, trusted connections, Household membership, location-sharing permissions, latest cloud location and Homi cloud collaboration data associated with your account. It also erases this phone’s Homi household data and cached location.',
+          'This cannot be undone. Homi deletes your account identity, connection code, trusted connections, Household membership, location-sharing permissions, latest cloud location and Homi cloud collaboration data associated with your account. It also erases this phone’s Homi household data and cached location. If you have Homi+, deleting your Homi account does not cancel its Google Play subscription. Cancel this deletion and use Profile settings → Homi+ → Plans & billing → Manage subscription first if you also want to cancel billing.',
       confirmLabel: 'Continue to delete',
       cancelLabel: 'Keep my account',
       icon: Icons.delete_forever_outlined,
@@ -186,7 +186,7 @@ class _AccountHubPageState extends State<AccountHubPage> {
       context,
       title: 'Final confirmation',
       message:
-          'Delete ${user.email ?? 'this Homi account'} and its associated Homi cloud data permanently?',
+          'Delete ${user.email ?? 'this Homi account'} and its associated Homi cloud data permanently? Any Google Play Homi+ subscription remains separate and is not canceled by this action.',
       confirmLabel: 'Delete permanently',
       cancelLabel: 'Cancel',
       icon: Icons.warning_amber_rounded,
@@ -391,7 +391,7 @@ class _AccountHubPageState extends State<AccountHubPage> {
                 icon: Icons.delete_forever_outlined,
                 title: 'Delete Homi account',
                 subtitle:
-                    'Permanently remove your account and associated Homi cloud data.',
+                    'Permanently remove your account and associated Homi cloud data. Google Play subscriptions are managed separately.',
                 destructive: true,
                 onTap: _busy ? null : _deleteAccount,
               ),
@@ -837,7 +837,8 @@ _InfoContent _content(HomiInfoTopic topic) {
           ]),
           _SectionContent('What uses the cloud', [
             'When you sign in and use cloud features, Homi may store account/profile identity, your Homi connection code, trusted connections, private relationship preferences, canonical Household membership/invitations, specifically shared household Tasks, notification device registration, location-sharing permissions, and your latest shared location/battery status.',
-            'Creating or joining a Household does not silently upload your local Home, Routine or Supply records. Those records stay on this device unless Homi clearly identifies a data type as shared.',
+            'A Shared Household can synchronize supported Routines, Supplies and Home records. Existing local records are imported automatically only in the narrow first-owner case where an authoritative server read confirms a new Household is empty; joining an existing or different Household does not silently upload unmatched older local records.',
+            'If you use Homi+, Homi also keeps server-restricted Google Play subscription verification/lifecycle records and a narrow entitlement projection for your account. Homi does not store your card or bank details.',
           ]),
           _SectionContent('Household membership', [
             'A Household is separate from a trusted People connection. Joining requires an explicit invitation and acceptance. One account can belong to one shared Household at a time, and leaving/removal does not automatically change a person’s separate location-sharing choices.',
@@ -851,14 +852,14 @@ _InfoContent _content(HomiInfoTopic topic) {
             'You can switch Homi notifications off or disable categories such as household attention, People, product updates or service notices. Android and network conditions can delay delivery.',
           ]),
           _SectionContent('Service providers', [
-            'Homi uses Google/Firebase services for authentication, cloud data and notifications, and Google Maps services for map display. Those providers process technical data needed to deliver those services under their own terms and privacy commitments.',
+            'Homi uses Google/Firebase services for authentication, cloud data and notifications, Google Maps services for map display, and Google Play for Android distribution and Homi+ subscription processing when used. Those providers process technical data needed to deliver their services under their own terms and privacy commitments.',
           ]),
           _SectionContent('What Homi does not need', [
             'Homi does not need to sell your location or household records to make the product useful. Privacy controls, stopping location sharing and deleting an account are not dependent on a paid plan.',
           ]),
           _SectionContent('Your controls', [
             'You can stop live location updates, revoke location access to an individual person, disconnect trusted people, leave a Household when you are not its owner, change notification categories, erase local data from a device, sign out, or permanently delete your Homi account.',
-            'Deleting an account is different from signing out. Account deletion removes the Homi cloud identity and associated Homi cloud data that the service manages, then clears Homi household/location data from the current device.',
+            'Deleting an account is different from signing out. Account deletion removes the Homi cloud identity and associated Homi cloud data that the service manages, then clears Homi household/location data from the current device. Deleting Homi does not cancel a separate Google Play Homi+ subscription.',
           ]),
         ],
       );
@@ -917,7 +918,7 @@ _InfoContent _content(HomiInfoTopic topic) {
             'You remain responsible for household notes, task text and other information you add. Do not upload unlawful content or information you do not have a right to use.',
           ]),
           _SectionContent('Paid features', [
-            'Any paid Homi plan shown in the app includes its price, billing period and renewal terms before purchase. Core consent, privacy, stop-sharing and account-deletion controls remain available independently of payment.',
+            'Any paid Homi plan shown in the app includes its price, billing period and renewal terms before purchase. Google Play manages Homi+ subscriptions on Android. Deleting a Homi account does not cancel Google Play billing. Core consent, privacy, stop-sharing and account-deletion controls remain available independently of payment.',
           ]),
           _SectionContent('Changes', [
             'Material changes to privacy-sensitive behaviour, paid features or these terms are communicated clearly rather than hidden inside unrelated product wording.',
@@ -933,7 +934,7 @@ _InfoContent _content(HomiInfoTopic topic) {
             'Homi explains the important choices where they appear. This page covers broader questions that apply across the app.',
         sections: [
           _SectionContent('Local or cloud?', [
-            'You can use Homi locally without an account. Sign-in is for features that need identity or sharing. Your canonical Household identity follows your account, while local Home, Routine and Supply records stay on this device unless Homi clearly marks that data type as shared.',
+            'You can use Homi locally without an account. Sign-in is for features that need identity or sharing. Your canonical Household identity follows your account, while local Home, Routine and Supply records stay on this device unless Homi identifies that record type as shared.',
           ]),
           _SectionContent('What is a Household?', [
             'A Household is the small group of Homi accounts that share one home context. It is separate from your wider trusted People list: somebody can remain a trusted friend without joining your Household.',
@@ -962,9 +963,9 @@ _InfoContent _content(HomiInfoTopic topic) {
         icon: Icons.info_outline_rounded,
         intro: 'Happy homes, easier days.',
         sections: [
-          _SectionContent('Homi 0.11.0', [
-            'Build 15 · Android.',
-            'Homi is a local-first household operating system with a user-controlled trusted-person location layer and canonical shared-Household identity.',
+          _SectionContent('Homi 0.13.0', [
+            'Build 17 · Android.',
+            'Homi is a local-first household operating system with user-controlled trusted-person location, canonical Shared Household collaboration and optional Homi+ subscription support.',
           ]),
           _SectionContent('Built by Concept Lab', [
             'Homi is developed by Concept Lab in South Africa. The product is designed around practical household clarity, restrained data collection and user-controlled sharing.',

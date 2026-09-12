@@ -59,34 +59,13 @@ Trusted friends outside the Household do not consume Household member seats mere
 
 ## Canonical Household and data-plane status
 
-0.11 established the server-owned canonical Household identity:
-
-- one Household per account at a time;
-- owner/member roles;
-- four occupied/reserved seats;
-- accepted trusted connection required before invite;
-- explicit invite acceptance;
-- member removal/leave;
-- ownership transfer;
-- server-owned membership and invitation writes.
-
-0.12 adds the shared Household data plane for Routines, Supplies, Home Things, maintenance/repair events and utility readings, plus canonical Household authorization for shared one-off Tasks. Existing local data uses the explicit safe first-sync/private-legacy strategy recorded in the 0.12 release documents.
+0.11 established the server-owned canonical Household identity. 0.12 adds the shared Household data plane for Routines, Supplies, Home Things, maintenance/repair events and utility readings, plus canonical Household authorization for shared one-off Tasks. Existing local data uses the explicit safe first-sync/private-legacy strategy recorded in the 0.12 release documents.
 
 0.13 attaches billing capability to these stable Household identifiers; it does not infer a paid Household from a People relationship label.
 
 ## Privacy and safety are never paywalled
 
-Payment state must never prevent a user from:
-
-- stopping continuous sharing;
-- removing a viewer;
-- disabling arrival monitoring/check-ins;
-- revoking exact Home/Work visibility;
-- disconnecting another person;
-- leaving a Household where the user is not the owner;
-- erasing local data;
-- deleting an account;
-- opening emergency-number shortcuts.
+Payment state must never prevent stopping continuous sharing, removing a viewer, disabling arrival monitoring/check-ins, revoking exact Home/Work visibility, disconnecting another person, leaving a Household where allowed, erasing local data, deleting an account, or opening emergency-number shortcuts.
 
 If a subscription expires, existing local data is not immediately destroyed. Paid creation/sync/broadcast capabilities may be disabled while privacy exits remain available.
 
@@ -94,38 +73,29 @@ Deleting a Homi account and canceling a Google Play subscription are separate op
 
 ## Cost guardrails
 
-The first paid model assumes continuous location remains a latest-state feature, not route history.
-
-Current technical boundaries:
-
-- Android requests background positions at roughly two-minute intervals with a 100 m movement filter;
-- Homi's client cloud-write guard is 90 seconds;
-- Firestore independently rejects repeat latest-location updates inside 90 seconds;
-- one sender can authorize no more than five active live-location viewers;
-- location remains one latest document rather than an append-only trail;
-- a location update does not invoke a Cloud Function or send an FCM push by itself.
-
-These controls are business-protection and privacy controls as well as technical limits. Do not raise them casually.
+The first paid model assumes continuous location remains a latest-state feature, not route history. Preserve the roughly two-minute/100 m Android request behavior, 90-second client/Firestore cloud-write floor, five-viewer cap and absence of automatic push on each coordinate update.
 
 ## Google Play catalog direction
 
-Use **one Google Play subscription product** for the Homi+ membership family, with separate base plans for the tier/cadence. The exact durable identifiers are to be created and verified in Play Console before source activation.
+Personal, Duo and Household are **different subscription benefits**, so they must be separate Google Play subscription products. Base plans define pricing/billing options for one subscription's benefit; they are not a substitute for different tiers of service.
 
-Proposed identifiers:
+Proposed permanent identifiers:
 
-- subscription product: `homi_plus`
-- base plan: `personal-monthly`
-- base plan: `duo-monthly`
-- base plan: `household-monthly`
-- base plan: `household-annual`
+- product `homi_plus_personal`
+  - base plan `monthly`
+- product `homi_plus_duo`
+  - base plan `monthly`
+- product `homi_plus_household`
+  - base plan `monthly`
+  - base plan `annual`
 
-Only Household has an approved annual price. Do not add annual Personal or Duo products/base plans until separately approved.
+Only Household has an approved annual price. Do not add annual Personal or Duo base plans until separately approved.
 
-Keeping the tiers under one Play subscription family reduces the risk of a customer accidentally holding unrelated simultaneous Homi+ subscriptions and lets Google Play own same-subscription plan-switch behavior. Final replacement behavior must be configured and tested in Play Console/Internal Testing before public sale.
+When moving between Personal, Duo and Household, the Android client must use Google Play's subscription replacement flow rather than purchase an unrelated concurrent Homi+ subscription. 0.13 supplies the current active Homi+ Play purchase as `ChangeSubscriptionParam` and requests time-prorated immediate replacement. That exact upgrade/downgrade behavior must be proven with license testers before public sale.
 
 ## Billing architecture — 0.13 source status
 
-0.13 implements the following in source:
+0.13 implements in source:
 
 1. Flutter purchase flow using `in_app_purchase`;
 2. Play-localized plan price display;
@@ -137,25 +107,24 @@ Keeping the tiers under one Play subscription family reduces the risk of a custo
 8. self-readable authoritative `entitlements/{uid}` projection;
 9. Pub/Sub RTDN receiver that re-fetches authoritative Play state before changing entitlement;
 10. restore/reinstall flow;
-11. Duo second-seat assignment with accepted-connection and cooldown checks;
-12. Household coverage derived from canonical Household membership;
-13. multi-source entitlement projection so one subscription cannot erase another valid coverage source;
-14. Google Play subscription-management handoff.
+11. governed subscription upgrade/downgrade replacement;
+12. Duo second-seat assignment with accepted-connection and cooldown checks;
+13. Household coverage derived from canonical Household membership;
+14. multi-source entitlement projection so one coverage source cannot erase another valid source;
+15. Google Play subscription-management handoff.
 
 The client never unlocks Homi+ merely because a local purchase callback says `purchased`.
 
 ### Capability model
 
-The backend projects capability questions rather than encouraging scattered local `isPaid` flags:
+The backend projects capability questions rather than scattered local `isPaid` checks:
 
 - `continuousLocationSender`
 - `sharedHousehold`
 - `householdMemberLimit`
 - `maxTrustedLiveViewers`
 
-The entitlement projection also records plan/state, purchaser context, seat role, Household context where relevant and expiry metadata.
-
-A Homi account can have multiple entitlement sources. Example: the user owns Personal while also being covered by another purchaser's Household plan. Backend-only `billingCoverage` records are therefore reduced into one `entitlements/{uid}` projection; an expiring source does not delete a separate valid source.
+A Homi account can have multiple entitlement sources. Backend-only `billingCoverage` records are reduced into one `entitlements/{uid}` projection; an expiring source does not delete a separate valid source.
 
 ## Play lifecycle semantics
 
@@ -169,15 +138,15 @@ A Homi account can have multiple entitlement sources. Example: the user owns Per
 
 ## Provider infrastructure required before billing deployment
 
-The 0.13 governed deploy fails closed until all of these are true:
+The 0.13 governed deploy fails closed until:
 
 - exact Play product/base-plan IDs are source-controlled in both Flutter and Functions catalogs;
 - Android Publisher API is enabled on `homi-ee80a`;
 - Pub/Sub topic `homi-google-play-rtdn` exists;
 - `google-play-developer-notifications@system.gserviceaccount.com` can publish to that topic;
-- the canonical Homi runtime identity is linked/authorized for the Play Console app with the minimum purchase/subscription access required for verification/acknowledgement.
+- canonical Homi runtime identity is linked/authorized for the Play Console app with minimum purchase/subscription access needed for verification/acknowledgement.
 
-The last item must be proven through the actual Play-installed Internal Testing purchase path; GCP IAM alone is not accepted as evidence that Play API access is correct.
+The last item must be proven through an actual Play-installed Internal Testing purchase; GCP IAM alone is not evidence that Play API access is correct.
 
 ## Paid enforcement sequencing
 
@@ -187,11 +156,11 @@ Required sequence:
 
 1. deploy and accept the 0.12 shared Household data plane;
 2. compile/analyze/test final 0.13 app source;
-3. create and verify Play subscription/base plans;
+3. create and verify the three Play subscription products/base plans;
 4. configure Android Publisher API access and RTDN Pub/Sub;
 5. deploy/validate the 0.13 billing backend;
 6. prove purchase + server verification + acknowledgement from a Play Internal Testing install;
-7. prove restore/reinstall/account mapping;
+7. prove upgrades/downgrades, restore/reinstall/account mapping;
 8. prove active/canceled/grace/hold/expiry lifecycle reconciliation and RTDN;
 9. prove Duo and Household coverage changes;
 10. prove privacy exits with no entitlement;

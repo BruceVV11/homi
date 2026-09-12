@@ -69,7 +69,7 @@ Payment state must never prevent stopping continuous sharing, removing a viewer,
 
 If a subscription expires, existing local data is not immediately destroyed. Paid creation/sync/broadcast capabilities may be disabled while privacy exits remain available.
 
-Deleting a Homi account and canceling a Google Play subscription are separate operations. Homi must warn about this clearly. Account deletion removes Homi-side entitlement/account mappings but does not cancel a Play subscription on the user's behalf.
+Deleting a Homi account and canceling a Google Play subscription are separate operations. Homi must warn about this clearly. Account deletion removes Homi-side entitlement/account mappings and stored Homi-side purchase tokens, but does not cancel a Play subscription on the user's behalf.
 
 ## Cost guardrails
 
@@ -95,6 +95,8 @@ When moving between Personal, Duo and Household, the Android client must use Goo
 
 Google Play issues a new purchase token for an in-app upgrade/downgrade/resubscribe before expiry and returns the old purchase through `linkedPurchaseToken`. Homi uses that lineage server-side: while the canonical purchase is still entitled, only a correctly linked replacement may displace it. A previously superseded token cannot become canonical again. After full expiry, a genuinely fresh verified purchase can become canonical without requiring stale linkage.
 
+Google Play can also create an **out-of-app resubscription** from the Play subscription center after the previous same-product subscription expired. The authoritative subscriptions-v2 resource then carries the former account association and expired token in `outOfAppPurchaseContext`. Homi may use only those verified Play fields to reconnect that event to an existing Homi billing link. If the Homi account/billing link was deleted, RTDN must not recreate it.
+
 ## Billing architecture — 0.13 source status
 
 0.13 implements in source:
@@ -110,15 +112,16 @@ Google Play issues a new purchase token for an in-app upgrade/downgrade/resubscr
 9. Pub/Sub RTDN receiver that re-fetches authoritative Play state before changing entitlement;
 10. restore/reinstall flow;
 11. governed subscription upgrade/downgrade replacement and linked-token validation;
-12. Duo second-seat assignment with accepted-connection and cooldown checks;
-13. Household coverage derived from canonical Household membership;
-14. multi-source entitlement projection so one coverage source cannot erase another valid source;
-15. paid-term expiry normalization so known stale canceled/active/grace state cannot keep capability after its verified term;
-16. Google Play subscription-management handoff.
+12. verified out-of-app resubscribe account/token lineage handling;
+13. Duo second-seat assignment with accepted-connection and cooldown checks;
+14. Household coverage derived from canonical Household membership;
+15. multi-source entitlement projection so one coverage source cannot erase another valid source;
+16. paid-term expiry normalization so active/grace/canceled state cannot keep capability without a future verified paid-through time;
+17. Google Play subscription-management handoff.
 
 The client never unlocks Homi+ merely because a local purchase callback says `purchased`.
 
-The Flutter entitlement model also treats a canceled entitlement whose known paid-through timestamp is already past as expired. That is a fail-closed stale-state backstop and does not replace server/RTDN authority.
+The Flutter entitlement model mirrors the same paid-through-time fail-closed rule. That is a stale-state backstop and does not replace server/RTDN authority.
 
 ### Capability model
 
@@ -133,14 +136,15 @@ A Homi account can have multiple entitlement sources. Backend-only `billingCover
 
 ## Play lifecycle semantics
 
-- `active` grants paid capability while its verified term has not already elapsed;
-- `grace_period` keeps paid capability while Play attempts payment recovery and the verified term has not already elapsed;
+- `active` grants paid capability only with a future verified paid-through time;
+- `grace_period` keeps paid capability only with a future verified paid-through time while Play attempts payment recovery;
 - a voluntarily `canceled` subscription keeps entitlement only through the already-paid term;
-- a canceled term whose verified expiry is already past is treated as expired even before a delayed `SUBSCRIPTION_EXPIRED` notification is processed;
+- active/grace/canceled state with a missing or elapsed verified paid-through time fails closed to expired;
 - `on_hold`, `paused`, `pending` and `expired` do not grant paid capability;
 - superseded purchase tokens can refresh historical lifecycle state but cannot regain canonical authority;
-- a new token replacing a still-entitled canonical purchase must match Play's `linkedPurchaseToken` lineage;
-- new purchase tokens are acknowledged on the server after verification;
+- a new token replacing a still-entitled canonical purchase must match Play's verified purchase-token lineage;
+- out-of-app resubscribe can resolve only through Play's verified prior account identifiers and an existing Homi account link;
+- new purchase tokens are acknowledged on the server after authoritative verification/coverage reconciliation;
 - RTDN is a signal, not trusted entitlement data: backend always re-queries Google Play.
 
 ## Provider infrastructure required before billing deployment
@@ -167,7 +171,7 @@ Required sequence:
 4. configure Android Publisher API access and RTDN Pub/Sub;
 5. deploy/validate the 0.13 billing backend;
 6. prove purchase + server verification + acknowledgement from a Play Internal Testing install;
-7. prove upgrades/downgrades, linked-token lineage, restore/reinstall/account mapping;
+7. prove upgrades/downgrades, linked-token lineage, restore/reinstall/account mapping and out-of-app resubscribe;
 8. prove active/canceled/grace/hold/expiry lifecycle reconciliation and RTDN;
 9. prove superseded-token replay cannot regain entitlement;
 10. prove Duo and Household coverage changes;

@@ -39,6 +39,8 @@ if [ ! -f functions/package.json ] || \
    [ ! -f functions/households.js ] || \
    [ ! -f functions/household_invite_owner_sync.js ] || \
    [ ! -f functions/trusted_people_preferences.js ] || \
+   [ ! -f functions/household_task_policy.js ] || \
+   [ ! -f functions/household_task_policy.test.js ] || \
    [ ! -f functions/shared_tasks_canonical.js ] || \
    [ ! -f functions/household_data_cleanup.js ] || \
    [ ! -f functions/household_task_membership_sync.js ] || \
@@ -194,6 +196,7 @@ npm ci \
   --no-audit \
   --no-fund
 npm run lint --prefix functions
+npm test --prefix functions
 
 # Load and validate the exact export surface only after dependencies exist, but
 # before security tests or any Firebase deployment begins.

@@ -3,11 +3,12 @@ set -Eeuo pipefail
 
 PROJECT_ID="homi-ee80a"
 EXPECTED_PROJECT_NUMBER="883068189841"
-EXPECTED_TEST_COUNT=23
+EXPECTED_TEST_COUNT=25
 TEST_FILES=(
   "server.boundary.test.js"
   "household.boundary.test.js"
   "shared_task_household.boundary.test.js"
+  "billing.boundary.test.js"
 )
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

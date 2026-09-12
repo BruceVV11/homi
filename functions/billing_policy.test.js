@@ -26,12 +26,21 @@ test("active grace and unexpired canceled states grant paid access", () => {
   assert.equal(grantsPaidAccess("expired"), false);
 });
 
-test("paid lifecycle state fails closed after its known term is over", () => {
+test("paid lifecycle state requires a future verified paid-through time", () => {
   const now = Date.parse("2026-09-12T00:00:00Z");
+  assert.equal(
+      effectivePlayState("active", "2026-09-13T00:00:00Z", now),
+      "active",
+  );
+  assert.equal(
+      effectivePlayState("grace_period", "2026-09-13T00:00:00Z", now),
+      "grace_period",
+  );
   assert.equal(
       effectivePlayState("canceled", "2026-09-13T00:00:00Z", now),
       "canceled",
   );
+  assert.equal(effectivePlayState("active", null, now), "expired");
   assert.equal(
       effectivePlayState("canceled", "2026-09-11T00:00:00Z", now),
       "expired",
@@ -80,6 +89,7 @@ test("multiple subscription sources combine without one purchase deleting anothe
     {
       plan: "personal",
       state: "active",
+      validUntil: "2099-01-01T00:00:00Z",
       purchaserUid: "alice",
       sourcePurchaseTokenHash: "personal-token",
       seatRole: "purchaser",
@@ -87,6 +97,7 @@ test("multiple subscription sources combine without one purchase deleting anothe
     {
       plan: "household",
       state: "grace_period",
+      validUntil: "2099-01-01T00:00:00Z",
       purchaserUid: "bob",
       sourcePurchaseTokenHash: "household-token",
       seatRole: "household_member",
@@ -115,6 +126,7 @@ test("inactive coverage cannot override a separate active subscription", () => {
     {
       plan: "personal",
       state: "active",
+      validUntil: "2099-01-01T00:00:00Z",
       purchaserUid: "alice",
       sourcePurchaseTokenHash: "active-personal",
       seatRole: "purchaser",

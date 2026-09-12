@@ -148,12 +148,22 @@ class HomiBillingService {
     final offers = <HomiStoreOffer>[];
     for (final details in response.productDetails) {
       if (details is! GooglePlayProductDetails) continue;
-      final productRef = catalog.products
-          .where((item) => item.productId == details.id)
-          .firstOrNull;
-      if (productRef == null) continue;
       final basePlanId = _basePlanId(details);
       if (basePlanId == null) continue;
+
+      // Homi may deliberately use one Google Play subscription product with
+      // separate base plans for Personal, Duo and Household. Match the base
+      // plan as well as the product ID so the same product can safely map to
+      // different Homi entitlements.
+      final productRef = catalog.products
+          .where(
+            (item) =>
+                item.productId == details.id &&
+                (item.monthlyBasePlanId == basePlanId ||
+                    item.annualBasePlanId == basePlanId),
+          )
+          .firstOrNull;
+      if (productRef == null) continue;
 
       final cadence = basePlanId == productRef.monthlyBasePlanId
           ? HomiBillingCadence.monthly

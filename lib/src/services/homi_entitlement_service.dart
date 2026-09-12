@@ -16,15 +16,22 @@ class HomiEntitlementService {
   User? get currentUser =>
       firebaseReady ? FirebaseAuth.instance.currentUser : null;
 
-  Stream<HomiEntitlement> watchCurrent() {
+  Stream<HomiEntitlement> watchCurrent() async* {
     final user = currentUser;
-    if (user == null) return Stream.value(HomiEntitlement.free);
-    return FirebaseFirestore.instance
-        .collection('entitlements')
-        .doc(user.uid)
-        .snapshots()
-        .map((snapshot) => HomiEntitlement.fromMap(snapshot.data()))
-        .handleError((Object _) => HomiEntitlement.free);
+    if (user == null) {
+      yield HomiEntitlement.free;
+      return;
+    }
+    try {
+      await for (final snapshot in FirebaseFirestore.instance
+          .collection('entitlements')
+          .doc(user.uid)
+          .snapshots()) {
+        yield HomiEntitlement.fromMap(snapshot.data());
+      }
+    } catch (_) {
+      yield HomiEntitlement.free;
+    }
   }
 
   Future<HomiEntitlement> getCurrent() async {

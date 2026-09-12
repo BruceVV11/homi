@@ -1,6 +1,6 @@
 # Homi Architecture
 
-Date: 2026-09-11
+Date: 2026-09-12
 Current source candidate: **0.12.0+16**
 
 ## Permanent identifiers
@@ -86,7 +86,7 @@ Household identity mutations are App-Check-protected server callables. Clients c
 
 The Household owner can rename the Household, invite connected people, cancel pending invitations, remove members, transfer ownership and delete an empty/sole-member Household. A non-owner can leave. Ownership transfer also rebinds pending invitation ownership to the new owner so management access does not become stale.
 
-The management UI is available from **Homi & account -> profile -> Shared Household**. It uses the existing local home name only as the default name when creating a new shared Household.
+The management UI is available from **Homi & account -> profile -> Shared Household**. It uses the existing local home name only as the default name when creating a new shared Household. If **Add person** has no eligible accepted connection, the UI uses Homi's branded informational bottom sheet instead of injecting a transient inline page error; full, already-member/pending, and connect-someone-first states are explained separately.
 
 ## 0.12 shared Household data plane
 
@@ -135,9 +135,9 @@ A relationship label such as Partner, Friend or Roommate remains editable. The o
 
 The protected `setTrustedPersonPreference` callable retains its deployed name for client compatibility but derives scope server-side. Caller-provided scope can no longer manufacture Household status.
 
-Each signed-in account has one reusable six-character Homi code. The populated People page keeps **My code** available alongside **Connect**, and code loading/error state is independent of the connections refresh so an identity failure cannot silently hide the code.
+Each signed-in account has one reusable six-character Homi code. The populated People page keeps **My code** available alongside **Connect**. For an established account, the client first reads the signed-in user's self-readable `users/{uid}` profile and reuses a valid stored `homiCode`; the App-Check-protected `ensureHomiIdentity` callable remains the provisioning/repair fallback. Connection creation with a code remains server-protected. Code loading/error state is independent of the connections refresh.
 
-People Firestore subscriptions now start immediately; cached GPS loading, passive location refresh and continuous-sharing resume happen in parallel rather than blocking the connection list.
+People Firestore subscriptions start immediately; cached GPS loading, passive location refresh and continuous-sharing resume happen in parallel rather than blocking the connection list.
 
 ## Tasks
 
@@ -145,9 +145,13 @@ Private **Me** Tasks remain local-only.
 
 Shared Tasks continue using `sharedTasks`, but the existing callable names `createSharedTask`, `toggleSharedTask` and `removeSharedTask` are overridden by canonical implementations. New shared Tasks derive `householdId` and `memberUids` from the creator's canonical Household. A People preference cannot manufacture task access or make a non-member assignable.
 
-The UI source for Household assignees is likewise canonical Household membership rather than `peoplePreferences.scope`.
+The canonical Household is the durable collaboration owner of a shared Task. Callable access requires the acting UID to be in the Task's stored safe audience **and** still be a current canonical member of that Task's `householdId`; it does not require the original creator to remain in the Household. For new audience-version-1 Tasks, the Household owner can perform the owner-level reopen/remove recovery actions when the creator/completer is no longer available.
 
-`onHouseholdTaskMembershipChanged` watches canonical Household member-list changes. New 0.12 shared Tasks carrying that `householdId` are rebound to the current member list, removed assignees become Unassigned, and removed completion UIDs are stripped. Pre-0.12 Tasks without `householdId` are deliberately not auto-expanded because widening an older preference-era Task to a new Household audience without consent would be unsafe.
+The UI source for Household assignees is canonical Household membership rather than `peoplePreferences.scope`.
+
+`onHouseholdTaskMembershipChanged` watches canonical Household member-list changes. **Only** new `audienceVersion: 1` Tasks are rebound to the current member list; removed assignees become Unassigned and removed completion UIDs are stripped.
+
+Pre-0.12 Tasks are migrated separately. A safely mappable legacy Task receives its creator's current canonical `householdId`, but its audience becomes only the intersection of historical recipients and current Household members and it is marked `audienceVersion: 0`. The membership synchronizer deliberately ignores version 0 so a later Household join cannot widen that historical audience. Unmappable legacy Tasks remain stored but fail closed under the canonical read rule.
 
 ## Current cloud collaboration
 
@@ -261,4 +265,4 @@ GitHub `main` is the tracked source of truth. `android/` remains intentionally l
 
 0.12 currently exists only on `homi-0.12-shared-data-plane` and is not production state until governed validation/merge/deployment completes.
 
-A source change is not considered compiled/device-accepted until Bruce's Windows Flutter toolchain and S25 Ultra prove it. Backend/rules changes require the governed Node 22 / Firestore emulator / batched Functions deployment helper after the Flutter gate passes. The 0.12 backend source surface is governed at exactly **37** Function exports.
+A source change is not considered compiled/device-accepted until Bruce's Windows Flutter toolchain and S25 Ultra prove it. Backend/rules changes require the governed Node 22 / Firestore emulator / migration / batched Functions deployment helper after the Flutter gate passes. The 0.12 backend source surface is governed at exactly **37** Function exports and the Firestore emulator surface at **23** tests.

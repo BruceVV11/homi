@@ -15,6 +15,7 @@ Homi handles trusted relationships, precise location, Shared Household records a
 - Google Play purchase success on-device never grants paid capability by itself;
 - purchase tokens never become client-readable cloud records;
 - billing lifecycle changes are re-verified against Google Play rather than trusted from RTDN payload contents;
+- an unrelated or previously superseded purchase token cannot silently replace the current active Homi+ purchase;
 - multiple subscription/coverage sources cannot overwrite each other accidentally;
 - account deletion removes Homi-side billing mappings without falsely representing Play subscription cancellation;
 - privacy exits remain available regardless of paid state;
@@ -100,6 +101,8 @@ Exact Home/Work sharing remains an independent explicit grant requiring an accep
 
 The client has one source-controlled `HomiPlayBillingCatalog.current`. It is deliberately blank/unconfigured until the real Play product/base-plan IDs exist. An unconfigured catalog cannot start a purchase.
 
+Personal, Duo and Household are different subscription benefits and therefore use three permanent Play subscription products. The client uses Google Play subscription replacement when moving between those products instead of intentionally creating a concurrent Homi+ purchase.
+
 The client uses the maintained Flutter `in_app_purchase` integration. Homi sends Google Play a SHA-256-derived opaque account identifier rather than the raw Firebase UID.
 
 The purchase stream can initiate verification but cannot grant capability. The app consumes paid state only from its own server-written `entitlements/{uid}` projection.
@@ -111,6 +114,21 @@ The purchase stream can initiate verification but cannot grant capability. The a
 The backend requires Google Play's `obfuscatedExternalAccountId` to equal the expected opaque identifier for the signed-in Homi account. A purchase already claimed by another Homi account cannot be reassigned by changing client input.
 
 The backend maps the **verified Play product + base-plan ID** to a Homi+ tier. Product/base-plan IDs are public but durable release infrastructure and are source-controlled after Play Console creation; they are not guessed at runtime.
+
+### Canonical purchase-token lineage
+
+Google Play issues a new token for an in-app upgrade/downgrade/resubscribe before expiry and returns the previous purchase in `linkedPurchaseToken`. Homi uses that lineage as part of its server-side replacement decision.
+
+While a canonical purchase is still entitled:
+
+- the same token may refresh itself;
+- a new token may replace it only when Play links the new token to the current canonical token;
+- an unrelated unlinked token cannot silently displace it;
+- a token Homi has already marked with `supersededByTokenHash` cannot become canonical again.
+
+If the current canonical purchase is no longer entitled, a new verified token tied to the same Homi account may become canonical even when Play correctly issues it as a fresh unlinked purchase after full expiry.
+
+A dangling canonical-token pointer with no purchase record fails closed rather than being used as permission to accept an unrelated replacement.
 
 ### Purchase token storage and acknowledgement
 
@@ -136,6 +154,8 @@ A person may be covered by more than one source, for example their own Personal 
 
 Each verified purchase projects backend-only coverage records. `entitlements/{uid}` is recomputed across current sources. If one source expires while another stays valid, the remaining source continues to grant its capabilities.
 
+Known paid-term expiry is evaluated when lifecycle state is reconciled. A canceled subscription remains entitled only while its verified expiry time is in the future. Stale active/grace state with an already-past verified expiry also fails closed when reconciled. The Flutter entitlement parser independently treats a canceled entitlement whose known paid term is already over as expired, so a delayed RTDN cannot leave that stale canceled capability enabled in the client.
+
 ### Duo seat safety
 
 - purchaser is the first seat;
@@ -156,12 +176,12 @@ Membership changes trigger entitlement reconciliation. Losing Household coverage
 
 Expected capability behavior:
 
-- `active` — paid capabilities enabled;
-- `grace_period` — enabled while Play attempts payment recovery;
+- `active` — paid capabilities enabled while the verified term has not already elapsed;
+- `grace_period` — enabled while Play attempts payment recovery and the verified term has not already elapsed;
 - `canceled` — enabled through the already-paid term until expiration;
 - `on_hold`, `paused`, `pending`, `expired` — paid capabilities disabled.
 
-Superseded purchase tokens cannot regain authority after a newer token becomes canonical for a plan change.
+Superseded purchase tokens may refresh their own historical lifecycle state but cannot regain canonical authority after a newer token replaces them.
 
 ## Account deletion + billing
 
@@ -187,10 +207,10 @@ The billing tests prove:
 
 ## Functions policy/export gates
 
-The dependency-loaded pure Node policy suite is expected to contain **14/14** tests:
+The dependency-loaded pure Node policy suite is expected to contain **16/16** tests:
 
 - 5 Household/shared-task policy tests;
-- 9 billing policy tests covering state/capability semantics, canceled paid-term behavior, multi-source reduction and fail-closed catalog mapping.
+- 11 billing policy tests covering state/capability semantics, paid-term expiry, multi-source reduction, fail-closed catalog mapping and canonical purchase-token replacement/replay rules.
 
 0.13 adds six billing exports to the 0.12 expected 37, giving an exact expected Functions surface of **43**.
 
@@ -199,7 +219,7 @@ The deploy helper refuses billing deployment until it proves:
 - Node 22;
 - immutable project number;
 - complete billing source;
-- Functions lint + 14 policy tests;
+- Functions lint + 16 policy tests;
 - exactly 43 exports;
 - Firestore 25/25;
 - source-controlled Play catalog is configured;
@@ -214,12 +234,12 @@ Actual Play Console API authorization for the canonical runtime identity still r
 
 The 0.13 source builds authoritative purchase/entitlement state, but existing continuous-location and Shared-Household capabilities are not yet paywalled. This is deliberate.
 
-Enforcement must not activate until real Play Internal Testing proves purchase, acknowledgement, restore/reinstall, cancellation, grace, hold, expiry, RTDN, plan changes, Duo/Household coverage and privacy exits. Final enforcement must be server-authoritative rather than a scattered Flutter `isPaid` check.
+Enforcement must not activate until real Play Internal Testing proves purchase, acknowledgement, restore/reinstall, cancellation, grace, hold, expiry, RTDN, cross-product plan replacement, Duo/Household coverage, superseded-token replay resistance and privacy exits. Final enforcement must be server-authoritative rather than a scattered Flutter `isPaid` check.
 
 ## Production security/compliance gates still required
 
 - 0.12 exact-head merge/governed Firebase deployment and runtime acceptance;
-- final 0.13 Windows analyzer/tests plus Node 22 / 14 policy / 43-export / Firestore 25 gates;
+- final 0.13 Windows analyzer/tests plus Node 22 / 16 policy / 43-export / Firestore 25 gates;
 - real Play product/base-plan catalog and Play API access;
 - RTDN Pub/Sub setup;
 - store-installed billing lifecycle proof;

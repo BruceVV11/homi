@@ -2,6 +2,60 @@ import 'package:flutter/material.dart';
 
 import '../theme/homi_theme.dart';
 
+Future<void> showHomiInfoSheet(
+  BuildContext context, {
+  required String title,
+  required String message,
+  String actionLabel = 'Got it',
+  IconData icon = Icons.info_outline_rounded,
+}) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: HomiColors.peach.withValues(alpha: 0.24),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Icon(icon, color: HomiColors.coral),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(message, style: Theme.of(context).textTheme.bodyLarge),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.pop(sheetContext),
+                child: Text(actionLabel),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 Future<bool> showHomiConfirmSheet(
   BuildContext context, {
   required String title,

@@ -18,6 +18,16 @@ void main() {
     final active = HomiEntitlement.fromMap(<String, dynamic>{
       'plan': 'household',
       'state': 'active',
+      'validUntil': '2099-01-01T00:00:00Z',
+      'continuousLocationSender': true,
+      'sharedHousehold': true,
+      'maxTrustedLiveViewers': 5,
+      'householdMemberLimit': 4,
+    });
+    final grace = HomiEntitlement.fromMap(<String, dynamic>{
+      'plan': 'household',
+      'state': 'grace_period',
+      'validUntil': '2099-01-01T00:00:00Z',
       'continuousLocationSender': true,
       'sharedHousehold': true,
       'maxTrustedLiveViewers': 5,
@@ -43,26 +53,44 @@ void main() {
 
     expect(active.canSendContinuousLocation, isTrue);
     expect(active.canUseSharedHousehold, isTrue);
+    expect(grace.canSendContinuousLocation, isTrue);
+    expect(grace.canUseSharedHousehold, isTrue);
     expect(canceled.canSendContinuousLocation, isTrue);
     expect(canceled.canUseSharedHousehold, isTrue);
     expect(held.canSendContinuousLocation, isFalse);
     expect(held.canUseSharedHousehold, isFalse);
   });
 
-  test('stale canceled paid term fails closed even before RTDN refresh', () {
+  test('stale paid term fails closed even before RTDN refresh', () {
+    for (final state in <String>['active', 'grace_period', 'canceled']) {
+      final entitlement = HomiEntitlement.fromMap(<String, dynamic>{
+        'plan': 'household',
+        'state': state,
+        'validUntil': '2020-01-01T00:00:00Z',
+        'continuousLocationSender': true,
+        'sharedHousehold': true,
+        'maxTrustedLiveViewers': 5,
+        'householdMemberLimit': 4,
+      });
+
+      expect(entitlement.state, HomiBillingState.expired);
+      expect(entitlement.canSendContinuousLocation, isFalse);
+      expect(entitlement.canUseSharedHousehold, isFalse);
+    }
+  });
+
+  test('paid state without a verified paid-through time fails closed', () {
     final entitlement = HomiEntitlement.fromMap(<String, dynamic>{
-      'plan': 'household',
-      'state': 'canceled',
-      'validUntil': '2020-01-01T00:00:00Z',
+      'plan': 'personal',
+      'state': 'active',
       'continuousLocationSender': true,
-      'sharedHousehold': true,
+      'sharedHousehold': false,
       'maxTrustedLiveViewers': 5,
-      'householdMemberLimit': 4,
+      'householdMemberLimit': 0,
     });
 
     expect(entitlement.state, HomiBillingState.expired);
     expect(entitlement.canSendContinuousLocation, isFalse);
-    expect(entitlement.canUseSharedHousehold, isFalse);
   });
 
   test('Play catalog is intentionally disabled until durable IDs are verified', () {

@@ -44,11 +44,12 @@ All except the narrow self-readable entitlement projection are backend-only.
 
 `onHomiPlusUserDeleted` is the billing cleanup backstop. It:
 
-- removes Homi coverage associated with the deleted purchaser;
+- finds **all** historical Homi purchase records still associated with the deleted purchaser, including superseded plan-change tokens rather than only the currently active token;
+- removes coverage associated with each of those purchase records;
+- removes the raw Play purchase token and Homi purchaser UID from those historical Homi records, clears their recipient list and records `accountDeletedAt` so they cannot silently restore the deleted Homi identity later;
 - removes the deleted user as a recipient of another payer's Duo/Household coverage;
 - removes the Homi billing account link and self entitlement;
-- releases Duo coverage pointing at the deleted Homi account while preserving the payer's reassignment cooldown;
-- records account deletion against a stored purchase record where relevant so Homi does not later silently restore that deleted account mapping.
+- releases Duo coverage pointing at the deleted Homi account while preserving the payer's reassignment cooldown.
 
 It does **not** call Google Play to cancel the user's subscription. Users must manage/cancel the Play subscription separately in Google Play. Public UI/legal copy must not imply otherwise.
 
@@ -152,7 +153,7 @@ Before production, test at minimum:
 - exact Home/Work shares removed as designed;
 - device-local erase versus cloud-shared rehydration;
 - notification/device registration cleanup;
-- Homi+ purchaser deletion while Play subscription remains active;
+- Homi+ purchaser deletion while Play subscription remains active, including multiple historical/superseded Homi+ purchase tokens;
 - Homi+ Duo secondary deletion;
 - Homi+ Household member deletion;
 - user with multiple Homi+ coverage sources;

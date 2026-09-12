@@ -227,7 +227,18 @@ class _PeoplePageState extends State<PeoplePage>
     }
     if (_identity == null) await _loadIdentity();
     final identity = _identity;
-    if (!mounted || identity == null) return;
+    if (!mounted) return;
+    if (identity == null) {
+      await showHomiInfoSheet(
+        context,
+        title: 'Could not load your Homi code',
+        message: _identityError ??
+            'Your reusable Homi code is temporarily unavailable. Try again when your connection is stable.',
+        actionLabel: 'Okay',
+        icon: Icons.key_off_outlined,
+      );
+      return;
+    }
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1102,20 +1113,6 @@ class _PeoplePageState extends State<PeoplePage>
             onTap: widget.onSignIn,
           ),
         ] else ...[
-          const SizedBox(height: 8),
-          if (_identity != null)
-            _HomiCodeCard(
-              identity: _identity!,
-              onCopy: () => Clipboard.setData(
-                ClipboardData(text: _identity!.code),
-              ),
-            )
-          else
-            _HomiCodeStateCard(
-              loading: _identityBusy,
-              error: _identityError,
-              onRetry: _loadIdentity,
-            ),
           if (incoming.isNotEmpty) ...[
             const SizedBox(height: 14),
             Text(
@@ -1738,118 +1735,6 @@ class _LocationStatusCard extends StatelessWidget {
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _HomiCodeStateCard extends StatelessWidget {
-  const _HomiCodeStateCard({
-    required this.loading,
-    required this.error,
-    required this.onRetry,
-  });
-
-  final bool loading;
-  final String? error;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: HomiColors.peach.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: HomiColors.border),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.key_rounded, color: HomiColors.coral),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Your Homi code',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  loading
-                      ? 'Loading your reusable connection code…'
-                      : error ?? 'Your code has not loaded yet.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-          ),
-          if (loading)
-            const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2.4),
-            )
-          else
-            TextButton(onPressed: onRetry, child: const Text('Retry')),
-        ],
-      ),
-    );
-  }
-}
-
-class _HomiCodeCard extends StatelessWidget {
-  const _HomiCodeCard({required this.identity, required this.onCopy});
-
-  final HomiIdentity identity;
-  final VoidCallback onCopy;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: HomiColors.peach.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: HomiColors.border),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.key_rounded, color: HomiColors.coral),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Your Homi code',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  identity.code,
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Reuse this code to connect with more people.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Copy Homi code',
-            onPressed: onCopy,
-            icon: const Icon(Icons.copy_rounded),
-          ),
-        ],
       ),
     );
   }

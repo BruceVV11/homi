@@ -8,6 +8,7 @@ const {
   grantsPaidAccess,
   entitlementCapabilities,
   projectEntitlementSources,
+  canAdoptCanonicalPurchase,
   configuredCatalog,
   productFor,
 } = require("./billing_policy");
@@ -25,7 +26,7 @@ test("active grace and unexpired canceled states grant paid access", () => {
   assert.equal(grantsPaidAccess("expired"), false);
 });
 
-test("canceled state becomes expired when its paid term is already over", () => {
+test("paid lifecycle state fails closed after its known term is over", () => {
   const now = Date.parse("2026-09-12T00:00:00Z");
   assert.equal(
       effectivePlayState("canceled", "2026-09-13T00:00:00Z", now),
@@ -33,6 +34,14 @@ test("canceled state becomes expired when its paid term is already over", () => 
   );
   assert.equal(
       effectivePlayState("canceled", "2026-09-11T00:00:00Z", now),
+      "expired",
+  );
+  assert.equal(
+      effectivePlayState("active", "2026-09-11T00:00:00Z", now),
+      "expired",
+  );
+  assert.equal(
+      effectivePlayState("grace_period", "2026-09-11T00:00:00Z", now),
       "expired",
   );
 });
@@ -133,6 +142,75 @@ test("an expired purchaser still receives status without paid capability", () =>
   assert.equal(projected.state, "expired");
   assert.equal(projected.continuousLocationSender, false);
   assert.equal(projected.sharedHousehold, false);
+});
+
+test("active canonical purchase requires Play linkage before another token can replace it", () => {
+  const now = Date.parse("2026-09-12T00:00:00Z");
+  const common = {
+    currentTokenHash: "old-token",
+    incomingTokenHash: "new-token",
+    currentPurchaseKnown: true,
+    currentState: "active",
+    currentValidUntil: "2026-10-12T00:00:00Z",
+    incomingSupersededByTokenHash: null,
+    nowMs: now,
+  };
+
+  assert.equal(
+      canAdoptCanonicalPurchase({...common, linkedTokenHash: "old-token"}),
+      true,
+  );
+  assert.equal(
+      canAdoptCanonicalPurchase({...common, linkedTokenHash: null}),
+      false,
+  );
+  assert.equal(
+      canAdoptCanonicalPurchase({...common, linkedTokenHash: "different-token"}),
+      false,
+  );
+});
+
+test("expired canonical purchase can be replaced but superseded token cannot return", () => {
+  const now = Date.parse("2026-09-12T00:00:00Z");
+  assert.equal(
+      canAdoptCanonicalPurchase({
+        currentTokenHash: "old-token",
+        incomingTokenHash: "new-token",
+        linkedTokenHash: null,
+        currentPurchaseKnown: true,
+        currentState: "canceled",
+        currentValidUntil: "2026-09-11T00:00:00Z",
+        incomingSupersededByTokenHash: null,
+        nowMs: now,
+      }),
+      true,
+  );
+  assert.equal(
+      canAdoptCanonicalPurchase({
+        currentTokenHash: "new-token",
+        incomingTokenHash: "old-token",
+        linkedTokenHash: null,
+        currentPurchaseKnown: true,
+        currentState: "active",
+        currentValidUntil: "2026-10-12T00:00:00Z",
+        incomingSupersededByTokenHash: "new-token",
+        nowMs: now,
+      }),
+      false,
+  );
+  assert.equal(
+      canAdoptCanonicalPurchase({
+        currentTokenHash: "dangling-token",
+        incomingTokenHash: "new-token",
+        linkedTokenHash: null,
+        currentPurchaseKnown: false,
+        currentState: null,
+        currentValidUntil: null,
+        incomingSupersededByTokenHash: null,
+        nowMs: now,
+      }),
+      false,
+  );
 });
 
 test("billing catalog fails closed until every durable Play id exists", () => {

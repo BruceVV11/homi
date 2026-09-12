@@ -1,7 +1,7 @@
 name: homi
 description: Homi - happy homes, easier days.
 publish_to: "none"
-version: 0.12.0+16
+version: 0.13.0+17
 
 environment:
   sdk: ">=3.11.0 <4.0.0"
@@ -31,6 +31,9 @@ dependencies:
   intl: ^0.20.2
   uuid: ^4.5.1
   google_fonts: ^6.3.0
+  crypto: ^3.0.6
+  in_app_purchase: ^3.3.0
+  in_app_purchase_android: ^0.5.3
 
 dev_dependencies:
   flutter_test:

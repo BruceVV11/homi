@@ -1,13 +1,14 @@
 # Homi+ commercial and entitlement contract
 
-Date: 2026-09-11
-Applies from source line: `0.11.0+15`
+Date: 2026-09-12
+Applies from source line: `0.13.0+17`
+Status: **approved product contract; billing implementation in source, Play provider setup and paid enforcement still pending**
 
-This document is the product and engineering source of truth for Homi's first paid model. Pricing may change before public sale, but code must not silently invent different seat or privacy rules.
+This document is the product and engineering source of truth for Homi's first paid model. Pricing may change only by an explicit product decision; code must not silently invent different seat, entitlement or privacy rules.
 
 ## Core rule
 
-**Receiving a live location is free. Continuously sending your own location requires one Homi+ sender seat. Every paid sender seat may share continuous live location with up to five trusted Homi viewers.**
+**Receiving a live location is free. Continuously sending your own location requires one Homi+ sender seat once paid enforcement is activated. Every paid sender seat may share continuous live location with up to five trusted Homi viewers.**
 
 The five viewers do not have to be members of the same Household and do not need a paid plan merely to receive the sender's location.
 
@@ -26,7 +27,7 @@ Connections, relationship labels and canonical Household membership are not subs
 - manual/current-location refresh where the product supports it;
 - all privacy, stop-sharing, check-in disable, exact-place revoke, erase and account-deletion controls.
 
-Free does **not** include a continuous-location sender seat once billing enforcement is activated.
+Free does **not** include a continuous-location sender seat after paid enforcement is activated.
 
 ### Homi+ Personal — R19.99/month
 
@@ -39,11 +40,14 @@ Personal is for one person who wants several trusted people to be able to follow
 
 - two continuous-location sender seats under one subscription;
 - each covered sender independently receives the same five-viewer limit;
-- the second seat can cover another trusted Homi account and does not require the two people to live together;
+- the first seat is the purchaser;
+- the second seat can cover one accepted trusted Homi connection and does not require the two people to live together;
 - intended use includes couples, parent/child, siblings and friends;
-- target seat-reassignment cooldown: seven days, subject to final billing implementation.
+- seven-day seat-reassignment cooldown.
 
 Duo is two sender entitlements paid by one purchaser. It does not create a shared Household by itself.
+
+Unassigning the second seat, disconnecting that person or reconnecting them must not reset/bypass the seven-day reassignment cooldown.
 
 ### Homi+ Household — R49.99/month or R499.99/year
 
@@ -53,20 +57,22 @@ Duo is two sender entitlements paid by one purchaser. It does not create a share
 
 Trusted friends outside the Household do not consume Household member seats merely because a Household member shares location with them.
 
-## Canonical Household status in 0.11
+## Canonical Household and data-plane status
 
-Homi 0.11 implements the real Household identity/membership layer before billing:
+0.11 established the server-owned canonical Household identity:
 
-- one canonical Household per account at a time;
+- one Household per account at a time;
 - owner/member roles;
 - four occupied/reserved seats;
-- explicit invitations that require an accepted trusted connection;
-- invite accept/decline/cancel;
+- accepted trusted connection required before invite;
+- explicit invite acceptance;
 - member removal/leave;
 - ownership transfer;
-- server-owned Firestore membership and invitation writes.
+- server-owned membership and invitation writes.
 
-This identity layer does **not** itself grant Homi+ entitlement and does not yet synchronize all Home/Routine/Supply data. It exists so future shared data and paid entitlement can attach to a stable `householdId` rather than trying to infer a Household from per-person relationship labels.
+0.12 adds the shared Household data plane for Routines, Supplies, Home Things, maintenance/repair events and utility readings, plus canonical Household authorization for shared one-off Tasks. Existing local data uses the explicit safe first-sync/private-legacy strategy recorded in the 0.12 release documents.
+
+0.13 attaches billing capability to these stable Household identifiers; it does not infer a paid Household from a People relationship label.
 
 ## Privacy and safety are never paywalled
 
@@ -82,15 +88,17 @@ Payment state must never prevent a user from:
 - deleting an account;
 - opening emergency-number shortcuts.
 
-If a subscription expires, existing data is not immediately destroyed. Paid creation/sync/broadcast capabilities may be disabled, while privacy exits remain available.
+If a subscription expires, existing local data is not immediately destroyed. Paid creation/sync/broadcast capabilities may be disabled while privacy exits remain available.
+
+Deleting a Homi account and canceling a Google Play subscription are separate operations. Homi must warn about this clearly. Account deletion removes Homi-side entitlement/account mappings but does not cancel a Play subscription on the user's behalf.
 
 ## Cost guardrails
 
 The first paid model assumes continuous location remains a latest-state feature, not route history.
 
-Source/runtime boundaries from 0.10.0 onward:
+Current technical boundaries:
 
-- Android asks for background positions at roughly two-minute intervals with a 100 m movement filter;
+- Android requests background positions at roughly two-minute intervals with a 100 m movement filter;
 - Homi's client cloud-write guard is 90 seconds;
 - Firestore independently rejects repeat latest-location updates inside 90 seconds;
 - one sender can authorize no more than five active live-location viewers;
@@ -99,54 +107,98 @@ Source/runtime boundaries from 0.10.0 onward:
 
 These controls are business-protection and privacy controls as well as technical limits. Do not raise them casually.
 
-## Billing architecture — required before paid enforcement
+## Google Play catalog direction
 
-The plan definitions and canonical Household records are commercial/product contracts only. They do not yet grant a paid entitlement.
+Use **one Google Play subscription product** for the Homi+ membership family, with separate base plans for the tier/cadence. The exact durable identifiers are to be created and verified in Play Console before source activation.
 
-Paid enforcement must be activated only after all of the following exist:
+Proposed identifiers:
 
-1. Google Play subscription products/base plans for the intended plans;
-2. Flutter purchase flow using the official Play Billing integration;
-3. server-side purchase-token verification through the Google Play Developer API;
-4. authoritative server-stored entitlement state;
-5. real-time subscription lifecycle handling (RTDN / Pub/Sub plus authoritative Play lookup);
-6. restore/reinstall/account-change handling;
-7. cancellation, grace period, hold, expiry and refund/revocation handling;
-8. Play Internal Testing proof from a store-installed build.
+- subscription product: `homi_plus`
+- base plan: `personal-monthly`
+- base plan: `duo-monthly`
+- base plan: `household-monthly`
+- base plan: `household-annual`
 
-The client must never unlock Homi+ only because a local purchase callback says a payment succeeded.
+Only Household has an approved annual price. Do not add annual Personal or Duo products/base plans until separately approved.
 
-## Entitlement model target
+Keeping the tiers under one Play subscription family reduces the risk of a customer accidentally holding unrelated simultaneous Homi+ subscriptions and lets Google Play own same-subscription plan-switch behavior. Final replacement behavior must be configured and tested in Play Console/Internal Testing before public sale.
 
-The backend should answer capability questions centrally rather than scattering `isPaid` checks through Flutter.
+## Billing architecture — 0.13 source status
 
-Examples:
+0.13 implements the following in source:
+
+1. Flutter purchase flow using `in_app_purchase`;
+2. Play-localized plan price display;
+3. opaque account association rather than exposing raw Homi UID to Play;
+4. App-Check-protected server purchase verification;
+5. Android Publisher `purchases.subscriptionsv2.get` verification;
+6. server-side purchase acknowledgement when Google says acknowledgement is pending;
+7. server-only purchase/account/coverage storage;
+8. self-readable authoritative `entitlements/{uid}` projection;
+9. Pub/Sub RTDN receiver that re-fetches authoritative Play state before changing entitlement;
+10. restore/reinstall flow;
+11. Duo second-seat assignment with accepted-connection and cooldown checks;
+12. Household coverage derived from canonical Household membership;
+13. multi-source entitlement projection so one subscription cannot erase another valid coverage source;
+14. Google Play subscription-management handoff.
+
+The client never unlocks Homi+ merely because a local purchase callback says `purchased`.
+
+### Capability model
+
+The backend projects capability questions rather than encouraging scattered local `isPaid` flags:
 
 - `continuousLocationSender`
 - `sharedHousehold`
 - `householdMemberLimit`
 - `maxTrustedLiveViewers`
 
-A Duo subscription should identify the purchaser plus one assigned Homi account. Household should identify one canonical `householdId` and its covered members. Store purchase ownership and Homi entitlement membership are separate concepts.
+The entitlement projection also records plan/state, purchaser context, seat role, Household context where relevant and expiry metadata.
 
-The authoritative future entitlement record must be server-written. Firestore/Functions must enforce paid mutations independently of Flutter UI visibility.
+A Homi account can have multiple entitlement sources. Example: the user owns Personal while also being covered by another purchaser's Household plan. Backend-only `billingCoverage` records are therefore reduced into one `entitlements/{uid}` projection; an expiring source does not delete a separate valid source.
 
-## Shared-data sequencing
+## Play lifecycle semantics
 
-Before activating Household billing, migrate selected shared data domains onto the canonical Household with an explicit first-sync/merge strategy. Existing local data must not be silently overwritten or uploaded merely because somebody creates or joins a Household.
+- `active` grants paid capability;
+- `grace_period` keeps paid capability while Play attempts payment recovery;
+- a voluntarily `canceled` subscription keeps entitlement through the already-paid term until Play reports expiration;
+- `on_hold`, `paused`, `pending` and `expired` do not grant paid capability;
+- superseded purchase tokens cannot regain authority after a newer plan-change token becomes canonical;
+- new purchase tokens are acknowledged on the server after verification;
+- RTDN is a signal, not trusted entitlement data: backend always re-queries Google Play.
 
-Recommended implementation order:
+## Provider infrastructure required before billing deployment
 
-1. canonical Household identity/membership — implemented in 0.11 source;
-2. shared Household Tasks/Routines/Supplies/Home data plane with merge/conflict behavior;
-3. centralized capability/entitlement service;
-4. Google Play Billing client + backend verification;
-5. RTDN/Pub/Sub lifecycle handling;
-6. Internal Testing proof;
-7. paid enforcement.
+The 0.13 governed deploy fails closed until all of these are true:
 
-## Annual pricing
+- exact Play product/base-plan IDs are source-controlled in both Flutter and Functions catalogs;
+- Android Publisher API is enabled on `homi-ee80a`;
+- Pub/Sub topic `homi-google-play-rtdn` exists;
+- `google-play-developer-notifications@system.gserviceaccount.com` can publish to that topic;
+- the canonical Homi runtime identity is linked/authorized for the Play Console app with the minimum purchase/subscription access required for verification/acknowledgement.
 
-Only Household annual pricing is currently approved: **R499.99/year**.
+The last item must be proven through the actual Play-installed Internal Testing purchase path; GCP IAM alone is not accepted as evidence that Play API access is correct.
 
-Do not hard-code annual Personal or Duo products until those prices are separately approved.
+## Paid enforcement sequencing
+
+Paid enforcement is deliberately **not active merely because the billing source exists**.
+
+Required sequence:
+
+1. deploy and accept the 0.12 shared Household data plane;
+2. compile/analyze/test final 0.13 app source;
+3. create and verify Play subscription/base plans;
+4. configure Android Publisher API access and RTDN Pub/Sub;
+5. deploy/validate the 0.13 billing backend;
+6. prove purchase + server verification + acknowledgement from a Play Internal Testing install;
+7. prove restore/reinstall/account mapping;
+8. prove active/canceled/grace/hold/expiry lifecycle reconciliation and RTDN;
+9. prove Duo and Household coverage changes;
+10. prove privacy exits with no entitlement;
+11. only then activate paid enforcement for continuous sending and shared-Household premium capability in the final launch candidate.
+
+## Store/install verification
+
+Android Studio sideloads are not accepted as payment proof. Google Play Billing must be exercised from the Google Play Internal Testing build attached to the real store catalog/test-account setup.
+
+Store-signed authentication, Play Integrity/App Check and Google Sign-In also require their own Internal Testing proof before production.

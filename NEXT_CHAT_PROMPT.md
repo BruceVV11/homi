@@ -53,26 +53,48 @@ Do not infer a stronger 0.11 deployment/test result than the evidence available 
 Version: **`0.12.0+16`**
 Branch: **`homi-0.12-shared-data-plane`**
 Production state: **NOT deployed**
-Compile/device state: **pending Bruce's Windows/S25 Ultra gate**
+Validation state: **an earlier exact 0.12 head passed Bruce's Windows Flutter gate, then S25 Ultra feedback caused new source commits; the final live PR head therefore requires a fresh exact-head Windows gate and focused device recheck before merge**
 
 Always re-fetch the live branch/PR head before validation. Do not rely on a SHA copied into this handoff because this file's own commit advances the branch.
+
+## 2026-09-12 S25 Ultra feedback
+
+Bruce reviewed the earlier 0.12 candidate in Android Studio and confirmed the new **My code** and **Connect** controls were present. Two issues were found:
+
+1. Household **Add person**, when no additional accepted trusted connection was eligible, caused a page refresh/layout jump and inserted an easy-to-miss inline peach error card.
+2. **My code** remained visible, but the code card showed: `Homi could not verify your signed-in session. Check your connection and try again.`
+
+The second message is the `unauthenticated` friendly message from `HomiCloudActions`; it is **not** evidence that `ensureHomiIdentity` is missing. The 0.11 production backend already contains that callable. It is Auth + App Check protected.
+
+The source now fixes both cases:
+
+- a reusable `showHomiInfoSheet` branded one-action bottom sheet exists in `lib/src/widgets/homi_controls.dart`;
+- Household **Add person** uses that sheet for full/no-candidate/connection-load cases instead of injecting an inline notice;
+- `TrustedPeopleService.ensureIdentity()` first reads the signed-in user's self-readable `users/{uid}` document and reuses a valid established `homiCode`;
+- `ensureHomiIdentity` remains the protected provisioning/repair fallback for a genuinely new or incomplete profile;
+- connecting **with** a code still uses the protected server mutation path; the fallback does not weaken code lookup/connection authorization.
+
+Bruce already used a Homi code to establish the existing Casey connection, and the backend provisions `users/{uid}.homiCode` and the lookup index atomically. The final device recheck should therefore show the existing six-character code without needing a fresh protected callable merely for display.
 
 ## 0.12 People fixes implemented in source
 
 1. People connections/preferences subscribe immediately instead of waiting behind cached GPS, passive location refresh, continuous-sharing resume and identity provisioning.
-2. Homi code provisioning has independent loading/error state so a successful connection refresh cannot silently hide a failed code load.
+2. Homi code display has independent loading/error state so a successful connection refresh cannot silently hide a failed code load.
 3. The populated Connections header exposes **My code** and **Connect**.
 4. The reusable six-character account code can be copied/shown even when existing connections are present.
-5. Relationship labels remain editable.
-6. Household/Friend connection type is now read-only and displayed from canonical Household membership.
-7. If no Household exists, the edit sheet explains that Shared Household must be created first and the person invited/accepted through **Homi & account -> Shared Household**.
-8. `setTrustedPersonPreference` keeps its public callable name but derives scope server-side; a client can no longer manufacture Household status by sending `scope: household`.
-9. `HouseholdPeopleService` uses canonical Household membership for shared Task assignee eligibility.
+5. An established code is read from the self-readable account profile first; protected provisioning is fallback only.
+6. Relationship labels remain editable.
+7. Household/Friend connection type is read-only and displayed from canonical Household membership.
+8. If no Household exists, the edit sheet explains that Shared Household must be created first and the person invited/accepted through **Homi & account -> Shared Household**.
+9. `setTrustedPersonPreference` keeps its public callable name but derives scope server-side; a client can no longer manufacture Household status by sending `scope: household`.
+10. `HouseholdPeopleService` uses canonical Household membership for shared Task assignee eligibility.
 
 Key source:
 
 - `lib/src/features/people/people_page.dart`
+- `lib/src/services/trusted_people_service.dart`
 - `lib/src/widgets/homi_controls.dart`
+- `lib/src/features/profile/household_settings_page.dart`
 - `lib/src/services/household_people_service.dart`
 - `functions/trusted_people_preferences.js`
 
@@ -137,7 +159,7 @@ New 0.12 shared Tasks use the existing public callable names but derive authoriz
 
 New tasks carry canonical `householdId`, `audienceVersion: 1` and current canonical `memberUids`.
 
-The client shared-task query now requires both:
+The client shared-task query requires both:
 
 - `householdId == current Household`; and
 - `memberUids array-contains current UID`.
@@ -200,32 +222,33 @@ Firestore suites:
 - `security-tests/household.boundary.test.js` — 8 canonical Household identity/data-plane tests;
 - `security-tests/shared_task_household.boundary.test.js` — 2 canonical shared-Task query/fail-closed tests.
 
-Final 0.12 Firestore gate is therefore expected to prove **23 tests**. The amendment `documentation/releases/0.12.0-shared-task-migration.md` supersedes earlier draft references to 21 tests.
+Final 0.12 Firestore gate is expected to prove **23 tests**.
 
 Standalone new JavaScript modules have received source-level Node 22 syntax checks during development where recorded, but that is not the dependency-loaded Functions/export/emulator gate.
 
 ## Exact next sequence
 
-1. Re-fetch focused PR metadata and exact live head SHA.
+1. Re-fetch focused PR metadata and the exact live head after all 2026-09-12 device-feedback/documentation commits.
 2. Inspect the final branch diff and all changed source/contracts; do not ask Bruce to validate while a known stale dependency remains.
-3. On Bruce's Windows machine, validate the exact PR head with Flutter 3.41.5:
+3. Bruce fast-forwards local `homi-0.12-shared-data-plane` to the exact live head and runs one final Windows gate with Flutter 3.41.5:
    - `flutter pub get`
    - `flutter analyze`
    - full `flutter test`
    - final exact SHA/worktree check
-4. If that exact gate passes, Bruce runs the same exact source on the S25 Ultra and checks:
-   - People list appears without the previous structural delay;
-   - **My code** remains visible with existing connections;
+4. If green, Bruce runs the same exact source on the S25 Ultra and verifies:
+   - People list still appears without the previous structural delay;
+   - **My code** displays the established reusable code instead of the previous protected-session error;
    - code sheet/copy and **Connect** work;
+   - Household **Add person** with no eligible person opens the custom informational bottom sheet without an inline page jump;
    - connection edit keeps Household/Friend type muted/read-only with correct explanation;
    - actual canonical member appears in Household grouping;
    - existing Routines/Supplies/Home records remain intact;
-   - normal add/update/delete/restart flows remain healthy;
-   - location/safety/nav behavior remains unchanged.
+   - normal add/update/delete/restart, location/safety and navigation behavior remain healthy.
 5. Do not claim second-device sync acceptance because Bruce does not currently have another device.
-6. Only after the exact app candidate passes, run the governed refresh-safe Cloud Shell backend worker against the exact accepted SHA. Required proof includes Node 22, project-number guard, exactly 37 exports and Firestore **23/23** before any deployment can continue.
-7. If backend deployment passes, record exact deployed SHA and update release docs from pending to deployed/accepted based only on real evidence.
-8. After 0.12 is accepted, proceed to centralized capability/entitlement state, then Google Play Billing + server verification + RTDN/Pub/Sub before any paid enforcement.
+6. Re-fetch the PR. Merge only the exact Windows/device-accepted head with expected-head protection.
+7. Run the governed refresh-safe Cloud Shell backend worker against the exact merge SHA. Required proof includes Node 22, project-number guard, exactly 37 exports, safe legacy shared-Task migration and Firestore **23/23** before deployment can continue.
+8. If backend deployment passes, record the exact deployed SHA and update release docs from pending to deployed/accepted based only on real evidence.
+9. After 0.12 is accepted, proceed to centralized capability/entitlement state, then Google Play Billing + server verification + RTDN/Pub/Sub before any paid enforcement.
 
 ## Commercial contract to preserve
 

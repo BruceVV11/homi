@@ -5,6 +5,11 @@ const PROJECT_ID = "homi-ee80a";
 const BATCH_SIZE = 400;
 const LEGACY_AUDIENCE_VERSION = 0;
 const apply = process.argv.includes("--apply");
+const assertStable = process.argv.includes("--assert-stable");
+
+if (apply && assertStable) {
+  throw new Error("Choose either --apply or --assert-stable, not both.");
+}
 
 initializeApp({projectId: PROJECT_ID});
 const db = getFirestore();
@@ -102,13 +107,24 @@ async function main() {
     }
   }
 
-  console.log(`Homi legacy shared-task migration mode: ${apply ? "APPLY" : "DRY-RUN"}`);
+  const mode = assertStable ? "ASSERT-STABLE" : apply ? "APPLY" : "DRY-RUN";
+  console.log(`Homi legacy shared-task migration mode: ${mode}`);
   console.log(`Total shared tasks: ${counts.total}`);
   console.log(`Already canonical: ${counts.alreadyCanonical}`);
   console.log(`Safe legacy tasks to migrate: ${counts.migrate}`);
   console.log(`Fail-closed without creator identity: ${counts.failClosedNoCreator}`);
   console.log(`Fail-closed without canonical Household: ${counts.failClosedNoHousehold}`);
   console.log(`Fail-closed with inconsistent Household membership: ${counts.failClosedInvalidMembership}`);
+
+  if (assertStable) {
+    if (migrations.length > 0) {
+      throw new Error(
+          `Migration is not stable: ${migrations.length} safely migratable legacy task(s) remain.`,
+      );
+    }
+    console.log("Legacy shared-task migration is stable.");
+    return;
+  }
 
   if (!apply || migrations.length === 0) return;
 

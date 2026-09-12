@@ -196,12 +196,18 @@ Paid enforcement remains off until Internal Testing proves the full billing life
 
 ### Store catalog
 
-Recommended single Google Play subscription family:
+Personal, Duo and Household are separate subscription benefits, so Homi uses three Google Play subscription products with only the approved billing base plans:
 
-- product: `homi_plus`
-- base plans: `personal-monthly`, `duo-monthly`, `household-monthly`, `household-annual`
+- product `homi_plus_personal`
+  - base plan `monthly`
+- product `homi_plus_duo`
+  - base plan `monthly`
+- product `homi_plus_household`
+  - base plans `monthly`, `annual`
 
 Homi has one governed client catalog and one governed Functions catalog. Both remain blank/unconfigured until the real permanent Play IDs exist. Blank catalog means purchase UI is disabled/fail-closed.
+
+Tier changes use Google Play subscription replacement rather than intentionally starting another concurrent Homi+ subscription. The client passes the current Homi+ Play purchase in `ChangeSubscriptionParam`; Google Play returns a new purchase token and `linkedPurchaseToken` lineage for an upgrade/downgrade/resubscribe before expiry. Homi verifies that lineage server-side before replacing an active canonical token.
 
 ### Client purchase path
 
@@ -211,9 +217,10 @@ Homi has one governed client catalog and one governed Functions catalog. Both re
 2. displays Play-localized pricing;
 3. starts purchase/restore using `in_app_purchase`;
 4. supplies SHA-256(`homi:<uid>`) as opaque Play account association rather than raw UID;
-5. sends the purchase token to protected `verifyGooglePlaySubscription`;
-6. never grants paid capability from local `PurchaseStatus`;
-7. consumes authoritative `entitlements/{uid}` through `HomiEntitlementService`.
+5. uses Play replacement/proration when another Homi+ product is already active;
+6. sends the purchase token to protected `verifyGooglePlaySubscription`;
+7. never grants paid capability from local `PurchaseStatus`;
+8. consumes authoritative `entitlements/{uid}` through `HomiEntitlementService`.
 
 Profile Settings exposes **Homi+ → Plans & billing**. The page also supports Google Play subscription management and Duo seat assignment.
 
@@ -227,8 +234,11 @@ Profile Settings exposes **Homi+ → Plans & billing**. The page also supports G
 4. verifies Play `obfuscatedExternalAccountId` matches expected Homi account hash;
 5. maps verified product + base plan to Homi tier;
 6. stores token/lifecycle only in backend-only state;
-7. acknowledges through Android Publisher if acknowledgement is pending;
-8. projects coverage/capability state.
+7. validates canonical-token replacement against Play `linkedPurchaseToken` while the existing token is still entitled;
+8. refuses a previously superseded token becoming canonical again;
+9. acknowledges through Android Publisher if acknowledgement is pending;
+10. normalizes known paid-term expiry so canceled/stale state cannot remain entitled after its expiry time;
+11. projects coverage/capability state.
 
 ### Billing state collections
 
@@ -279,9 +289,9 @@ Pub/Sub topic contract:
 Expected states:
 
 - active/grace/unexpired canceled term: capability available;
-- hold/paused/pending/expired: no paid capability.
+- hold/paused/pending/expired or known paid term already past: no paid capability.
 
-Superseded purchase tokens cannot retake authority after a plan change.
+Superseded purchase tokens can refresh historical lifecycle state but cannot retake canonical authority. A linked replacement token may replace the current active canonical purchase; an unrelated unlinked token cannot silently displace it while the current purchase remains entitled.
 
 ### Account deletion
 
@@ -316,9 +326,9 @@ Current production remains 0.11 until the final 0.12 governed deployment is prov
 Expected final 0.13 source gates after provider setup:
 
 - Flutter dependency resolution/analyzer/full tests on Bruce's real toolchain;
-- Node22 lint + policy tests **14/14**;
+- Node22 lint + policy tests **16/16**;
 - exact Functions exports **43**;
 - Firestore emulator **25/25**;
 - S25 Ultra regression;
-- Play Internal Testing purchase/lifecycle proof;
+- Play Internal Testing purchase/lifecycle proof including cross-tier replacement and superseded-token replay resistance;
 - paid enforcement only after lifecycle proof.

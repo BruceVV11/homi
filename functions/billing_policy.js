@@ -56,21 +56,17 @@ function timestampMillis(value) {
 }
 
 function effectivePlayState(state, validUntil, nowMs = Date.now()) {
-  // Google Play reports a voluntarily canceled subscription as CANCELED while
-  // the user remains entitled until the current paid term expires. If expiry
-  // is already past, fail closed immediately instead of waiting for the next
-  // EXPIRED RTDN. Active/grace records with an already-past expiry are also
-  // treated as expired if stale lifecycle state is ever replayed.
-  const expiryMs = timestampMillis(validUntil);
-  if (state === "canceled") {
-    return expiryMs != null && expiryMs > nowMs ? "canceled" : "expired";
-  }
+  // Paid capability requires both a Play state that can grant access and a
+  // verified paid-through timestamp still in the future. This prevents a stale
+  // ACTIVE/GRACE/CANCELED record from outliving its known Play term if RTDN is
+  // delayed, and it fails closed when the paid-through boundary is missing.
   if (
-    (state === "active" || state === "grace_period") &&
-    expiryMs != null &&
-    expiryMs <= nowMs
+    state === "active" ||
+    state === "grace_period" ||
+    state === "canceled"
   ) {
-    return "expired";
+    const expiryMs = timestampMillis(validUntil);
+    return expiryMs != null && expiryMs > nowMs ? state : "expired";
   }
   return state;
 }

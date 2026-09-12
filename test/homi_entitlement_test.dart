@@ -14,10 +14,18 @@ void main() {
     expect(entitlement.maxTrustedLiveViewers, 0);
   });
 
-  test('only active or grace-period paid state grants capabilities', () {
+  test('active grace and canceled paid-term states keep capabilities', () {
     final active = HomiEntitlement.fromMap(<String, dynamic>{
       'plan': 'household',
       'state': 'active',
+      'continuousLocationSender': true,
+      'sharedHousehold': true,
+      'maxTrustedLiveViewers': 5,
+      'householdMemberLimit': 4,
+    });
+    final canceled = HomiEntitlement.fromMap(<String, dynamic>{
+      'plan': 'household',
+      'state': 'canceled',
       'continuousLocationSender': true,
       'sharedHousehold': true,
       'maxTrustedLiveViewers': 5,
@@ -34,6 +42,8 @@ void main() {
 
     expect(active.canSendContinuousLocation, isTrue);
     expect(active.canUseSharedHousehold, isTrue);
+    expect(canceled.canSendContinuousLocation, isTrue);
+    expect(canceled.canUseSharedHousehold, isTrue);
     expect(held.canSendContinuousLocation, isFalse);
     expect(held.canUseSharedHousehold, isFalse);
   });

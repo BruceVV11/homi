@@ -117,7 +117,8 @@ Implemented source contracts:
 - **DONE in source** deterministic record IDs and versioned envelope.
 - **DONE in source** parent Household deletion has a bounded cleanup trigger for nested shared data and canonical new shared Tasks.
 - **DONE in source** shared Task creation/toggle/removal are bound to canonical Household membership while retaining their deployed callable names.
-- **DONE in source** `onHouseholdTaskMembershipChanged` keeps new 0.12 shared Task `memberUids` aligned with current Household membership and strips removed assignee/completion UIDs.
+- **DONE in source** canonical shared Tasks remain usable by their safe current Household audience if the original creator leaves; the current Household owner has explicit recovery actions.
+- **DONE in source** `onHouseholdTaskMembershipChanged` updates only audience-version-1 Tasks, strips removed assignee/completion UIDs, and never widens migrated audience-version-0 Tasks.
 - **DONE in source** pre-0.12 Tasks are migrated only when safely mappable and are not silently widened to a newer Household audience.
 
 Validation required:
@@ -143,12 +144,12 @@ Established backend identity:
 0.12 backend source:
 
 - **DONE in source** `setTrustedPersonPreference` keeps the public name but derives Household/Friend scope server-side.
-- **DONE in source** `createSharedTask`, `toggleSharedTask`, `removeSharedTask` keep public names but use canonical Household membership.
+- **DONE in source** `createSharedTask`, `toggleSharedTask`, `removeSharedTask` keep public names but use canonical Household membership and durable Household ownership semantics.
 - **DONE in source** `onHomiHouseholdDeletedDataCleanup` adds bounded orphan-data cleanup.
-- **DONE in source** `onHouseholdTaskMembershipChanged` reconciles new canonical shared Task membership after Household changes.
+- **DONE in source** `onHouseholdTaskMembershipChanged` reconciles only new canonical shared Task audiences after Household changes; migrated historical audiences remain privacy-stable.
 - **DONE in source** deployment helper source-completeness list updated.
 - **DONE in source** exact Functions export guard is **37**: two new trigger names (cleanup + Task-membership sync); preference/task modules override existing callable names.
-- **DONE static only** new standalone JavaScript modules have source-level Node 22 syntax checks where recorded. This is not a Functions runtime or emulator pass.
+- **DONE source preflight only** `household_task_policy.test.js` defines five pure policy tests for historical-audience non-widening, canonical membership reconciliation, attribution cleanup and Household-owner recovery. The policy suite passed 5/5 under Node 22 during source preflight, but this does not replace the governed Cloud Shell run.
 
 Firestore 0.12 boundary:
 
@@ -157,14 +158,17 @@ Firestore 0.12 boundary:
 - deterministic `domain--itemId` identity is enforced;
 - payload ID, schema version, authenticated actor and server request timestamp are enforced;
 - canonical shared-Task reads require both `householdId == current Household` and exact `memberUids array-contains current UID` query constraints;
+- legacy shared Tasks without a safely migrated canonical Household fail closed;
 - outsiders and stale/forged half-memberships are denied in the source-controlled tests.
 
 Governed backend gate still required before deployment:
 
 - **VERIFY** Node 22 dependency install/lint.
+- **VERIFY** Functions policy suite **5/5** under the dependency-loaded governed worker.
 - **VERIFY** exactly **37** entrypoint exports.
-- **VERIFY** Firestore emulator suite expected **23/23**: 13 established + 8 Household + 2 canonical shared-Task tests.
+- **VERIFY** Firestore emulator suite **23/23**: 13 established + 8 Household + 2 canonical shared-Task tests. The helper refuses to run a stale/omitted suite if those three files do not declare exactly 23 tests.
 - **VERIFY** legacy shared-Task migration dry-run/apply/stability sequence.
+- **VERIFY** known legacy `onConnectionDeleted` drift is reconciled before any new 0.12 Function deployment if that old resource still exists.
 - **VERIFY** Firestore rules/index deploy.
 - **VERIFY** all 37 Functions deploy in controlled batches.
 - **VERIFY** final exact-SHA/worktree status ends PASS.
@@ -228,13 +232,13 @@ Permanent package: `za.co.theconceptlab.homi`.
 
 ## Immediate sequence
 
-1. Re-fetch the final focused PR head after the 2026-09-12 device-feedback patches and finish repository-wide source/document preflight.
-2. Bruce fast-forwards the local `homi-0.12-shared-data-plane` branch to that exact head and runs one final Windows gate: dependency resolution, analyzer, full tests, final SHA/worktree check.
+1. Re-fetch the final focused PR head after all 2026-09-12 device-feedback/backend-contract patches and finish repository-wide source/document preflight.
+2. Bruce fast-forwards the local `homi-0.12-shared-data-plane` branch to that exact head and runs one final Windows gate: dependency resolution, analyzer, full Flutter tests, final SHA/worktree check.
 3. If green, run that same exact source on the S25 Ultra and verify:
    - **Add person** with no eligible extra connection opens the custom informational bottom sheet without page-jump/inline-error behaviour;
    - the already-established reusable Homi code loads from the account profile and **My code** opens/copies it;
    - People immediate load, canonical disabled connection type, preserved local data and normal Home/Routines/Supplies behavior remain healthy.
 4. Re-fetch the PR and merge only the exact Windows/device-accepted head using expected-head protection.
-5. Run the governed refresh-safe Cloud Shell backend worker against the exact merge SHA. Required evidence includes Node 22, project-number guard, exactly 37 exports, safe legacy Task migration and Firestore **23/23** before deployment proceeds.
+5. Run the governed refresh-safe Cloud Shell backend worker against the exact merge SHA. Required evidence includes Node 22, Functions policy **5/5**, project-number guard, exactly 37 exports, Firestore **23/23**, legacy Function drift reconciliation and safe legacy Task migration before the stricter rules/remaining Functions deployment proceeds.
 6. After backend deployment passes, re-test the affected Household data-plane flows and record the exact deployed SHA in release docs.
 7. After 0.12 acceptance, build the centralized capability/entitlement layer, then Google Play Billing + server verification + RTDN/Pub/Sub before any paid enforcement.

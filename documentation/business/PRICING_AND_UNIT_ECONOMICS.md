@@ -51,17 +51,21 @@ Only Household annual pricing is approved. Do not create annual Personal/Duo pla
 
 ## Google Play product structure
 
-Use one Google Play subscription family for Homi+, with base plans for the tier/cadence. This reduces accidental simultaneous unrelated Homi+ purchases and gives Google Play the correct same-subscription plan-switch context.
+Personal, Duo and Household provide materially different subscription benefits. Homi therefore uses three permanent Google Play subscription products; base plans describe how each product is billed rather than being used as unrelated entitlement tiers.
 
 Proposed durable IDs to create/verify once in Play Console:
 
-- subscription product: `homi_plus`
-- base plan: `personal-monthly`
-- base plan: `duo-monthly`
-- base plan: `household-monthly`
-- base plan: `household-annual`
+- product `homi_plus_personal`
+  - base plan `monthly`
+- product `homi_plus_duo`
+  - base plan `monthly`
+- product `homi_plus_household`
+  - base plan `monthly`
+  - base plan `annual`
 
 Do not create throwaway duplicate IDs to work around setup mistakes. After the real store IDs exist, populate the same exact identifiers into Homi's source-controlled client/backend catalog.
+
+Moving between Personal, Duo and Household must use Google Play's subscription replacement flow. The Android client supplies the current Homi+ purchase through `ChangeSubscriptionParam` and requests immediate time-prorated replacement instead of intentionally creating a second unrelated Homi+ subscription. That exact Play behavior must be proven with license testers before public sale.
 
 ## 0.13 billing architecture
 
@@ -73,6 +77,7 @@ Implemented in source:
 - query real Play products/base plans;
 - display Play-localized pricing;
 - launch purchase/restore;
+- Play subscription replacement for Homi+ tier changes;
 - opaque SHA-256-derived account association rather than raw Homi UID;
 - send purchase token to protected Homi backend;
 - consume server-written capability state;
@@ -95,8 +100,9 @@ Implemented in source:
 - multi-source coverage reduction so one ending source does not remove a separate valid source;
 - Duo seat/cooldown rules;
 - Household coverage derived from canonical Household membership;
-- superseded-token protection for plan changes;
-- billing verification/seat mutation rate limits.
+- billing verification/seat mutation rate limits;
+- paid-term expiry normalization so canceled/stale paid state does not remain entitled after its known term;
+- linked-purchase-token validation so an unrelated or already-superseded token cannot silently replace the canonical active Homi+ purchase.
 
 Capability examples remain:
 
@@ -114,6 +120,7 @@ Implemented in source:
 - authoritative Android Publisher refresh before entitlement changes;
 - active/grace/canceled-paid-term versus hold/paused/pending/expired capability semantics;
 - restore/reinstall path;
+- cross-product upgrade/downgrade replacement lineage through Play `linkedPurchaseToken`;
 - account/Household/connection cleanup reconciliation.
 
 The real provider lifecycle still requires Play Internal Testing proof.
@@ -125,9 +132,9 @@ The real provider lifecycle still requires Play Internal Testing proof.
 0.13 is stacked on that final 0.12 source and now contains the payment/entitlement architecture. It is **not** yet a launch-ready paid build because:
 
 - tracked Flutter dependencies still need exact lock resolution/compile/analyzer/test on Bruce's Flutter 3.41.5 toolchain;
-- real Play subscription/base-plan IDs do not exist in the source catalog yet;
+- the three real Play subscription products/base plans do not exist in the source catalog yet;
 - Android Publisher API/Play Console access and RTDN Pub/Sub are not yet configured/proven;
-- purchase/acknowledgement/restore/lifecycle has not yet been proven from a Play-installed Internal Testing build;
+- purchase/acknowledgement/upgrade/downgrade/restore/lifecycle has not yet been proven from a Play-installed Internal Testing build;
 - paid enforcement remains deliberately off until that proof is green.
 
 ## Cloud/unit economics guardrails
@@ -155,13 +162,13 @@ Before public production:
 The source implementation milestone is now **provider integration and proof**, not more speculative pricing design:
 
 1. close 0.12 merge/governed Firebase deployment;
-2. create the permanent `homi_plus` Play subscription and approved base plans;
+2. create the permanent `homi_plus_personal`, `homi_plus_duo` and `homi_plus_household` Play subscription products with only the approved base plans;
 3. populate the exact source catalogs;
 4. configure Android Publisher API access and RTDN Pub/Sub;
 5. run final 0.13 Windows/Node/Firestore/device gates;
 6. deploy the billing backend from an accepted exact merge SHA;
-7. prove real purchase, server verification/acknowledgement, restore/reinstall and lifecycle through Play Internal Testing;
-8. prove Duo/Household coverage changes and multi-source safety;
+7. prove real purchase, server verification/acknowledgement, cross-tier replacement, restore/reinstall and lifecycle through Play Internal Testing;
+8. prove Duo/Household coverage changes, purchase-token lineage and multi-source safety;
 9. only then activate paid enforcement;
 10. close signing/App Check/legal/background-location/Data Safety/store-listing gates before production rollout.
 

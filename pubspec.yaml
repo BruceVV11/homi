@@ -33,7 +33,11 @@ dependencies:
   google_fonts: ^6.3.0
   crypto: ^3.0.6
   in_app_purchase: ^3.3.0
-  in_app_purchase_android: ^0.5.3
+  # 0.5.0 is the latest Android platform plugin compatible with Homi's
+  # Flutter 3.41.5 / Dart 3.11.3 toolchain while moving to Play Billing 8.
+  # 0.5.1+ raises the Dart floor to 3.12, so keep this exact until Homi's
+  # Flutter toolchain is deliberately upgraded.
+  in_app_purchase_android: 0.5.0
 
 dev_dependencies:
   flutter_test:

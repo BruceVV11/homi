@@ -120,11 +120,11 @@ Personal **Me** Tasks remain local/private.
 
 For a new 0.12 shared Task, the server derives `householdId` and `memberUids` from the creator's current canonical Household. A caller cannot manufacture task visibility by setting a People scope. An assignee must be a current member of the same Household.
 
-The new callable implementation also verifies canonical Household access before toggle/remove operations. Existing completion/reopen/removal restrictions remain.
+Callable access requires the acting UID to be present in the Task's safe `memberUids` audience and still be a current canonical member of the Task's stored `householdId`. The original creator does **not** have to remain in the Household for remaining legitimate recipients to keep using the Task. For audience-version-1 Tasks, the current Household owner can perform owner-level reopen/remove recovery when the original creator/completer is no longer available.
 
-`onHouseholdTaskMembershipChanged` keeps new Tasks carrying the canonical `householdId` aligned when the Household member list changes. Removed assignee UIDs are cleared, and removed completion UIDs are stripped. This prevents the authorization list on a new shared Task from becoming stale merely because membership changed after task creation.
+`onHouseholdTaskMembershipChanged` updates only `audienceVersion: 1` Tasks when the canonical Household member list changes. Removed assignee UIDs are cleared and removed completion UIDs are stripped. The version check is deliberate: migrated historical Tasks are never widened merely because somebody new joins later.
 
-Pre-0.12 Tasks are governed by the deployment migration. A safely mappable legacy Task receives the creator's current canonical Household and only the intersection of its historical recipients and current members. It is marked `audienceVersion: 0`, so the canonical audience synchronizer does not widen it to newer members. Unmappable Tasks remain stored but fail closed under the 0.12 read rule.
+Pre-0.12 Tasks are governed by the deployment migration. A safely mappable legacy Task receives the creator's current canonical Household and only the intersection of its historical recipients and current members. It is marked `audienceVersion: 0`, so the canonical audience synchronizer ignores it. Unmappable Tasks remain stored but fail closed under the 0.12 read rule.
 
 `sharedTasks` remains a separate compatibility collection in 0.12 rather than being destructively migrated into the generic data plane during the same release.
 
@@ -192,17 +192,19 @@ Permanent backend identity remains:
 
 ## Automated gates
 
-`scripts/test-firestore-security.sh` runs the Firestore emulator security suite serially.
-
-For the final 0.12 candidate the expected suite is **23 tests**:
+`scripts/test-firestore-security.sh` runs all three Firestore emulator suites serially and refuses to run if their declared test count is not exactly **23**:
 
 - 13 established server-boundary tests;
 - 8 canonical Household identity/data-plane tests;
 - 2 canonical shared-Task query/fail-closed tests.
 
-The governed Functions helper requires Node 22, the immutable project number, exact source files, dependency lint and exactly **37** exports before it reaches deployment. The legacy shared-Task migration is dry-run/apply/stability governed, and Firestore security tests must pass before the stricter rules/indexes and remaining Functions deployment continue.
+The older server-boundary shared-Task assertions were updated to the canonical 0.12 contract rather than left expecting the pre-0.12 member-list-only rule.
 
-Standalone new JavaScript modules have received source-level Node 22 syntax checks where recorded. This is not a substitute for the governed dependency/export/emulator gate.
+`functions/household_task_policy.test.js` adds **5 pure Node policy tests** proving that migrated audience-version-0 Tasks are not widened, canonical version-1 Tasks follow membership, invalid assignee/completer attribution is stripped, and Household-owner recovery permissions remain explicit. The governed backend helper runs these tests after Functions lint and before export/security/deployment work.
+
+The governed Functions helper requires Node 22, the immutable project number, exact source files, dependency lint, the 5 policy tests and exactly **37** exports before it reaches any production mutation. It then runs Firestore 23/23, dry-runs the legacy shared-Task migration, deploys/proves the canonical shared-Task writers, applies the safe migration, asserts migration stability, and only then deploys the stricter Firestore rules/indexes and remaining bounded Function batches.
+
+Standalone new JavaScript modules have received source-level Node 22 syntax checks where recorded. The pure task policy tests were additionally run against Node 22 during source preflight, but neither result substitutes for the governed dependency-loaded/export/emulator gate in Cloud Shell.
 
 Do not weaken collection-wide rules to make a client test pass. Fix the intended contract, inspect dependent query behavior, rerun the exact security gate, then deploy.
 
@@ -220,7 +222,7 @@ Privacy, current-location revoke, exact-place revoke, local erase and account de
 
 - final exact 0.12 Windows analyzer/full Flutter test pass after the 2026-09-12 device-feedback source changes;
 - S25 Ultra acceptance of the affected People/Household/data flows, including established Homi-code display and graceful Add-person empty state;
-- governed Node 22 / **37-export** / **23-test** backend pass before 0.12 deployment;
+- governed Node 22 / **5 policy tests** / **37-export** / **23 Firestore tests** backend pass before 0.12 deployment;
 - permanent release signing / Play App Signing fingerprints;
 - Play-installed Google Sign-In;
 - production Maps/Places key restrictions;

@@ -40,37 +40,34 @@ Use **mobile-app-development** first for app/source work, **concept-lab-release-
 
 ## Production and stacked source state
 
-Production/backend remains the deployed 0.11 baseline at:
+Production/backend remains deployed 0.11 at:
 
 `3b26f3120864146f4ad3d2949e5a1a1416694b5c`
 
-0.12 final candidate/head used as the 0.13 branch base:
+0.12 final candidate used as the 0.13 base:
 
 `233c6ab16caa3a9c5951251d7805f57a68ca440c`
 
 0.12 version: `0.12.0+16`.
-
 0.12 is **not yet recorded as a governed Firebase production deployment**. Do not let 0.13 billing deployment skip that data-plane deployment/acceptance gate.
 
 0.13 version: `0.13.0+17`.
 Branch: `homi-0.13-billing-entitlements`.
 Always re-fetch the live branch head; do not trust a SHA copied into this handoff because this file's own commit advances the branch.
 
-## Final 0.12 device feedback carried into 0.13
+## Final 0.12 Household feedback folded into 0.13
 
-Bruce approved the reusable **My code** behavior and requested the persistent orange code card be removed. Only the **My code** header action remains, opening the dedicated code sheet.
+Bruce explicitly asked not to make a cosmetic micro-release for these:
 
-Bruce then reported two final minor Household UX issues and explicitly asked that they be folded into the next pass rather than creating a separate pass:
-
-1. Canceling a pending Household invitation caused the same refresh/loading flash seen earlier.
-2. The one-person **Add to Household** sheet felt visually sunken/too short.
+1. Canceling a pending Household invitation caused a refresh/loading flash.
+2. The one-person **Add to Household** sheet felt too sunken/short.
 
 0.13 source addresses both:
 
-- `HouseholdService` reuses stable current-Household/member/incoming/outgoing Firestore streams per authenticated UID, so `_busy` rebuilds no longer manufacture a new stream/loading state. This fixes the root pattern across cancel, rename, invite, remove, transfer and delete actions.
-- `_InviteMemberSheet` ends with a compact sage privacy/context panel explaining that Household membership never turns on location sharing. This adds useful visual balance rather than empty filler.
+- `HouseholdService` reuses stable current-Household/member/incoming/outgoing Firestore streams for the authenticated UID, so `_busy` rebuilds do not manufacture a new stream/loading state. This fixes the root pattern across cancel, rename, invite, remove, transfer and delete actions.
+- `_InviteMemberSheet` ends with a compact sage privacy/context panel explaining that Household membership never turns on location sharing. This adds useful visual weight instead of empty filler.
 
-These changes are source-only until Bruce's real Flutter/device gate proves them.
+Source only until Bruce's real S25 Ultra proves it.
 
 ## 0.12 shared Household data plane to preserve
 
@@ -110,9 +107,7 @@ Personal **Me** Tasks remain local/private. Shared one-off Tasks use canonical H
 - Household membership never turns on location sharing
 - deleting Homi is separate from canceling Google Play billing
 
-## 0.13 Homi+ source implementation
-
-### Flutter/client
+## 0.13 Flutter/client source
 
 Added:
 
@@ -131,51 +126,47 @@ Added:
 - `in_app_purchase: ^3.3.0`
 - exact `in_app_purchase_android: 0.5.0`
 
-The direct Android plugin is intentionally pinned to 0.5.0 because it moves Homi to Play Billing Library 8 while remaining compatible with Homi's current Dart 3.11.3 toolchain. Later 0.5.x versions raise the Dart floor beyond the current toolchain.
+The Android billing plugin is pinned to 0.5.0 because it moves Homi onto the Play Billing Library 8 integration line while remaining compatible with Dart 3.11.3. Later 0.5.x versions raise the Dart floor beyond the current Homi toolchain.
 
-**Important:** tracked `pubspec.lock` has not yet been regenerated for these new dependencies. The next real Flutter dependency-resolution step must update/commit that exact lock before treating the final 0.13 candidate as clean/validated.
-
-The client Play catalog is intentionally blank/unconfigured. It cannot start a purchase until exact real Play IDs exist.
+**Important:** tracked `pubspec.lock` has not yet been regenerated for these new dependencies. This is now the next unresolved app-source validation dependency.
 
 The client:
 
-- queries Play product/base-plan details;
-- displays Play-localized prices;
-- launches purchase/restore once catalog exists;
-- uses Google Play subscription replacement when moving between Homi+ products;
-- uses SHA-256(`homi:<uid>`) as opaque Play account identifier rather than raw UID;
+- queries Play products/base plans and displays Play-localized prices;
+- starts purchase/restore only once the governed catalog is real/configured;
+- uses SHA-256(`homi:<uid>`) rather than raw UID as Play's obfuscated account identifier;
+- uses Google Play `ChangeSubscriptionParam` for cross-tier replacement rather than intentionally creating a second concurrent Homi+ subscription;
+- currently requests `ReplacementMode.withTimeProration`; license-test it before public sale;
 - sends purchase token to the protected backend;
-- never grants itself paid capability from local purchase state;
-- reads server-written `entitlements/{uid}`;
-- defensively treats a canceled entitlement as expired if its known paid-through time is already past;
-- provides Play subscription-management handoff;
-- provides Duo second-seat UI.
+- never grants itself entitlement from local purchase state;
+- reads only server-written `entitlements/{uid}`;
+- fails closed when active/grace/canceled state has no future verified paid-through timestamp;
+- provides Google Play subscription management and Duo seat UI.
 
-### Permanent Play catalog direction
+## Permanent Play catalog direction
 
-Personal, Duo and Household are materially different subscription benefits and therefore use separate Google Play subscription products:
+Personal, Duo and Household are different subscription benefits, so use three permanent Google Play subscription products:
 
-- product `homi_plus_personal`
+- `homi_plus_personal`
   - base plan `monthly`
-- product `homi_plus_duo`
+- `homi_plus_duo`
   - base plan `monthly`
-- product `homi_plus_household`
+- `homi_plus_household`
   - base plans `monthly`, `annual`
 
-Do not populate source catalogs until these exact IDs have actually been created and verified in Play Console. Do not invent duplicate/temporary store products to recover from setup mistakes.
+Do not populate source catalogs until these exact IDs exist in Play Console. Do not create temporary duplicate products.
 
-For a tier change, `HomiBillingService` supplies the existing configured Homi+ purchase through `ChangeSubscriptionParam` and currently requests `ReplacementMode.withTimeProration`. This exact upgrade/downgrade behavior must be proven with license testers before public sale.
-
-### Backend
+## 0.13 billing backend source
 
 Added:
 
 - `functions/billing_catalog.js`
 - `functions/billing_policy.js`
 - `functions/billing_policy.test.js`
+- `functions/check_policy_test_count.js`
 - `functions/billing.js`
 - billing exports in `functions/entrypoint.js`
-- `google-auth-library` dependency
+- `google-auth-library`
 
 Billing Functions:
 
@@ -186,29 +177,30 @@ Billing Functions:
 - `onHomiPlusConnectionDeleted`
 - `onHomiPlusUserDeleted`
 
-Expected 0.13 Functions surface: **43**.
+Expected 0.13 export surface: **43 Functions**.
 
-Backend behavior:
+Current backend behavior:
 
-- purchase verification requires Firebase Auth + App Check + server rate limit;
-- calls Android Publisher subscriptions-v2 for permanent package `za.co.theconceptlab.homi`;
-- Play `obfuscatedExternalAccountId` must match expected opaque Homi account hash;
-- raw purchase token is server-only;
-- verified unacknowledged subscription is acknowledged by the server;
-- RTDN is a change signal and triggers authoritative Play lookup;
-- backend-only `billingCoverage` records are reduced into self-readable `entitlements/{uid}`;
-- multiple coverage sources are safe: ending one source does not delete another active source;
-- Duo second seat must be an accepted trusted connection and cannot bypass seven-day cooldown through unassign/disconnect;
-- Household coverage derives from purchaser's current canonical Household and caps at four;
-- known paid-term expiry is normalized during reconciliation so stale canceled/active/grace state cannot remain entitled after a verified term is already past;
+- Auth + App Check + rate limit on purchase verification;
+- authoritative Android Publisher `purchases.subscriptionsv2.get` for `za.co.theconceptlab.homi`;
+- verified Play account/Homi account binding through obfuscated account ID;
+- raw purchase tokens kept backend-only;
+- entitlement/coverage reconciliation occurs from verified Play state; server acknowledges when Play says acknowledgement is pending;
+- active/grace/canceled state grants capability only with a future verified paid-through timestamp;
+- multi-source `billingCoverage` is reduced into `entitlements/{uid}`, so one source ending cannot erase a separate valid source;
+- Duo second seat requires accepted connection and seven-day reassignment cooldown cannot be bypassed by unassign/disconnect;
+- Household coverage derives from current canonical Household and caps at four;
 - a new token replacing another still-entitled canonical purchase must be linked by Play's `linkedPurchaseToken`;
-- an already-superseded token cannot retake canonical authority;
-- a fresh verified token may become canonical after the prior purchase is no longer entitled;
-- account deletion removes Homi mappings/coverage but does not cancel Play billing.
+- a token already marked superseded cannot become canonical again;
+- a fresh verified purchase may become canonical after the previous one is no longer entitled;
+- Google Play out-of-app resubscribe is supported using the authoritative `outOfAppPurchaseContext.expiredExternalAccountIdentifiers` and `expiredPurchaseToken` fields when the prior Homi billing account link still exists;
+- deleting a Homi account removes coverage and scans **all** historical purchaser-linked Homi billing records, strips raw stored Play purchase tokens/Homi purchaser identity, removes the billing account link, and does not pretend to cancel the Google Play subscription.
 
-### Billing Firestore boundary
+The official current `SubscriptionPurchaseV2` schema confirms the out-of-app context field names above and states they are present for Play subscription-center resubscriptions after the previous same-product subscription expired. Do not replace these with guessed field names.
 
-Client may get only its own `entitlements/{uid}` and cannot write/list it.
+## Billing Firestore/security gates
+
+Client may `get` only its own `entitlements/{uid}` and cannot list/write/delete it.
 
 Backend-only:
 
@@ -217,11 +209,23 @@ Backend-only:
 - `billingAccountLinks/*`
 - `billingCoverage/*`
 
-Two new emulator tests raise final 0.13 Firestore expected count to **25/25**.
+0.13 Firestore expected count: **25/25** = existing 23 + 2 billing boundary tests.
 
-Pure Functions policy suite expected count: **16/16** = existing 5 shared-task + 11 billing policy tests.
+Pure Functions policy expected count: **16/16** = 5 shared-task + 11 billing tests.
 
-## 0.13 provider prerequisites
+`functions/check_policy_test_count.js` is wired into Functions `pretest`, so a stale/omitted pure policy suite fails closed unless it declares exactly 16 tests.
+
+**Actual evidence in this development pass:** source-level pure policy tests were run under Node 22 and passed **16/16**. This is NOT the governed dependency-loaded Functions lint/export/emulator/deployment gate.
+
+## Account deletion UX/source
+
+0.13 source now explicitly says on the Delete Homi account card and both destructive confirmation sheets that deleting Homi does **not** cancel a Google Play Homi+ subscription. It directs users who also want billing canceled to:
+
+**Profile settings → Homi+ → Plans & billing → Manage subscription**
+
+The Privacy/Terms/About source copy is also aligned to 0.12 Shared Household synchronization and 0.13 Google Play billing.
+
+## Provider prerequisites before billing deployment
 
 The governed backend helper expects exactly 43 Functions and refuses billing deployment until:
 
@@ -229,9 +233,9 @@ The governed backend helper expects exactly 43 Functions and refuses billing dep
 - Android Publisher API is enabled on `homi-ee80a`;
 - Pub/Sub topic `homi-google-play-rtdn` exists;
 - `google-play-developer-notifications@system.gserviceaccount.com` has publisher on that topic;
-- canonical runtime identity receives the minimum Play Console API access required for purchase verification/acknowledgement.
+- canonical Homi runtime identity has the minimum Play Console API access for purchase verification/acknowledgement.
 
-Actual Play Console API access must be proven by a Play Internal Testing purchase. GCP IAM alone is not accepted as proof.
+Actual Play app/API authorization must be proven by a Play Internal Testing purchase. GCP IAM alone is not proof.
 
 ## Paid enforcement status
 
@@ -242,12 +246,13 @@ Do not gate continuous location or Shared Household capabilities merely because 
 - real Play purchase;
 - backend verification;
 - server acknowledgement;
+- cross-tier replacement and linked-token lineage;
 - restore/reinstall;
-- voluntary cancel through paid term;
+- out-of-app resubscribe;
+- voluntary cancellation through paid term;
 - grace;
 - hold/paused/expiry;
 - RTDN refresh;
-- Personal/Duo/Household upgrade/downgrade replacement and linked-token lineage;
 - superseded-token replay resistance;
 - Duo/Household coverage;
 - multi-source entitlement safety;
@@ -257,22 +262,23 @@ Then activate final server-authoritative capability enforcement in the launch ca
 
 ## Exact next sequence
 
-1. Re-fetch `homi-0.13-billing-entitlements` and finish source/document preflight before asking Bruce to validate.
-2. Resolve the tracked `pubspec.lock` using Bruce's real Flutter 3.41.5 toolchain; do not treat the expected lock change as an unexplained dirty worktree.
+1. Re-fetch the branch head; current source/document preflight has been narrowed to real-toolchain/provider validation rather than another speculative source pass.
+2. On Bruce's real Flutter 3.41.5 toolchain, resolve/update the tracked `pubspec.lock`, then run exact-head analyzer/full Flutter tests. Treat `pubspec.lock` as an expected change but stop if unrelated tracked files become dirty.
 3. Close final 0.12 exact-head validation/merge/governed Firebase deployment before any 0.13 billing deployment reaches production.
 4. Create the three permanent Homi+ subscription products/base plans in Play Console and record exact IDs.
 5. Populate both client/backend governed catalogs with those IDs.
 6. Configure Android Publisher API, Play Console API access and RTDN Pub/Sub.
-7. Run exact-head 0.13 Windows Flutter gate, Node 22 lint/policy **16/16**, exact **43** exports and Firestore **25/25**; then S25 Ultra regression.
-8. Merge/deploy exact accepted 0.13 billing source.
-9. Upload/store-install an Internal Testing AAB and prove complete billing lifecycle, including cross-tier replacement and token-lineage behavior.
+7. Run exact-head 0.13 governed Node 22 dependency lint/policy **16/16**, exact **43** exports and Firestore **25/25**, then S25 Ultra regression including Household Cancel no-refresh and balanced Add-to-Household sheet.
+8. Merge/deploy the exact accepted 0.13 billing source only after provider prerequisites are present.
+9. Upload/store-install an Internal Testing AAB and prove the complete billing lifecycle, including client/server acknowledgement behavior, replacement modes, out-of-app resubscribe and token-lineage behavior.
 10. Activate paid enforcement only after lifecycle proof.
 11. Complete release signing/Play App Signing fingerprints, store-installed Google Sign-In, Play Integrity App Check, budgets, Privacy Policy, Terms, external deletion page, Data Safety, background-location approval evidence, listing/assets and any account-specific closed-testing requirement before production.
 
 ## Do not overclaim
 
 - 0.12 is not production until its governed backend deployment is proven.
-- 0.13 has not yet been compiled on Bruce's current exact branch head.
+- 0.13 has not yet been compiled/analyzed/tested on Bruce's final exact branch head.
+- 0.13 current exact `billing.js` still requires the governed dependency-loaded Functions lint before any deploy claim.
 - Homi+ cannot be purchased until real Play IDs/provider setup exist.
 - No billing lifecycle has been proven from a Play-installed build yet.
 - A second physical device is still unavailable; do not claim two-device Shared Household acceptance.

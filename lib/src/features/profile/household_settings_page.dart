@@ -692,6 +692,35 @@ class _InviteMemberSheet extends StatelessWidget {
                 },
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 22),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: HomiColors.sage.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: HomiColors.border),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.shield_outlined,
+                      size: 19,
+                      color: HomiColors.muted,
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        'Household membership does not turn on location sharing. Each person keeps location sharing as a separate opt-in choice.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),

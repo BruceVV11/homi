@@ -1,110 +1,84 @@
 # Homi — next chat handoff
 
-Continue development of **Homi** from the focused GitHub branch `homi-0.12-shared-data-plane`. GitHub is the source of truth for tracked source/docs. The focused PR title is **Homi 0.12: shared Household data plane**.
+Continue development of **Homi** from GitHub branch `homi-0.13-billing-entitlements`. GitHub is the source of truth for tracked source/docs. This branch is deliberately stacked on the final 0.12 candidate so the last minor Household UX polish could be included with the billing phase instead of creating a cosmetic micro-release.
 
-Before changing anything, re-fetch the current branch/PR head and inspect:
+Before changing anything, re-fetch the live branch head and inspect:
 
 - `documentation/releases/0.12.0.md`
 - `documentation/releases/0.12.0-shared-task-migration.md`
+- `documentation/releases/0.13.0.md`
 - `documentation/RELEASE_READINESS.md`
-- `documentation/ARCHITECTURE.md`
+- `documentation/MONETIZATION.md`
 - `documentation/SECURITY.md`
-- `documentation/NOTIFICATIONS.md`
+- `documentation/ARCHITECTURE.md`
 - `documentation/LOCATION_SAFETY.md`
 - `documentation/legal/PRIVACY_AND_COMPLIANCE.md`
 - `documentation/legal/ACCOUNT_DELETION.md`
 - `documentation/business/PRICING_AND_UNIT_ECONOMICS.md`
-- the latest affected source files
+- latest affected source
 
-Use the **mobile-app-development** workflow first and **concept-lab-release-integrity** for every validation/merge/deployment step. Preserve approved behaviour/design, exact brand assets and existing user data. Never claim a new pass compiled/worked on-device until Bruce's real Flutter/Android toolchain proves it.
+Use **mobile-app-development** first for app/source work, **concept-lab-release-integrity** for validation/merge/deployment, and **app-store-deployment** for Play Console/store work. Preserve approved behavior/design, brand assets and existing user data. Never claim a pass compiled/worked on-device until Bruce's real Flutter/Android toolchain proves it. A user rerun is not a diagnostic tool.
 
 ## Permanent project context
 
 - local root: `C:\ConceptLab\Projects\homi`
 - repo: `BruceVV11/homi`
 - Android package: `za.co.theconceptlab.homi`
-- Firebase/GCP project: `homi-ee80a`
-- numeric project number: `883068189841`
+- Firebase/GCP: `homi-ee80a`
+- project number: `883068189841`
 - Firestore/Functions region: `africa-south1`
 - Functions runtime: Node 22
 - runtime identity: `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`
 - Flutter 3.41.5 / Dart 3.11.3 / JDK 21 / Gradle 8.14
 - real device: Samsung S25 Ultra / `SM-S938B`
-- `android/` is intentionally local/untracked
-- deleted project `homi-508000` must never be used
+- `android/` intentionally local/untracked
+- deleted `homi-508000` must never be used
 - safety stash `stash@{0}: On main: Homi pre-0.5.0 local tracked changes` must never be popped/deleted automatically
-- brand: coral `#FF6B5E`, peach `#FFB08A`, sage `#A7B89F`, cream `#FFF8F2`, slate `#2E2E2E`, Nunito and exact assets under `assets/brand/`
-- primary nav: **Overview · Tasks · Home · Supplies · People**; People remains map-first
-- connection, canonical Household membership, current-location sharing, arrival recipients and exact Home/Work visibility are separate choices
-- local-first use remains available; privacy/revoke/stop-sharing/delete controls are never paywalled
+- brand: coral `#FF6B5E`, peach `#FFB08A`, sage `#A7B89F`, cream `#FFF8F2`, slate `#2E2E2E`, Nunito, exact assets in `assets/brand`
+- primary nav: **Overview · Tasks · Home · Supplies · People**
+- privacy/revoke/stop-sharing/local erase/account deletion never paywalled
 
-## Production baseline before 0.12
+## Production and stacked source state
 
-Production/backend baseline for this branch is:
+Production/backend remains the deployed 0.11 baseline at:
 
 `3b26f3120864146f4ad3d2949e5a1a1416694b5c`
 
-Bruce reported that the governed 0.11 backend deployment completed and then reviewed 0.11 on the S25 Ultra. Device review confirmed the emergency-sheet overflow was resolved, country flags displayed, Shared Household creation worked, and an accepted trusted connection could be invited to the Household. There is no second physical device, so true second-device invitation acceptance/realtime propagation remains unproven.
+0.12 final candidate/head used as the 0.13 branch base:
 
-Do not infer a stronger 0.11 deployment/test result than the evidence available in the current chat/repository.
+`233c6ab16caa3a9c5951251d7805f57a68ca440c`
 
-## Current candidate
+0.12 version: `0.12.0+16`.
 
-Version: **`0.12.0+16`**
-Branch: **`homi-0.12-shared-data-plane`**
-Production state: **NOT deployed**
-Validation state: **an earlier exact 0.12 head passed Bruce's Windows Flutter gate, then S25 Ultra feedback caused new source commits; the final live PR head therefore requires a fresh exact-head Windows gate and focused device recheck before merge**
+0.12 is **not yet recorded as a governed Firebase production deployment**. Do not let 0.13 billing deployment skip that data-plane deployment/acceptance gate.
 
-Always re-fetch the live branch/PR head before validation. Do not rely on a SHA copied into this handoff because this file's own commit advances the branch.
+0.13 version: `0.13.0+17`.
+Branch: `homi-0.13-billing-entitlements`.
+Always re-fetch the live branch head; do not trust a SHA copied into this handoff because this file's own commit advances the branch.
 
-## 2026-09-12 S25 Ultra feedback
+## Final 0.12 device feedback carried into 0.13
 
-Bruce reviewed the earlier 0.12 candidate in Android Studio and confirmed the new **My code** and **Connect** controls were present. Two issues were found:
+Bruce approved the reusable **My code** behavior and requested the persistent orange code card be removed. Only the **My code** header action remains, opening the dedicated code sheet.
 
-1. Household **Add person**, when no additional accepted trusted connection was eligible, caused a page refresh/layout jump and inserted an easy-to-miss inline peach error card.
-2. **My code** remained visible, but the code card showed: `Homi could not verify your signed-in session. Check your connection and try again.`
+Bruce then reported two final minor Household UX issues and explicitly asked that they be folded into the next pass rather than creating a separate pass:
 
-The second message is the `unauthenticated` friendly message from `HomiCloudActions`; it is **not** evidence that `ensureHomiIdentity` is missing. The 0.11 production backend already contains that callable. It is Auth + App Check protected.
+1. Canceling a pending Household invitation caused the same refresh/loading flash seen earlier.
+2. The one-person **Add to Household** sheet felt visually sunken/too short.
 
-The source now fixes both cases:
+0.13 source addresses both:
 
-- a reusable `showHomiInfoSheet` branded one-action bottom sheet exists in `lib/src/widgets/homi_controls.dart`;
-- Household **Add person** uses that sheet for full/no-candidate/connection-load cases instead of injecting an inline notice;
-- `TrustedPeopleService.ensureIdentity()` first reads the signed-in user's self-readable `users/{uid}` document and reuses a valid established `homiCode`;
-- `ensureHomiIdentity` remains the protected provisioning/repair fallback for a genuinely new or incomplete profile;
-- connecting **with** a code still uses the protected server mutation path; the fallback does not weaken code lookup/connection authorization.
+- `HouseholdService` now reuses stable current-Household/member/incoming/outgoing Firestore streams per authenticated UID, so `_busy` rebuilds no longer manufacture a new stream/loading state. This fixes the root pattern across cancel, rename, invite, remove, transfer and delete actions.
+- `_InviteMemberSheet` now ends with a compact sage privacy/context panel explaining that Household membership never turns on location sharing. This adds useful visual balance rather than empty filler.
 
-Bruce already used a Homi code to establish the existing Casey connection, and the backend provisions `users/{uid}.homiCode` and the lookup index atomically. The final device recheck should therefore show the existing six-character code without needing a fresh protected callable merely for display.
+These changes are source-only until Bruce's real Flutter/device gate proves them.
 
-## 0.12 People fixes implemented in source
-
-1. People connections/preferences subscribe immediately instead of waiting behind cached GPS, passive location refresh, continuous-sharing resume and identity provisioning.
-2. Homi code display has independent loading/error state so a successful connection refresh cannot silently hide a failed code load.
-3. The populated Connections header exposes **My code** and **Connect**.
-4. The reusable six-character account code can be copied/shown even when existing connections are present.
-5. An established code is read from the self-readable account profile first; protected provisioning is fallback only.
-6. Relationship labels remain editable.
-7. Household/Friend connection type is read-only and displayed from canonical Household membership.
-8. If no Household exists, the edit sheet explains that Shared Household must be created first and the person invited/accepted through **Homi & account -> Shared Household**.
-9. `setTrustedPersonPreference` keeps its public callable name but derives scope server-side; a client can no longer manufacture Household status by sending `scope: household`.
-10. `HouseholdPeopleService` uses canonical Household membership for shared Task assignee eligibility.
-
-Key source:
-
-- `lib/src/features/people/people_page.dart`
-- `lib/src/services/trusted_people_service.dart`
-- `lib/src/widgets/homi_controls.dart`
-- `lib/src/features/profile/household_settings_page.dart`
-- `lib/src/services/household_people_service.dart`
-- `functions/trusted_people_preferences.js`
-
-## 0.12 shared Household data plane
+## 0.12 shared Household data plane to preserve
 
 Canonical path:
 
 `households/{householdId}/data/{domain--itemId}`
 
-Supported domains:
+Domains:
 
 - `routine`
 - `supply`
@@ -112,152 +86,184 @@ Supported domains:
 - `homeEvent`
 - `utilityReading`
 
-Envelope:
+Local-first controller remains immediate device authority. Safe first-owner migration requires an authoritative non-cache empty server collection. Older unmatched data stays private when joining another/existing Household. Explicit local-only mode suppresses sync.
 
-- `domain`
-- `itemId`
-- `payload`
-- `schemaVersion: 1`
-- `updatedByUid`
-- `updatedAt`
+Personal **Me** Tasks remain local/private. Shared one-off Tasks use canonical Household membership; pre-0.12 task migration is intersection-only and never widens old audiences.
 
-Firestore requires both the caller's `householdMemberships/{uid}` pointer and the parent Household `memberUids` to agree. Writes also require an allowed domain, deterministic document ID, matching payload ID, schema version, authenticated actor and server request timestamp.
+0.12 backend contract before billing additions:
 
-The device controller remains local-first. User actions persist to SharedPreferences first, then an eligible Household mutation is mirrored to Firestore. Applying a Firestore snapshot persists the synchronized state locally without echoing the same record back to cloud.
+- exactly **37** Functions;
+- pure shared-task policy **5/5**;
+- Firestore emulator **23/23**;
+- governed safe legacy task migration and old Function drift reconciliation.
 
-Key source:
+## Approved Homi+ commercial contract
 
-- `lib/src/domain/household_data_mutation.dart`
-- `lib/src/state/homi_app_controller.dart`
-- `lib/src/services/household_data_sync_service.dart`
-- `lib/src/shell/homi_shell.dart`
-- `firebase/firestore.rules`
+- Free — R0
+- Personal — R19.99/month: one sender seat
+- Duo — R34.99/month: purchaser + one accepted trusted Homi connection as second sender seat
+- Household — R49.99/month or R499.99/year: up to four canonical Household members
+- every paid sender: maximum five active live viewers
+- receiving live location is free
+- Duo reassignment cooldown: seven days
+- no annual Personal/Duo pricing is approved
+- Household membership never turns on location sharing
+- deleting Homi is separate from canceling Google Play billing
 
-### First-sync rule
+## 0.13 Homi+ source implementation
 
-Do not silently upload arbitrary pre-existing records when an account joins a Household.
+### Flutter/client
 
-Automatic import is restricted to the safe migration case where:
+Added:
 
-- this device has never synchronized another Household;
-- the current user is the owner; and
-- an **authoritative non-cache** Firestore snapshot proves the Household data collection is empty.
+- `lib/src/domain/homi_entitlement.dart`
+- `lib/src/domain/homi_billing_catalog.dart`
+- `lib/src/services/homi_entitlement_service.dart`
+- `lib/src/services/homi_billing_service.dart`
+- `lib/src/services/homi_plus_management_service.dart`
+- `lib/src/features/profile/homi_plus_page.dart`
+- Profile Settings → **Homi+ → Plans & billing**
+- `test/homi_entitlement_test.dart`
 
-Otherwise unmatched local records remain device-private legacy data. New records created after Household classification may synchronize normally. A future explicit import/merge UI can promote private legacy records.
+`pubspec.yaml` is now `0.13.0+17` and adds:
 
-Explicit local-only mode suppresses the Household synchronizer even if Firebase still has a cached signed-in user.
+- `crypto: ^3.0.6`
+- `in_app_purchase: ^3.3.0`
+- exact `in_app_purchase_android: 0.5.0`
 
-## Shared one-off Tasks
+The direct Android plugin is intentionally pinned to 0.5.0 because it moves Homi to Play Billing Library 8 while remaining compatible with Homi's current Dart 3.11.3 toolchain. Later 0.5.x versions raise the Dart floor beyond the current toolchain.
 
-Personal **Me** Tasks remain local/private.
+**Important:** tracked `pubspec.lock` has not yet been regenerated for these new dependencies. The next real Flutter dependency-resolution step must update/commit that exact lock before treating the final 0.13 candidate as clean/validated.
 
-New 0.12 shared Tasks use the existing public callable names but derive authorization from canonical Household identity:
+The client Play catalog is intentionally blank/unconfigured. It cannot start a purchase until exact real Play IDs exist.
 
-- `createSharedTask`
-- `toggleSharedTask`
-- `removeSharedTask`
+The client:
 
-New tasks carry canonical `householdId`, `audienceVersion: 1` and current canonical `memberUids`.
+- queries Play product/base-plan details;
+- displays Play-localized prices;
+- can launch purchase/restore once catalog exists;
+- uses SHA-256(`homi:<uid>`) as opaque Play account identifier rather than raw UID;
+- sends purchase token to the protected backend;
+- never grants itself paid capability from local purchase state;
+- reads server-written `entitlements/{uid}`;
+- provides Play subscription-management handoff;
+- provides Duo second-seat UI.
 
-The client shared-task query requires both:
+### Recommended Play catalog
 
-- `householdId == current Household`; and
-- `memberUids array-contains current UID`.
+Use **one Google Play subscription product** for the Homi+ family:
 
-`firebase/firestore.indexes.json` contains the composite index for this query. Firestore rules additionally require current canonical Household membership.
+- product: `homi_plus`
+- base plan: `personal-monthly`
+- base plan: `duo-monthly`
+- base plan: `household-monthly`
+- base plan: `household-annual`
 
-Pre-0.12 Tasks are handled by `functions/migrate_legacy_shared_tasks.js` during governed deployment. The helper defaults to dry-run. A safe legacy Task is attached only to the creator's current canonical Household and keeps only the intersection of its historical recipients and current Household members. It receives `audienceVersion: 0`, so it is never silently widened to newer Household members. Unsafe/unmappable legacy Tasks fail closed rather than being deleted.
+Do not populate source catalogs until these exact IDs have actually been created and verified in Play Console. Do not invent duplicate/temporary store products to recover from setup mistakes.
 
-`onHouseholdTaskMembershipChanged` keeps audience-version-1 Tasks aligned with current canonical membership. The deployment helper first dry-runs legacy migration, deploys canonical Task writers so no new preference-era Task can appear, applies the safe migration, asserts stability, and only then deploys the stricter Firestore rules/indexes.
+### Backend
 
-Key source:
+Added:
 
-- `lib/src/services/shared_task_service.dart`
-- `functions/shared_tasks_canonical.js`
-- `functions/household_task_membership_sync.js`
-- `functions/migrate_legacy_shared_tasks.js`
-- `security-tests/shared_task_household.boundary.test.js`
+- `functions/billing_catalog.js`
+- `functions/billing_policy.js`
+- `functions/billing_policy.test.js`
+- `functions/billing.js`
+- billing exports in `functions/entrypoint.js`
+- `google-auth-library` dependency
 
-## Household deletion cleanup
+Billing Functions:
 
-Firestore parent deletion does not recursively remove subcollections. `onHomiHouseholdDeletedDataCleanup` removes nested Household data in bounded batches after a canonical Household is deleted and removes new canonical shared Tasks carrying that Household ID.
+- `verifyGooglePlaySubscription`
+- `setHomiPlusDuoSeat`
+- `onGooglePlayBillingNotification`
+- `onHomiPlusHouseholdChanged`
+- `onHomiPlusConnectionDeleted`
+- `onHomiPlusUserDeleted`
 
-Key source:
+Expected 0.13 Functions surface: **43**.
 
-- `functions/household_data_cleanup.js`
+Backend behavior:
 
-## Backend release contract
+- purchase verification requires Firebase Auth + App Check + server rate limit;
+- calls Android Publisher subscriptions-v2 for permanent package `za.co.theconceptlab.homi`;
+- Play `obfuscatedExternalAccountId` must match expected opaque Homi account hash;
+- raw purchase token is server-only;
+- verified unacknowledged subscription is acknowledged by the server;
+- RTDN is a change signal and triggers authoritative Play lookup;
+- backend-only `billingCoverage` records are reduced into self-readable `entitlements/{uid}`;
+- multiple coverage sources are safe: ending one source does not delete another active source;
+- Duo second seat must be an accepted trusted connection and cannot bypass seven-day cooldown through unassign/disconnect;
+- Household coverage derives from purchaser's current canonical Household and caps at four;
+- superseded purchase tokens cannot retake authority after plan change;
+- account deletion removes Homi mappings/coverage but does not cancel Play billing.
 
-The 0.12 Functions entrypoint is governed at exactly **37 unique exports**:
+### Billing Firestore boundary
 
-- the preference/task modules override existing callable names;
-- `onHomiHouseholdDeletedDataCleanup` is a new export;
-- `onHouseholdTaskMembershipChanged` is a new export.
+Client may get only its own `entitlements/{uid}` and cannot write/list it.
 
-`scripts/deploy-notification-backend.sh` requires:
+Backend-only:
 
-- Node 22;
-- project `homi-ee80a`;
-- project number `883068189841`;
-- complete 0.12 Functions source;
-- dependency install + lint;
-- exactly 37 exports;
-- Firestore emulator security gate;
-- legacy shared-Task migration preflight/apply/stability check;
-- safe legacy `onConnectionDeleted` migration if still present;
-- Firestore rules/indexes;
-- Functions in batches of five.
+- `billingPurchases/*`
+- `billingAccounts/*`
+- `billingAccountLinks/*`
+- `billingCoverage/*`
 
-Do not deploy if any preflight/gate fails.
+Two new emulator tests raise final 0.13 Firestore expected count to **25/25**.
 
-## Tests in source
+Pure Functions policy suite expected count: **14/14** = existing 5 shared-task + 9 billing policy tests.
 
-Flutter/controller coverage added:
+## 0.13 provider prerequisites
 
-- `test/household_data_sync_controller_test.dart`
+The governed backend helper now expects exactly 43 Functions and refuses billing deployment until:
 
-Firestore suites:
+- source-controlled Play catalog is populated;
+- Android Publisher API is enabled on `homi-ee80a`;
+- Pub/Sub topic `homi-google-play-rtdn` exists;
+- `google-play-developer-notifications@system.gserviceaccount.com` has publisher on that topic;
+- canonical runtime identity receives the minimum Play Console API access required for purchase verification/acknowledgement.
 
-- `security-tests/server.boundary.test.js` — established 13 tests;
-- `security-tests/household.boundary.test.js` — 8 canonical Household identity/data-plane tests;
-- `security-tests/shared_task_household.boundary.test.js` — 2 canonical shared-Task query/fail-closed tests.
+Actual Play Console API access must be proven by a Play Internal Testing purchase. GCP IAM alone is not accepted as proof.
 
-Final 0.12 Firestore gate is expected to prove **23 tests**.
+## Paid enforcement status
 
-Standalone new JavaScript modules have received source-level Node 22 syntax checks during development where recorded, but that is not the dependency-loaded Functions/export/emulator gate.
+**Paid enforcement is deliberately OFF.**
+
+Do not gate continuous location or Shared Household capabilities merely because 0.13 billing source exists. First prove:
+
+- real Play purchase;
+- backend verification;
+- server acknowledgement;
+- restore/reinstall;
+- voluntary cancel through paid term;
+- grace;
+- hold/paused/expiry;
+- RTDN refresh;
+- plan changes/superseded token behavior;
+- Duo/Household coverage;
+- multi-source entitlement safety;
+- privacy exits without entitlement.
+
+Then activate final server-authoritative capability enforcement in the launch candidate.
 
 ## Exact next sequence
 
-1. Re-fetch focused PR metadata and the exact live head after all 2026-09-12 device-feedback/documentation commits.
-2. Inspect the final branch diff and all changed source/contracts; do not ask Bruce to validate while a known stale dependency remains.
-3. Bruce fast-forwards local `homi-0.12-shared-data-plane` to the exact live head and runs one final Windows gate with Flutter 3.41.5:
-   - `flutter pub get`
-   - `flutter analyze`
-   - full `flutter test`
-   - final exact SHA/worktree check
-4. If green, Bruce runs the same exact source on the S25 Ultra and verifies:
-   - People list still appears without the previous structural delay;
-   - **My code** displays the established reusable code instead of the previous protected-session error;
-   - code sheet/copy and **Connect** work;
-   - Household **Add person** with no eligible person opens the custom informational bottom sheet without an inline page jump;
-   - connection edit keeps Household/Friend type muted/read-only with correct explanation;
-   - actual canonical member appears in Household grouping;
-   - existing Routines/Supplies/Home records remain intact;
-   - normal add/update/delete/restart, location/safety and navigation behavior remain healthy.
-5. Do not claim second-device sync acceptance because Bruce does not currently have another device.
-6. Re-fetch the PR. Merge only the exact Windows/device-accepted head with expected-head protection.
-7. Run the governed refresh-safe Cloud Shell backend worker against the exact merge SHA. Required proof includes Node 22, project-number guard, exactly 37 exports, safe legacy shared-Task migration and Firestore **23/23** before deployment can continue.
-8. If backend deployment passes, record the exact deployed SHA and update release docs from pending to deployed/accepted based only on real evidence.
-9. After 0.12 is accepted, proceed to centralized capability/entitlement state, then Google Play Billing + server verification + RTDN/Pub/Sub before any paid enforcement.
+1. Re-fetch `homi-0.13-billing-entitlements` and finish source/document preflight before asking Bruce to validate.
+2. Resolve the tracked `pubspec.lock` using Bruce's real Flutter 3.41.5 toolchain; do not treat the expected lock change as an unexplained dirty worktree.
+3. Close final 0.12 exact-head validation/merge/governed Firebase deployment before any 0.13 billing deployment reaches production.
+4. Create the real Homi+ subscription/base plans in Play Console and record exact IDs.
+5. Populate both client/backend governed catalogs with those IDs.
+6. Configure Android Publisher API, Play Console API access and RTDN Pub/Sub.
+7. Run exact-head 0.13 Windows Flutter gate, Node 22 lint/policy **14/14**, exact **43** exports and Firestore **25/25**; then S25 Ultra regression.
+8. Merge/deploy exact accepted 0.13 billing source.
+9. Upload/store-install an Internal Testing AAB and prove complete billing lifecycle.
+10. Activate paid enforcement only after lifecycle proof.
+11. Complete release signing/Play App Signing fingerprints, store-installed Google Sign-In, Play Integrity App Check, budgets, Privacy Policy, Terms, external deletion page, Data Safety, background-location approval evidence, listing/assets and any account-specific closed-testing requirement before production.
 
-## Commercial contract to preserve
+## Do not overclaim
 
-- Free: R0
-- Personal: R19.99/month — 1 sender seat
-- Duo: R34.99/month — 2 sender seats under one payer
-- Household: R49.99/month or R499.99/year — up to 4 canonical Household members + shared Household product
-- each paid sender: max 5 active live viewers
-- receiving live location remains free
-- privacy/revoke/delete controls never paywalled
-
-No Homi+ entitlement is active yet. Client purchase state must never become authoritative by itself.
+- 0.12 is not production until its governed backend deployment is proven.
+- 0.13 has not yet been compiled on Bruce's current exact branch head.
+- Homi+ cannot be purchased until real Play IDs/provider setup exist.
+- No billing lifecycle has been proven from a Play-installed build yet.
+- A second physical device is still unavailable; do not claim two-device Shared Household acceptance.

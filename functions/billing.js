@@ -15,6 +15,7 @@ const {
   normalizePlayState,
   grantsPaidAccess,
   entitlementCapabilities,
+  projectEntitlementSources,
   configuredCatalog,
   productFor,
 } = require("./billing_policy");
@@ -24,6 +25,7 @@ const PACKAGE_NAME = "za.co.theconceptlab.homi";
 const PLAY_SCOPE = "https://www.googleapis.com/auth/androidpublisher";
 const RTDN_TOPIC = "homi-google-play-rtdn";
 const MAX_TOKEN_LENGTH = 4096;
+const HOUR_MS = 60 * 60 * 1000;
 const auth = new GoogleAuth({scopes: [PLAY_SCOPE]});
 
 function sha256(value) {
@@ -32,6 +34,10 @@ function sha256(value) {
 
 function obfuscatedAccountId(uid) {
   return sha256(`homi:${uid}`);
+}
+
+function coverageDocId(purchaseTokenHash, uid) {
+  return `${purchaseTokenHash}_${sha256(uid).slice(0, 24)}`;
 }
 
 function cleanToken(value) {
@@ -54,6 +60,30 @@ function requireAuth(request) {
   return request.auth;
 }
 
+async function requireBillingRateLimit(uid, scope, limit) {
+  const ref = db.collection("serverRateLimits").doc(`${scope}_${uid}`);
+  const now = Date.now();
+  const allowed = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const data = snapshot.exists ? snapshot.data() : {};
+    const storedStart = Number(data.windowStartMs || 0);
+    const expired = !storedStart || now - storedStart >= HOUR_MS;
+    const count = expired ? 0 : Number(data.count || 0);
+    if (count >= limit) return false;
+    transaction.set(ref, {
+      scope,
+      actorUid: uid,
+      windowStartMs: expired ? now : storedStart,
+      count: count + 1,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: true});
+    return true;
+  });
+  if (!allowed) {
+    throw new HttpsError("resource-exhausted", "Too many billing requests. Wait a while and try again.");
+  }
+}
+
 function catalogOrThrow() {
   const catalog = configuredCatalog(process.env);
   if (!catalog.configured) {
@@ -69,10 +99,12 @@ async function playRequest(path, {method = "GET", body} = {}) {
   const client = await auth.getClient();
   const url = `https://androidpublisher.googleapis.com${path}`;
   const authHeaders = await client.getRequestHeaders(url);
+  const headerObject = typeof authHeaders.entries === "function" ?
+    Object.fromEntries(authHeaders.entries()) : authHeaders;
   const response = await fetch(url, {
     method,
     headers: {
-      ...authHeaders,
+      ...headerObject,
       Accept: "application/json",
       ...(body === undefined ? {} : {"Content-Type": "application/json"}),
     },
@@ -180,11 +212,12 @@ async function acceptedConnection(firstUid, secondUid) {
   return data.status === "accepted" && data.aUid === ids[0] && data.bUid === ids[1];
 }
 
-function entitlementDocument({
+function coverageDocument({
   plan,
   state,
   purchaserUid,
   purchaseTokenHash,
+  recipientUid,
   seatRole,
   householdId = null,
   duoSeatAssigneeUid = null,
@@ -195,6 +228,7 @@ function entitlementDocument({
     state,
     purchaserUid,
     sourcePurchaseTokenHash: purchaseTokenHash,
+    recipientUid,
     seatRole,
     householdId,
     duoSeatAssigneeUid,
@@ -202,6 +236,24 @@ function entitlementDocument({
     ...entitlementCapabilities(plan, state),
     updatedAt: FieldValue.serverTimestamp(),
   };
+}
+
+async function recomputeEntitlement(uid) {
+  const snapshot = await db.collection("billingCoverage")
+      .where("recipientUid", "==", uid).get();
+  const sources = snapshot.docs.map((document) => document.data());
+  const projection = projectEntitlementSources(sources);
+  const ref = db.collection("entitlements").doc(uid);
+  if (!projection) {
+    await ref.delete().catch((error) => {
+      if (!error || error.code !== 5) throw error;
+    });
+    return;
+  }
+  await ref.set({
+    ...projection,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, {merge: false});
 }
 
 async function currentPurchaseForPurchaser(uid) {
@@ -219,84 +271,134 @@ async function entitlementRecipientsForPurchase(purchase) {
   const recipients = new Map();
   const data = purchase.data;
   const purchaserUid = String(data.purchaserUid || "").trim();
-  if (!purchaserUid) return recipients;
+  if (!purchaserUid) {
+    return {recipients, householdId: null, duoSeatAssigneeUid: null};
+  }
+
   recipients.set(purchaserUid, "purchaser");
-  if (!grantsPaidAccess(data.state)) return recipients;
+  let householdId = null;
+  let duoSeatAssigneeUid = null;
+  if (!grantsPaidAccess(data.state)) {
+    return {recipients, householdId, duoSeatAssigneeUid};
+  }
 
   if (data.plan === "duo") {
     const account = await db.collection("billingAccounts").doc(purchaserUid).get();
     const secondaryUid = account.exists ?
       String(account.data().duoSecondaryUid || "").trim() : "";
     if (secondaryUid && await acceptedConnection(purchaserUid, secondaryUid)) {
+      duoSeatAssigneeUid = secondaryUid;
       recipients.set(secondaryUid, "duo_secondary");
     }
   }
 
   if (data.plan === "household") {
-    let householdId = String(data.householdId || "").trim();
-    let household = null;
-    if (householdId) {
-      const snapshot = await db.collection("households").doc(householdId).get();
-      if (snapshot.exists) {
-        household = {
-          householdId,
-          memberUids: Array.isArray(snapshot.data().memberUids) ?
-            snapshot.data().memberUids.filter((value) => typeof value === "string") : [],
-        };
-      }
-    }
-    if (!household) {
-      household = await canonicalHouseholdFor(purchaserUid);
-      if (household) {
-        householdId = household.householdId;
-        await purchase.ref.set({householdId}, {merge: true});
-      }
-    }
+    const household = await canonicalHouseholdFor(purchaserUid);
     if (household) {
+      householdId = household.householdId;
       for (const memberUid of household.memberUids.slice(0, 4)) {
         recipients.set(memberUid, memberUid === purchaserUid ? "purchaser" : "household_member");
       }
     }
   }
-  return recipients;
+  return {recipients, householdId, duoSeatAssigneeUid};
 }
 
 async function reconcilePurchaseEntitlements(purchase) {
   const data = purchase.data;
   const purchaseTokenHash = purchase.tokenHash;
   const purchaserUid = String(data.purchaserUid || "").trim();
-  if (!purchaserUid) return;
-
-  const recipients = await entitlementRecipientsForPurchase(purchase);
-  const existing = await db.collection("entitlements")
-      .where("sourcePurchaseTokenHash", "==", purchaseTokenHash).get();
-  const batch = db.batch();
-  const desired = new Set(recipients.keys());
-
-  for (const document of existing.docs) {
-    if (!desired.has(document.id)) batch.delete(document.ref);
+  if (!purchaserUid) {
+    await removePurchaseCoverage(purchaseTokenHash);
+    return;
   }
 
-  const accountSnapshot = await db.collection("billingAccounts").doc(purchaserUid).get();
-  const duoSeatAssigneeUid = accountSnapshot.exists ?
-    String(accountSnapshot.data().duoSecondaryUid || "").trim() || null : null;
-  const householdId = String(data.householdId || "").trim() || null;
-  for (const [uid, seatRole] of recipients.entries()) {
+  const result = await entitlementRecipientsForPurchase(purchase);
+  const desiredUids = new Set(result.recipients.keys());
+  let previousUids = Array.isArray(data.coveredUids) ?
+    data.coveredUids.filter((value) => typeof value === "string") : [];
+  if (previousUids.length === 0) {
+    const existing = await db.collection("billingCoverage")
+        .where("sourcePurchaseTokenHash", "==", purchaseTokenHash).get();
+    previousUids = existing.docs
+        .map((document) => document.data().recipientUid)
+        .filter((value) => typeof value === "string");
+  }
+  const affectedUids = new Set([...previousUids, ...desiredUids]);
+  const batch = db.batch();
+
+  for (const uid of previousUids) {
+    if (!desiredUids.has(uid)) {
+      batch.delete(db.collection("billingCoverage").doc(coverageDocId(purchaseTokenHash, uid)));
+    }
+  }
+  for (const [uid, seatRole] of result.recipients.entries()) {
     batch.set(
-        db.collection("entitlements").doc(uid),
-        entitlementDocument({
+        db.collection("billingCoverage").doc(coverageDocId(purchaseTokenHash, uid)),
+        coverageDocument({
           plan: data.plan,
           state: data.state,
           purchaserUid,
           purchaseTokenHash,
+          recipientUid: uid,
           seatRole,
-          householdId,
-          duoSeatAssigneeUid,
+          householdId: result.householdId,
+          duoSeatAssigneeUid: result.duoSeatAssigneeUid,
           validUntil: data.validUntil || null,
         }),
         {merge: false},
     );
   }
+
+  batch.set(purchase.ref, {
+    coveredUids: [...desiredUids],
+    ...(result.householdId ? {householdId: result.householdId} : {householdId: FieldValue.delete()}),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, {merge: true});
+  await batch.commit();
+  await Promise.all([...affectedUids].map((uid) => recomputeEntitlement(uid)));
+}
+
+async function removePurchaseCoverage(purchaseTokenHash) {
+  const purchaseRef = db.collection("billingPurchases").doc(purchaseTokenHash);
+  const purchase = await purchaseRef.get();
+  let coveredUids = purchase.exists && Array.isArray(purchase.data().coveredUids) ?
+    purchase.data().coveredUids.filter((value) => typeof value === "string") : [];
+  const existing = await db.collection("billingCoverage")
+      .where("sourcePurchaseTokenHash", "==", purchaseTokenHash).get();
+  if (coveredUids.length === 0) {
+    coveredUids = existing.docs
+        .map((document) => document.data().recipientUid)
+        .filter((value) => typeof value === "string");
+  }
+  const affectedUids = new Set(coveredUids);
+  const batch = db.batch();
+  existing.docs.forEach((document) => batch.delete(document.ref));
+  if (purchase.exists) {
+    batch.set(purchaseRef, {
+      coveredUids: [],
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: true});
+  }
+  await batch.commit();
+  await Promise.all([...affectedUids].map((uid) => recomputeEntitlement(uid)));
+}
+
+async function removeRecipientCoverage(uid) {
+  const snapshot = await db.collection("billingCoverage")
+      .where("recipientUid", "==", uid).get();
+  const batch = db.batch();
+  for (const document of snapshot.docs) {
+    batch.delete(document.ref);
+    const tokenHash = String(document.data().sourcePurchaseTokenHash || "").trim();
+    if (tokenHash) {
+      batch.set(db.collection("billingPurchases").doc(tokenHash), {
+        coveredUids: FieldValue.arrayRemove(uid),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+    }
+  }
+  batch.delete(db.collection("entitlements").doc(uid));
   await batch.commit();
 }
 
@@ -326,11 +428,9 @@ async function persistVerifiedPurchase({
   let previousTokenHash = null;
 
   await db.runTransaction(async (transaction) => {
-    const [existingPurchase, accountSnapshot, linkSnapshot] = await Promise.all([
-      transaction.get(purchaseRef),
-      transaction.get(accountRef),
-      transaction.get(linkRef),
-    ]);
+    const existingPurchase = await transaction.get(purchaseRef);
+    const accountSnapshot = await transaction.get(accountRef);
+    const linkSnapshot = await transaction.get(linkRef);
     if (existingPurchase.exists) {
       const previousPurchaser = String(existingPurchase.data().purchaserUid || "");
       if (previousPurchaser && previousPurchaser !== purchaserUid) {
@@ -394,11 +494,6 @@ async function persistVerifiedPurchase({
     }, {merge: true});
   }
 
-  const household = identity.plan === "household" ?
-    await canonicalHouseholdFor(purchaserUid) : null;
-  if (household) {
-    await purchaseRef.set({householdId: household.householdId}, {merge: true});
-  }
   const finalSnapshot = await purchaseRef.get();
   await reconcilePurchaseEntitlements({
     ref: purchaseRef,
@@ -407,11 +502,7 @@ async function persistVerifiedPurchase({
   });
 
   if (previousTokenHash && previousTokenHash !== purchaseTokenHash) {
-    const oldEntitlements = await db.collection("entitlements")
-        .where("sourcePurchaseTokenHash", "==", previousTokenHash).get();
-    const batch = db.batch();
-    oldEntitlements.docs.forEach((document) => batch.delete(document.ref));
-    await batch.commit();
+    await removePurchaseCoverage(previousTokenHash);
   }
 
   return {
@@ -450,6 +541,7 @@ async function refreshStoredPurchase(purchaseToken, purchaserUid = null) {
         acknowledgementState: playPurchase.acknowledgementState || null,
         updatedAt: FieldValue.serverTimestamp(),
       }, {merge: true});
+      await removePurchaseCoverage(purchaseTokenHash);
       return {ignoredSuperseded: true, purchaserUid: resolvedUid};
     }
   }
@@ -466,6 +558,7 @@ exports.verifyGooglePlaySubscription = onCall(
     {enforceAppCheck: true, maxInstances: 3, timeoutSeconds: 60},
     async (request) => {
       const user = requireAuth(request);
+      await requireBillingRateLimit(user.uid, "billing_verify_hour", 30);
       catalogOrThrow();
       const purchaseToken = cleanToken(request.data && request.data.purchaseToken);
       const expectedProductId = String(request.data && request.data.productId || "").trim();
@@ -505,6 +598,7 @@ exports.setHomiPlusDuoSeat = onCall(
     {enforceAppCheck: true, maxInstances: 3, timeoutSeconds: 30},
     async (request) => {
       const user = requireAuth(request);
+      await requireBillingRateLimit(user.uid, "billing_duo_seat_hour", 30);
       const purchase = await currentPurchaseForPurchaser(user.uid);
       if (!purchase || purchase.data.plan !== "duo" || !grantsPaidAccess(purchase.data.state)) {
         throw new HttpsError("failed-precondition", "An active Homi+ Duo subscription is required.");
@@ -524,25 +618,39 @@ exports.setHomiPlusDuoSeat = onCall(
       const canReassignAt = account.exists && account.data().duoCanReassignAt &&
         typeof account.data().duoCanReassignAt.toMillis === "function" ?
         account.data().duoCanReassignAt.toMillis() : 0;
-      if (currentUid && currentUid !== requestedUid && canReassignAt > Date.now()) {
+      if (requestedUid && currentUid !== requestedUid && canReassignAt > Date.now()) {
         throw new HttpsError(
             "failed-precondition",
             "The second Duo seat cannot be reassigned yet.",
         );
       }
 
-      const nextReassignAt = requestedUid ? Timestamp.fromMillis(
-          Date.now() + DUO_REASSIGNMENT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000,
-      ) : null;
-      await accountRef.set({
-        duoSecondaryUid: requestedUid || FieldValue.delete(),
-        duoCanReassignAt: requestedUid ? nextReassignAt : FieldValue.delete(),
+      const update = {
         updatedAt: FieldValue.serverTimestamp(),
-      }, {merge: true});
-      await reconcilePurchaseEntitlements(purchase);
+      };
+      if (!requestedUid) {
+        update.duoSecondaryUid = FieldValue.delete();
+        // Keep the existing cooldown. Unassigning a seat must not become a way
+        // to bypass the seven-day reassignment boundary.
+      } else if (currentUid !== requestedUid) {
+        update.duoSecondaryUid = requestedUid;
+        update.duoCanReassignAt = Timestamp.fromMillis(
+            Date.now() + DUO_REASSIGNMENT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000,
+        );
+      }
+      await accountRef.set(update, {merge: true});
+      const refreshedPurchase = await purchase.ref.get();
+      await reconcilePurchaseEntitlements({
+        ref: purchase.ref,
+        tokenHash: purchase.tokenHash,
+        data: refreshedPurchase.data(),
+      });
+      const refreshedAccount = await accountRef.get();
+      const next = refreshedAccount.data() && refreshedAccount.data().duoCanReassignAt;
       return {
         assigned: Boolean(requestedUid),
-        canReassignAt: nextReassignAt ? nextReassignAt.toDate().toISOString() : null,
+        canReassignAt: next && typeof next.toDate === "function" ?
+          next.toDate().toISOString() : null,
       };
     },
 );
@@ -583,52 +691,39 @@ exports.onHomiPlusHouseholdChanged = onDocumentWritten(
     "households/{householdId}",
     async (event) => {
       const householdId = event.params.householdId;
-      const after = event.data && event.data.after && event.data.after.exists ?
-        event.data.after.data() : null;
       const before = event.data && event.data.before && event.data.before.exists ?
         event.data.before.data() : null;
-      const purchaserCandidates = new Set();
-      if (after && after.ownerUid) purchaserCandidates.add(after.ownerUid);
-      if (before && before.ownerUid) purchaserCandidates.add(before.ownerUid);
+      const after = event.data && event.data.after && event.data.after.exists ?
+        event.data.after.data() : null;
+      const candidates = new Set();
+      for (const data of [before, after]) {
+        if (!data) continue;
+        if (typeof data.ownerUid === "string" && data.ownerUid) candidates.add(data.ownerUid);
+        if (Array.isArray(data.memberUids)) {
+          data.memberUids.forEach((uid) => {
+            if (typeof uid === "string" && uid) candidates.add(uid);
+          });
+        }
+      }
 
       const attached = await db.collection("billingPurchases")
           .where("householdId", "==", householdId).get();
       for (const document of attached.docs) {
         const data = document.data();
         if (data.plan !== "household" || data.supersededByTokenHash) continue;
-        if (!after) {
-          await document.ref.set({
-            householdId: FieldValue.delete(),
-            updatedAt: FieldValue.serverTimestamp(),
-          }, {merge: true});
-        }
-        const refreshed = await document.ref.get();
         await reconcilePurchaseEntitlements({
           ref: document.ref,
           tokenHash: document.id,
-          data: refreshed.data(),
+          data,
         });
       }
 
-      if (after) {
-        for (const uid of purchaserCandidates) {
-          const purchase = await currentPurchaseForPurchaser(uid);
-          if (!purchase || purchase.data.plan !== "household" || !grantsPaidAccess(purchase.data.state)) {
-            continue;
-          }
-          if (!purchase.data.householdId) {
-            await purchase.ref.set({
-              householdId,
-              updatedAt: FieldValue.serverTimestamp(),
-            }, {merge: true});
-            const refreshed = await purchase.ref.get();
-            await reconcilePurchaseEntitlements({
-              ref: purchase.ref,
-              tokenHash: purchase.tokenHash,
-              data: refreshed.data(),
-            });
-          }
+      for (const uid of candidates) {
+        const purchase = await currentPurchaseForPurchaser(uid);
+        if (!purchase || purchase.data.plan !== "household" || !grantsPaidAccess(purchase.data.state)) {
+          continue;
         }
+        await reconcilePurchaseEntitlements(purchase);
       }
     },
 );
@@ -647,7 +742,8 @@ exports.onHomiPlusConnectionDeleted = onDocumentDeleted(
           if (!uids.includes(purchaserUid)) continue;
           await account.ref.set({
             duoSecondaryUid: FieldValue.delete(),
-            duoCanReassignAt: FieldValue.delete(),
+            // Preserve duoCanReassignAt so connection removal cannot bypass the
+            // seven-day seat reassignment boundary.
             updatedAt: FieldValue.serverTimestamp(),
           }, {merge: true});
           const purchase = await currentPurchaseForPurchaser(purchaserUid);
@@ -668,27 +764,26 @@ exports.onHomiPlusUserDeleted = onDocumentDeleted(
       const account = await accountRef.get();
       const activeTokenHash = account.exists ?
         String(account.data().activePurchaseTokenHash || "").trim() : "";
+
       if (activeTokenHash) {
+        await removePurchaseCoverage(activeTokenHash);
         await db.collection("billingPurchases").doc(activeTokenHash).set({
           purchaserUid: FieldValue.delete(),
           accountDeletedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         }, {merge: true});
       }
+      await removeRecipientCoverage(uid);
 
-      const purchaserEntitlements = await db.collection("entitlements")
-          .where("purchaserUid", "==", uid).get();
       const secondaryAssignments = await db.collection("billingAccounts")
           .where("duoSecondaryUid", "==", uid).get();
       const batch = db.batch();
-      purchaserEntitlements.docs.forEach((document) => batch.delete(document.ref));
-      batch.delete(db.collection("entitlements").doc(uid));
       batch.delete(db.collection("billingAccountLinks").doc(accountId));
       batch.delete(accountRef);
       secondaryAssignments.docs.forEach((document) => {
         batch.set(document.ref, {
           duoSecondaryUid: FieldValue.delete(),
-          duoCanReassignAt: FieldValue.delete(),
+          // Preserve the payer's existing reassignment cooldown.
           updatedAt: FieldValue.serverTimestamp(),
         }, {merge: true});
       });

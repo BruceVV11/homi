@@ -3,7 +3,12 @@ set -Eeuo pipefail
 
 PROJECT_ID="homi-ee80a"
 EXPECTED_PROJECT_NUMBER="883068189841"
-TEST_FILES=("server.boundary.test.js" "household.boundary.test.js")
+EXPECTED_TEST_COUNT=23
+TEST_FILES=(
+  "server.boundary.test.js"
+  "household.boundary.test.js"
+  "shared_task_household.boundary.test.js"
+)
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${REPO_ROOT}"
@@ -24,6 +29,13 @@ for test_file in "${TEST_FILES[@]}"; do
     exit 1
   fi
 done
+
+DECLARED_TEST_COUNT="$(grep -h -E '^test\(' "${TEST_FILES[@]/#/security-tests/}" | wc -l | tr -d '[:space:]')"
+if [ "${DECLARED_TEST_COUNT}" != "${EXPECTED_TEST_COUNT}" ]; then
+  echo "Expected ${EXPECTED_TEST_COUNT} Homi Firestore tests; found ${DECLARED_TEST_COUNT}. Refusing to run a stale security gate." >&2
+  exit 1
+fi
+echo "==> Verified ${DECLARED_TEST_COUNT} declared Homi Firestore security tests"
 
 # Generated dependencies are never source data. Remove leftovers from earlier
 # Cloud Shell runs so the small persistent home disk cannot fill silently.
@@ -61,4 +73,4 @@ else
       "${TEST_COMMAND}"
 fi
 
-echo "Homi Firestore security tests completed."
+echo "Homi Firestore security tests completed: ${EXPECTED_TEST_COUNT}/${EXPECTED_TEST_COUNT} expected tests declared."

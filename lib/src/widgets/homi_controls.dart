@@ -2,6 +2,60 @@ import 'package:flutter/material.dart';
 
 import '../theme/homi_theme.dart';
 
+Future<void> showHomiInfoSheet(
+  BuildContext context, {
+  required String title,
+  required String message,
+  String actionLabel = 'Got it',
+  IconData icon = Icons.info_outline_rounded,
+}) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: HomiColors.peach.withValues(alpha: 0.24),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Icon(icon, color: HomiColors.coral),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(message, style: Theme.of(context).textTheme.bodyLarge),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.pop(sheetContext),
+                child: Text(actionLabel),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 Future<bool> showHomiConfirmSheet(
   BuildContext context, {
   required String title,
@@ -86,6 +140,7 @@ class HomiChoiceGroup<T> extends StatelessWidget {
     required this.selected,
     required this.labelFor,
     required this.onSelected,
+    this.enabledFor,
     this.compact = false,
     super.key,
   });
@@ -94,6 +149,7 @@ class HomiChoiceGroup<T> extends StatelessWidget {
   final T selected;
   final String Function(T value) labelFor;
   final ValueChanged<T> onSelected;
+  final bool Function(T value)? enabledFor;
   final bool compact;
 
   @override
@@ -103,33 +159,37 @@ class HomiChoiceGroup<T> extends StatelessWidget {
       runSpacing: 8,
       children: values.map((value) {
         final active = value == selected;
-        return Semantics(
-          selected: active,
-          button: true,
-          label: labelFor(value),
-          child: GestureDetector(
-            onTap: () => onSelected(value),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              padding: EdgeInsets.symmetric(
-                horizontal: compact ? 11 : 14,
-                vertical: compact ? 8 : 10,
-              ),
-              decoration: BoxDecoration(
-                color: active
-                    ? HomiColors.coral
-                    : HomiColors.peach.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: active ? HomiColors.coral : HomiColors.border,
+        final enabled = enabledFor?.call(value) ?? true;
+        return Opacity(
+          opacity: enabled ? 1 : 0.48,
+          child: Semantics(
+            selected: active,
+            button: true,
+            label: labelFor(value),
+            child: GestureDetector(
+              onTap: enabled ? () => onSelected(value) : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 11 : 14,
+                  vertical: compact ? 8 : 10,
                 ),
-              ),
-              child: Text(
-                labelFor(value),
-                style: TextStyle(
-                  fontSize: compact ? 12 : 13,
-                  fontWeight: FontWeight.w900,
-                  color: active ? Colors.white : HomiColors.slate,
+                decoration: BoxDecoration(
+                  color: active
+                      ? HomiColors.coral
+                      : HomiColors.peach.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: active ? HomiColors.coral : HomiColors.border,
+                  ),
+                ),
+                child: Text(
+                  labelFor(value),
+                  style: TextStyle(
+                    fontSize: compact ? 12 : 13,
+                    fontWeight: FontWeight.w900,
+                    color: active ? Colors.white : HomiColors.slate,
+                  ),
                 ),
               ),
             ),

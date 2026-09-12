@@ -151,6 +151,8 @@ class TrustedPeopleService {
   TrustedPeopleService({required this.firebaseReady})
       : _cloudActions = HomiCloudActions(firebaseReady: firebaseReady);
 
+  static final RegExp _homiCodePattern = RegExp(r'^[A-HJ-NP-Z2-9]{6}$');
+
   final bool firebaseReady;
   final HomiCloudActions _cloudActions;
 
@@ -161,24 +163,68 @@ class TrustedPeopleService {
 
   Future<HomiIdentity> ensureIdentity() async {
     final user = _requireUser();
+
+    // The signed-in user's profile is already self-readable in Firestore and
+    // the backend writes homiCode + its lookup index atomically. Reuse that
+    // established code first so a populated People page does not depend on a
+    // fresh protected callable merely to display an existing reusable code.
+    // The callable remains the provisioning fallback for a genuinely new or
+    // incomplete profile.
+    try {
+      final profile = await _firestore.collection('users').doc(user.uid).get();
+      final existing = _identityFromData(user, profile.data());
+      if (existing != null) return existing;
+    } catch (_) {
+      // Fall through to the protected provisioning path. A transient profile
+      // read failure should not prevent the backend from repairing identity.
+    }
+
     final data = await _cloudActions.call('ensureHomiIdentity');
-    final code = (data['code'] as String?)?.trim().toUpperCase();
-    final displayName = (data['displayName'] as String?)?.trim();
-    if (code == null || code.length != 6 || displayName == null || displayName.isEmpty) {
+    final provisioned = _identityFromData(user, data);
+    if (provisioned == null) {
       throw StateError('Homi could not load your connection code. Try again.');
     }
+    return provisioned;
+  }
+
+  HomiIdentity? _identityFromData(
+    User user,
+    Map<String, dynamic>? data,
+  ) {
+    if (data == null) return null;
+    final code = (data['homiCode'] ?? data['code'])
+        ?.toString()
+        .trim()
+        .toUpperCase();
+    if (code == null || !_homiCodePattern.hasMatch(code)) return null;
+
+    final storedName = data['displayName']?.toString().trim();
+    final authName = user.displayName?.trim();
+    final email = user.email?.trim();
+    final emailName = email != null && email.contains('@')
+        ? email.split('@').first.trim()
+        : null;
+    final displayName = storedName?.isNotEmpty == true
+        ? storedName!
+        : authName?.isNotEmpty == true
+            ? authName!
+            : emailName?.isNotEmpty == true
+                ? emailName!
+                : 'Homi user';
+    final storedPhoto = data['photoUrl']?.toString().trim();
+
     return HomiIdentity(
       code: code,
       uid: user.uid,
       displayName: displayName,
-      photoUrl: data['photoUrl'] as String?,
+      photoUrl: storedPhoto?.isNotEmpty == true ? storedPhoto : user.photoURL,
     );
   }
 
   Future<void> connectWithCode(String rawCode) async {
     _requireUser();
     final code = rawCode.trim().toUpperCase().replaceAll(' ', '');
-    if (!RegExp(r'^[A-HJ-NP-Z2-9]{6}$').hasMatch(code)) {
+    if (!_homiCodePattern.hasMatch(code)) {
       throw StateError('Enter the 6-character Homi code.');
     }
     await _cloudActions.call('connectWithHomiCode', <String, dynamic>{

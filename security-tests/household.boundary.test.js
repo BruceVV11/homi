@@ -43,6 +43,12 @@ async function seed(pathName, data) {
   });
 }
 
+async function removeSeed(pathName) {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await deleteDoc(doc(context.firestore(), pathName));
+  });
+}
+
 async function seedHousehold() {
   await seed("households/home1", {
     name: "Durban Home",
@@ -98,6 +104,33 @@ async function seedInvite() {
   });
 }
 
+function routineRecord(uid = "alice", itemId = "routine1") {
+  return {
+    domain: "routine",
+    itemId,
+    payload: {
+      id: itemId,
+      title: "Bins",
+      category: "Chores",
+      repeat: "weekly",
+      frequency: "Weekly",
+      estimatedMinutes: 10,
+      repeatDays: [1],
+      dayOfMonth: null,
+      dueHour: 18,
+      dueMinute: 0,
+      createdAt: new Date().toISOString(),
+      nextDueAt: null,
+      completions: [],
+      completed: false,
+      lastCompletedAt: null,
+    },
+    schemaVersion: 1,
+    updatedByUid: uid,
+    updatedAt: serverTimestamp(),
+  };
+}
+
 test("members can query their Household without exposing non-members", async () => {
   await seedHousehold();
   const alice = env.authenticatedContext("alice").firestore();
@@ -131,7 +164,6 @@ test("members can query their Household without exposing non-members", async () 
 test("membership documents are self-readable and server-only", async () => {
   await seedHousehold();
   const alice = env.authenticatedContext("alice").firestore();
-  const bob = env.authenticatedContext("bob").firestore();
 
   await assertSucceeds(getDoc(doc(alice, "householdMemberships/alice")));
   await assertFails(getDoc(doc(alice, "householdMemberships/bob")));
@@ -218,4 +250,87 @@ test("Household identity and invitation mutations remain server-only", async () 
   await assertFails(deleteDoc(
       doc(charlie, "householdInvites/home1_charlie"),
   ));
+});
+
+test("canonical Household members can sync versioned data while outsiders cannot", async () => {
+  await seedHousehold();
+  const alice = env.authenticatedContext("alice").firestore();
+  const bob = env.authenticatedContext("bob").firestore();
+  const mallory = env.authenticatedContext("mallory").firestore();
+  const recordPath = "households/home1/data/routine--routine1";
+
+  await assertSucceeds(setDoc(doc(alice, recordPath), routineRecord("alice")));
+  await assertSucceeds(getDoc(doc(bob, recordPath)));
+  const visible = await assertSucceeds(getDocs(
+      collection(bob, "households/home1/data"),
+  ));
+  assert.equal(visible.size, 1);
+
+  await assertFails(getDoc(doc(mallory, recordPath)));
+  await assertFails(setDoc(
+      doc(mallory, "households/home1/data/routine--mallory"),
+      routineRecord("mallory", "mallory"),
+  ));
+  await assertFails(deleteDoc(doc(mallory, recordPath)));
+
+  await assertSucceeds(deleteDoc(doc(bob, recordPath)));
+});
+
+test("Household data envelope rejects forged actor domain and item identity", async () => {
+  await seedHousehold();
+  const alice = env.authenticatedContext("alice").firestore();
+
+  await assertFails(setDoc(
+      doc(alice, "households/home1/data/routine--forged-actor"),
+      routineRecord("bob", "forged-actor"),
+  ));
+
+  const invalidDomain = routineRecord("alice", "bad-domain");
+  invalidDomain.domain = "locationHistory";
+  await assertFails(setDoc(
+      doc(alice, "households/home1/data/locationHistory--bad-domain"),
+      invalidDomain,
+  ));
+
+  const mismatchedPayload = routineRecord("alice", "outer-id");
+  mismatchedPayload.payload.id = "different-id";
+  await assertFails(setDoc(
+      doc(alice, "households/home1/data/routine--outer-id"),
+      mismatchedPayload,
+  ));
+
+  await assertFails(setDoc(
+      doc(alice, "households/home1/data/routine--wrong-document-id"),
+      routineRecord("alice", "actual-item-id"),
+  ));
+});
+
+test("Household data requires both membership pointer and current member list", async () => {
+  await seedHousehold();
+  await seed("householdMemberships/mallory", {
+    householdId: "home1",
+    role: "member",
+    joinedAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  });
+  const mallory = env.authenticatedContext("mallory").firestore();
+
+  await assertFails(setDoc(
+      doc(mallory, "households/home1/data/routine--mallory"),
+      routineRecord("mallory", "mallory"),
+  ));
+
+  await seed("households/home1/data/routine--routine1", {
+    ...routineRecord("alice"),
+    updatedAt: Timestamp.now(),
+  });
+  await assertFails(getDoc(
+      doc(mallory, "households/home1/data/routine--routine1"),
+  ));
+
+  // A member removed from the canonical membership pointer loses access even
+  // if an old Household document were momentarily stale.
+  await removeSeed("householdMemberships/bob");
+  const bob = env.authenticatedContext("bob").firestore();
+  await assertFails(getDocs(collection(bob, "households/home1/data")));
 });

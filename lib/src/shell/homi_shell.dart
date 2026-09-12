@@ -15,6 +15,7 @@ import '../services/account_data_service.dart';
 import '../services/arrival_check_in_service.dart';
 import '../services/auth_service.dart';
 import '../services/developer_notification_service.dart';
+import '../services/household_data_sync_service.dart';
 import '../services/household_people_service.dart';
 import '../services/location_status_service.dart';
 import '../services/notification_service.dart';
@@ -56,6 +57,7 @@ class _HomiShellState extends State<HomiShell> {
   late final TrustedPeopleService _trustedPeopleService;
   late final HouseholdPeopleService _householdPeopleService;
   late final SharedTaskService _sharedTaskService;
+  late final HouseholdDataSyncService _householdDataSyncService;
   late final AccountDataService _accountDataService;
   late final HomiNotificationService _notificationService;
   late final DeveloperNotificationService _developerNotificationService;
@@ -82,6 +84,10 @@ class _HomiShellState extends State<HomiShell> {
     _sharedTaskService = SharedTaskService(
       firebaseReady: widget.firebaseReady,
     );
+    _householdDataSyncService = HouseholdDataSyncService(
+      firebaseReady: widget.firebaseReady,
+      controller: widget.controller,
+    );
     _accountDataService = AccountDataService(
       firebaseReady: widget.firebaseReady,
     );
@@ -93,6 +99,7 @@ class _HomiShellState extends State<HomiShell> {
     );
     widget.controller.addListener(_queueNotificationReconcile);
     unawaited(widget.controller.pruneExpiredTasks());
+    unawaited(_householdDataSyncService.start());
     unawaited(_initializeLocationFeatures());
     unawaited(_initializeNotifications());
   }
@@ -186,6 +193,7 @@ class _HomiShellState extends State<HomiShell> {
     unawaited(_notificationRouteSubscription?.cancel());
     _pageController.dispose();
     _arrivalCheckInService.dispose();
+    unawaited(_householdDataSyncService.disposeService());
     unawaited(_notificationService.disposeService());
     unawaited(_locationService.dispose());
     super.dispose();

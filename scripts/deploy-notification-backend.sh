@@ -41,7 +41,8 @@ if [ ! -f functions/package.json ] || \
    [ ! -f functions/trusted_people_preferences.js ] || \
    [ ! -f functions/shared_tasks_canonical.js ] || \
    [ ! -f functions/household_data_cleanup.js ] || \
-   [ ! -f functions/household_task_membership_sync.js ]; then
+   [ ! -f functions/household_task_membership_sync.js ] || \
+   [ ! -f functions/migrate_legacy_shared_tasks.js ]; then
   echo "Homi Functions source is incomplete." >&2
   exit 1
 fi
@@ -107,6 +108,34 @@ load_function_exports() {
   printf '    %s\n' "${FUNCTION_NAMES[@]}"
 }
 
+verify_active_v2_function() {
+  local function_name="$1"
+  local state
+  state="$(gcloud functions describe "${function_name}" \
+    --v2 \
+    --region "${FUNCTION_REGION}" \
+    --project "${PROJECT_ID}" \
+    --format='value(state)' 2>/dev/null || true)"
+  if [ "${state}" != "ACTIVE" ]; then
+    echo "Homi Function ${function_name} is not ACTIVE after deployment; refusing to continue." >&2
+    exit 1
+  fi
+}
+
+deploy_canonical_task_boundary() {
+  local selector
+  selector="functions:createSharedTask,functions:toggleSharedTask,functions:removeSharedTask,functions:onHouseholdTaskMembershipChanged"
+
+  echo "==> Deploying canonical Homi shared-task writers before legacy migration"
+  run_firebase deploy --only "${selector}" --project "${PROJECT_ID}"
+
+  verify_active_v2_function "createSharedTask"
+  verify_active_v2_function "toggleSharedTask"
+  verify_active_v2_function "removeSharedTask"
+  verify_active_v2_function "onHouseholdTaskMembershipChanged"
+  echo "==> Canonical shared-task writers are ACTIVE"
+}
+
 deploy_function_batches() {
   local -a batch=()
   local function_name
@@ -167,9 +196,7 @@ npm ci \
 npm run lint --prefix functions
 
 # Load and validate the exact export surface only after dependencies exist, but
-# before security tests or any Firebase deployment begins. This prevents a
-# Cloud Shell with a clean/disposable node_modules directory from failing its
-# preflight merely because firebase-functions has not been installed yet.
+# before security tests or any Firebase deployment begins.
 load_function_exports
 
 if [ -f scripts/test-firestore-security.sh ]; then
@@ -179,6 +206,24 @@ else
   echo "Homi Firestore security test helper is missing; refusing to deploy." >&2
   exit 1
 fi
+
+# 0.12 tightens shared-task reads around canonical Household identity. First
+# inspect the legacy production data without changing it. Then deploy only the
+# canonical task writers/membership synchronizer so no new preference-era task
+# can be created during the migration window. Apply the safe intersection-only
+# migration, and prove no safely migratable task remains before stricter rules
+# are allowed to reach production. Fail-closed legacy tasks may remain stored;
+# the new rules intentionally keep them unreadable rather than deleting them.
+echo "==> Dry-running Homi legacy shared-task migration"
+node functions/migrate_legacy_shared_tasks.js
+
+deploy_canonical_task_boundary
+
+echo "==> Applying safe Homi legacy shared-task migration"
+node functions/migrate_legacy_shared_tasks.js --apply
+
+echo "==> Proving Homi legacy shared-task migration is stable"
+node functions/migrate_legacy_shared_tasks.js --assert-stable
 
 # Firebase cannot change an existing Function from HTTPS to an event trigger in
 # place. Homi had a stale HTTPS function named onConnectionDeleted, while the

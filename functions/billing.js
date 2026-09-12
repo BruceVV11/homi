@@ -13,9 +13,11 @@ const {GoogleAuth} = require("google-auth-library");
 const {
   DUO_REASSIGNMENT_COOLDOWN_DAYS,
   normalizePlayState,
+  effectivePlayState,
   grantsPaidAccess,
   entitlementCapabilities,
   projectEntitlementSources,
+  canAdoptCanonicalPurchase,
   configuredCatalog,
   productFor,
 } = require("./billing_policy");
@@ -172,7 +174,7 @@ function purchaseIdentity(playPurchase, expectedProductId = null) {
   };
 }
 
-async function resolveUidFromPlay(playPurchase, purchaseTokenHash) {
+async function resolveUidFromPlay(playPurchase) {
   const external = playPurchase.externalAccountIdentifiers || {};
   const accountId = String(external.obfuscatedExternalAccountId || "").trim();
   if (!accountId) return null;
@@ -182,8 +184,6 @@ async function resolveUidFromPlay(playPurchase, purchaseTokenHash) {
   if (!uid) return null;
   const account = await db.collection("billingAccounts").doc(uid).get();
   if (!account.exists) return null;
-  const activeHash = String(account.data().activePurchaseTokenHash || "");
-  if (activeHash && activeHash !== purchaseTokenHash) return null;
   return uid;
 }
 
@@ -271,15 +271,21 @@ async function entitlementRecipientsForPurchase(purchase) {
   const recipients = new Map();
   const data = purchase.data;
   const purchaserUid = String(data.purchaserUid || "").trim();
+  const effectiveState = effectivePlayState(data.state, data.validUntil);
   if (!purchaserUid) {
-    return {recipients, householdId: null, duoSeatAssigneeUid: null};
+    return {
+      recipients,
+      householdId: null,
+      duoSeatAssigneeUid: null,
+      effectiveState,
+    };
   }
 
   recipients.set(purchaserUid, "purchaser");
   let householdId = null;
   let duoSeatAssigneeUid = null;
-  if (!grantsPaidAccess(data.state)) {
-    return {recipients, householdId, duoSeatAssigneeUid};
+  if (!grantsPaidAccess(effectiveState)) {
+    return {recipients, householdId, duoSeatAssigneeUid, effectiveState};
   }
 
   if (data.plan === "duo") {
@@ -301,7 +307,7 @@ async function entitlementRecipientsForPurchase(purchase) {
       }
     }
   }
-  return {recipients, householdId, duoSeatAssigneeUid};
+  return {recipients, householdId, duoSeatAssigneeUid, effectiveState};
 }
 
 async function reconcilePurchaseEntitlements(purchase) {
@@ -337,7 +343,7 @@ async function reconcilePurchaseEntitlements(purchase) {
         db.collection("billingCoverage").doc(coverageDocId(purchaseTokenHash, uid)),
         coverageDocument({
           plan: data.plan,
-          state: data.state,
+          state: result.effectiveState,
           purchaserUid,
           purchaseTokenHash,
           recipientUid: uid,
@@ -411,7 +417,12 @@ async function persistVerifiedPurchase({
 }) {
   const purchaseTokenHash = sha256(purchaseToken);
   const identity = purchaseIdentity(playPurchase, expectedProductId);
-  const state = normalizePlayState(playPurchase.subscriptionState);
+  const state = effectivePlayState(
+      normalizePlayState(playPurchase.subscriptionState),
+      identity.validUntil,
+  );
+  const linkedPurchaseToken = String(playPurchase.linkedPurchaseToken || "").trim();
+  const linkedTokenHash = linkedPurchaseToken ? sha256(linkedPurchaseToken) : null;
   const expectedAccountId = obfuscatedAccountId(purchaserUid);
   const external = playPurchase.externalAccountIdentifiers || {};
   const actualAccountId = String(external.obfuscatedExternalAccountId || "").trim();
@@ -446,6 +457,31 @@ async function persistVerifiedPurchase({
 
     previousTokenHash = accountSnapshot.exists ?
       String(accountSnapshot.data().activePurchaseTokenHash || "").trim() || null : null;
+    let currentPurchase = null;
+    if (previousTokenHash && previousTokenHash !== purchaseTokenHash) {
+      currentPurchase = await transaction.get(
+          db.collection("billingPurchases").doc(previousTokenHash),
+      );
+    }
+    const existingData = existingPurchase.exists ? existingPurchase.data() : {};
+    const currentData = currentPurchase && currentPurchase.exists ?
+      currentPurchase.data() : {};
+    if (!canAdoptCanonicalPurchase({
+      currentTokenHash: previousTokenHash,
+      incomingTokenHash: purchaseTokenHash,
+      linkedTokenHash,
+      currentPurchaseKnown: Boolean(currentPurchase && currentPurchase.exists),
+      currentState: currentData.state,
+      currentValidUntil: currentData.validUntil,
+      incomingSupersededByTokenHash:
+        String(existingData.supersededByTokenHash || "").trim() || null,
+    })) {
+      throw new HttpsError(
+          "failed-precondition",
+          "This Google Play purchase cannot replace the current Homi+ subscription.",
+      );
+    }
+
     transaction.set(linkRef, {
       uid: purchaserUid,
       updatedAt: FieldValue.serverTimestamp(),
@@ -464,6 +500,7 @@ async function persistVerifiedPurchase({
       plan: identity.plan,
       state,
       validUntil: identity.validUntil,
+      linkedPurchaseTokenHash: linkedTokenHash,
       acknowledgementState: playPurchase.acknowledgementState || null,
       latestOrderId: playPurchase.latestOrderId || null,
       updatedAt: FieldValue.serverTimestamp(),
@@ -517,33 +554,37 @@ async function persistVerifiedPurchase({
 async function refreshStoredPurchase(purchaseToken, purchaserUid = null) {
   const purchaseTokenHash = sha256(purchaseToken);
   const playPurchase = await fetchSubscription(purchaseToken);
+  const identity = purchaseIdentity(playPurchase);
+  const freshState = effectivePlayState(
+      normalizePlayState(playPurchase.subscriptionState),
+      identity.validUntil,
+  );
+  const stored = await db.collection("billingPurchases").doc(purchaseTokenHash).get();
+
+  if (stored.exists && stored.data().supersededByTokenHash) {
+    await stored.ref.set({
+      state: freshState,
+      validUntil: identity.validUntil,
+      acknowledgementState: playPurchase.acknowledgementState || null,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: true});
+    await removePurchaseCoverage(purchaseTokenHash);
+    return {
+      ignoredSuperseded: true,
+      purchaserUid: String(stored.data().purchaserUid || "").trim() || null,
+    };
+  }
+
   let resolvedUid = purchaserUid;
-  if (!resolvedUid) {
-    const stored = await db.collection("billingPurchases").doc(purchaseTokenHash).get();
-    if (stored.exists) resolvedUid = String(stored.data().purchaserUid || "").trim() || null;
+  if (!resolvedUid && stored.exists) {
+    resolvedUid = String(stored.data().purchaserUid || "").trim() || null;
   }
   if (!resolvedUid) {
-    resolvedUid = await resolveUidFromPlay(playPurchase, purchaseTokenHash);
+    resolvedUid = await resolveUidFromPlay(playPurchase);
   }
   if (!resolvedUid) {
     logger.warn("Homi billing RTDN could not resolve a Homi account", {purchaseTokenHash});
     return null;
-  }
-
-  const account = await db.collection("billingAccounts").doc(resolvedUid).get();
-  if (account.exists) {
-    const activeHash = String(account.data().activePurchaseTokenHash || "").trim();
-    if (activeHash && activeHash !== purchaseTokenHash) {
-      const identity = purchaseIdentity(playPurchase);
-      await db.collection("billingPurchases").doc(purchaseTokenHash).set({
-        state: normalizePlayState(playPurchase.subscriptionState),
-        validUntil: identity.validUntil,
-        acknowledgementState: playPurchase.acknowledgementState || null,
-        updatedAt: FieldValue.serverTimestamp(),
-      }, {merge: true});
-      await removePurchaseCoverage(purchaseTokenHash);
-      return {ignoredSuperseded: true, purchaserUid: resolvedUid};
-    }
   }
 
   return persistVerifiedPurchase({
@@ -600,7 +641,13 @@ exports.setHomiPlusDuoSeat = onCall(
       const user = requireAuth(request);
       await requireBillingRateLimit(user.uid, "billing_duo_seat_hour", 30);
       const purchase = await currentPurchaseForPurchaser(user.uid);
-      if (!purchase || purchase.data.plan !== "duo" || !grantsPaidAccess(purchase.data.state)) {
+      const purchaseState = purchase ?
+        effectivePlayState(purchase.data.state, purchase.data.validUntil) : null;
+      if (
+        !purchase ||
+        purchase.data.plan !== "duo" ||
+        !grantsPaidAccess(purchaseState)
+      ) {
         throw new HttpsError("failed-precondition", "An active Homi+ Duo subscription is required.");
       }
 
@@ -720,7 +767,13 @@ exports.onHomiPlusHouseholdChanged = onDocumentWritten(
 
       for (const uid of candidates) {
         const purchase = await currentPurchaseForPurchaser(uid);
-        if (!purchase || purchase.data.plan !== "household" || !grantsPaidAccess(purchase.data.state)) {
+        const purchaseState = purchase ?
+          effectivePlayState(purchase.data.state, purchase.data.validUntil) : null;
+        if (
+          !purchase ||
+          purchase.data.plan !== "household" ||
+          !grantsPaidAccess(purchaseState)
+        ) {
           continue;
         }
         await reconcilePurchaseEntitlements(purchase);

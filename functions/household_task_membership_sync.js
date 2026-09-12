@@ -4,6 +4,7 @@ const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 
 const db = getFirestore();
 const BATCH_SIZE = 400;
+const CANONICAL_AUDIENCE_VERSION = 1;
 
 function cleanUids(value) {
   if (!Array.isArray(value)) return [];
@@ -17,11 +18,11 @@ function sameUids(first, second) {
   return first.every((uid, index) => uid === second[index]);
 }
 
-// New 0.12 shared Tasks carry householdId. Keep their visibility aligned with
-// current canonical membership rather than freezing the member list at task
-// creation time. Legacy pre-0.12 Tasks without householdId are intentionally
-// left unchanged because automatically broadening their audience could expose
-// a task that was shared under the old preference-based model.
+// New 0.12 Tasks are audienceVersion 1 and intentionally follow the current
+// canonical Household membership. Migrated pre-0.12 Tasks are audienceVersion
+// 0: their safe recipient list is the intersection of the historic audience
+// and the Household at migration time, so this trigger must never widen them
+// when somebody joins later.
 exports.onHouseholdTaskMembershipChanged = onDocumentUpdated(
     "households/{householdId}",
     async (event) => {
@@ -38,29 +39,36 @@ exports.onHouseholdTaskMembershipChanged = onDocumentUpdated(
         const tasks = await db.collection("sharedTasks")
             .where("householdId", "==", householdId)
             .get();
-        if (tasks.empty) return;
+        const canonicalTasks = tasks.docs.filter(
+            (document) =>
+              Number(document.data().audienceVersion) ===
+                CANONICAL_AUDIENCE_VERSION,
+        );
+        if (canonicalTasks.length === 0) return;
 
-        for (let start = 0; start < tasks.docs.length; start += BATCH_SIZE) {
+        for (let start = 0; start < canonicalTasks.length; start += BATCH_SIZE) {
           const batch = db.batch();
-          tasks.docs.slice(start, start + BATCH_SIZE).forEach((document) => {
-            const data = document.data();
-            const update = {
-              memberUids: nextMembers,
-              updatedAt: FieldValue.serverTimestamp(),
-            };
+          canonicalTasks.slice(start, start + BATCH_SIZE)
+              .forEach((document) => {
+                const data = document.data();
+                const update = {
+                  memberUids: nextMembers,
+                  updatedAt: FieldValue.serverTimestamp(),
+                };
 
-            if (data.assigneeUid && !nextMembers.includes(data.assigneeUid)) {
-              update.assigneeUid = null;
-              update.assigneeName = "Unassigned";
-            }
-            if (data.completedByUid &&
-                !nextMembers.includes(data.completedByUid)) {
-              update.completedByUid = null;
-              update.completedByName = "Former Household member";
-            }
+                if (data.assigneeUid &&
+                    !nextMembers.includes(data.assigneeUid)) {
+                  update.assigneeUid = null;
+                  update.assigneeName = "Unassigned";
+                }
+                if (data.completedByUid &&
+                    !nextMembers.includes(data.completedByUid)) {
+                  update.completedByUid = null;
+                  update.completedByName = "Former Household member";
+                }
 
-            batch.update(document.ref, update);
-          });
+                batch.update(document.ref, update);
+              });
           await batch.commit();
         }
       } catch (error) {

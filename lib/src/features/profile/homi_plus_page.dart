@@ -34,6 +34,7 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
   List<TrustedConnection> _connections = const <TrustedConnection>[];
   bool _loadingCatalog = true;
   bool _busy = false;
+  bool _householdMemberSelectionTouched = false;
   int _householdMembers = homiPlusHouseholdIncludedMemberLimit;
 
   User? get _user =>
@@ -358,6 +359,15 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
           initialData: HomiEntitlement.free,
           builder: (context, snapshot) {
             final entitlement = snapshot.data ?? HomiEntitlement.free;
+            final effectiveHouseholdMembers =
+                !_householdMemberSelectionTouched &&
+                        entitlement.plan == HomiPlusPlan.household &&
+                        entitlement.householdMemberLimit >=
+                            homiPlusHouseholdIncludedMemberLimit
+                    ? HomiPlusPlans.normalizeHouseholdMemberCount(
+                        entitlement.householdMemberLimit,
+                      )
+                    : _householdMembers;
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
               children: [
@@ -398,7 +408,7 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
                       .map((definition) {
                     final householdLimit =
                         definition.plan == HomiPlusPlan.household
-                            ? _householdMembers
+                            ? effectiveHouseholdMembers
                             : null;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -417,12 +427,13 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
                         householdMembers: householdLimit,
                         onHouseholdMembersChanged: householdLimit == null
                             ? null
-                            : (value) => setState(
-                                  () => _householdMembers =
+                            : (value) => setState(() {
+                                  _householdMemberSelectionTouched = true;
+                                  _householdMembers =
                                       HomiPlusPlans.normalizeHouseholdMemberCount(
                                     value,
-                                  ),
-                                ),
+                                  );
+                                }),
                         busy: _busy,
                         onMonthly: () => _purchase(
                           definition,

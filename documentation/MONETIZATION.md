@@ -108,6 +108,7 @@ The backend remains authoritative. Flutter purchase callbacks never grant capabi
 - source supports Household tiers from 4 through 10 members;
 - the canonical Household backend reads server-written entitlement state before allowing places above four;
 - billing reconciliation projects the verified paid member limit back onto the Household;
+- the purchaser always counts inside that paid member limit; canonical member ordering must never make a four-seat purchase cover five people;
 - if entitlement falls back to four, existing over-cap members are not silently deleted, but no further member can be added until capacity is restored.
 
 ## Google Play catalog direction

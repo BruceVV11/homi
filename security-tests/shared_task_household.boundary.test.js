@@ -47,11 +47,11 @@ async function removeSeed(pathName) {
   });
 }
 
-async function seedHousehold() {
+async function seedHousehold(memberUids = ["alice", "bob"]) {
   await seed("households/home1", {
     name: "Durban Home",
     ownerUid: "alice",
-    memberUids: ["alice", "bob"],
+    memberUids,
     pendingInviteUids: [],
     memberLimit: 4,
     schemaVersion: 1,
@@ -137,6 +137,19 @@ test("legacy or stale shared Tasks fail closed outside canonical membership", as
   const bob = env.authenticatedContext("bob").firestore();
   await assertFails(getDoc(doc(bob, "sharedTasks/legacy")));
 
+  // A stale membership pointer alone is insufficient if the canonical
+  // Household parent has already removed this user.
+  await seedHousehold(["alice"]);
+  await assertFails(getDoc(doc(bob, "sharedTasks/task1")));
+  await assertFails(getDocs(query(
+      collection(bob, "sharedTasks"),
+      where("householdId", "==", "home1"),
+      where("memberUids", "array-contains", "bob"),
+  )));
+
+  // Restore the parent list, then prove the inverse stale state also fails:
+  // parent membership alone is insufficient after the pointer is removed.
+  await seedHousehold();
   await removeSeed("householdMemberships/bob");
   await assertFails(getDoc(doc(bob, "sharedTasks/task1")));
   await assertFails(getDocs(query(

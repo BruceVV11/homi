@@ -12,6 +12,8 @@ const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore"
 const {GoogleAuth} = require("google-auth-library");
 const {
   DUO_REASSIGNMENT_COOLDOWN_DAYS,
+  HOUSEHOLD_INCLUDED_MEMBER_LIMIT,
+  HOUSEHOLD_MAXIMUM_MEMBER_LIMIT,
   normalizePlayState,
   effectivePlayState,
   grantsPaidAccess,
@@ -231,6 +233,37 @@ async function canonicalHouseholdFor(uid) {
   };
 }
 
+async function recomputeCanonicalHouseholdMemberLimit(householdId) {
+  const cleanHouseholdId = String(householdId || "").trim();
+  if (!cleanHouseholdId) return;
+
+  const homeRef = db.collection("households").doc(cleanHouseholdId);
+  const [home, coverage] = await Promise.all([
+    homeRef.get(),
+    db.collection("billingCoverage")
+        .where("householdId", "==", cleanHouseholdId)
+        .get(),
+  ]);
+  if (!home.exists) return;
+
+  let memberLimit = HOUSEHOLD_INCLUDED_MEMBER_LIMIT;
+  for (const document of coverage.docs) {
+    const data = document.data();
+    if (data.plan !== "household" || data.sharedHousehold !== true) continue;
+    const candidate = Number(data.householdMemberLimit || 0);
+    if (Number.isFinite(candidate)) memberLimit = Math.max(memberLimit, candidate);
+  }
+  memberLimit = Math.max(
+      HOUSEHOLD_INCLUDED_MEMBER_LIMIT,
+      Math.min(HOUSEHOLD_MAXIMUM_MEMBER_LIMIT, Math.trunc(memberLimit)),
+  );
+
+  await homeRef.set({
+    memberLimit,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, {merge: true});
+}
+
 async function acceptedConnection(firstUid, secondUid) {
   const ids = [firstUid, secondUid].sort();
   const snapshot = await db.collection("connections").doc(`${ids[0]}_${ids[1]}`).get();
@@ -342,6 +375,8 @@ async function entitlementRecipientsForPurchase(purchase) {
 async function reconcilePurchaseEntitlements(purchase) {
   const data = purchase.data;
   const purchaseTokenHash = purchase.tokenHash;
+  const previousHouseholdId = typeof data.householdId === "string" ?
+    data.householdId.trim() : "";
   const purchaserUid = String(data.purchaserUid || "").trim();
   if (!purchaserUid) {
     await removePurchaseCoverage(purchaseTokenHash);
@@ -393,11 +428,22 @@ async function reconcilePurchaseEntitlements(purchase) {
   }, {merge: true});
   await batch.commit();
   await Promise.all([...affectedUids].map((uid) => recomputeEntitlement(uid)));
+
+  const householdIds = new Set(
+      [previousHouseholdId, result.householdId].filter(Boolean),
+  );
+  await Promise.all(
+      [...householdIds].map((householdId) =>
+        recomputeCanonicalHouseholdMemberLimit(householdId)),
+  );
 }
 
 async function removePurchaseCoverage(purchaseTokenHash) {
   const purchaseRef = db.collection("billingPurchases").doc(purchaseTokenHash);
   const purchase = await purchaseRef.get();
+  const householdId = purchase.exists &&
+      typeof purchase.data().householdId === "string" ?
+    purchase.data().householdId.trim() : "";
   let coveredUids = purchase.exists && Array.isArray(purchase.data().coveredUids) ?
     purchase.data().coveredUids.filter((value) => typeof value === "string") : [];
   const existing = await db.collection("billingCoverage")
@@ -418,6 +464,9 @@ async function removePurchaseCoverage(purchaseTokenHash) {
   }
   await batch.commit();
   await Promise.all([...affectedUids].map((uid) => recomputeEntitlement(uid)));
+  if (householdId) {
+    await recomputeCanonicalHouseholdMemberLimit(householdId);
+  }
 }
 
 async function removeRecipientCoverage(uid) {

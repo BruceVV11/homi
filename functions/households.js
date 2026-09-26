@@ -6,7 +6,8 @@ const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const db = getFirestore();
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-const MAX_HOUSEHOLD_MEMBERS = 4;
+const INCLUDED_HOUSEHOLD_MEMBERS = 4;
+const MAX_HOUSEHOLD_MEMBERS = 10;
 
 function requireVerifiedCloudAccount(request) {
   if (!request.auth) {
@@ -130,6 +131,18 @@ function pendingInvitees(data) {
   return uniqueUids(data && data.pendingInviteUids);
 }
 
+function householdLimitFromEntitlement(snapshot) {
+  if (!snapshot || !snapshot.exists) return INCLUDED_HOUSEHOLD_MEMBERS;
+  const data = snapshot.data();
+  if (!data || data.sharedHousehold !== true) return INCLUDED_HOUSEHOLD_MEMBERS;
+  const requested = Number(data.householdMemberLimit || 0);
+  if (!Number.isFinite(requested)) return INCLUDED_HOUSEHOLD_MEMBERS;
+  return Math.max(
+      INCLUDED_HOUSEHOLD_MEMBERS,
+      Math.min(MAX_HOUSEHOLD_MEMBERS, Math.trunc(requested)),
+  );
+}
+
 async function setRelationshipScope(firstUid, secondUid, scope) {
   const connection = await connectionRef(firstUid, secondUid).get();
   if (!acceptedConnectionData(connection, firstUid, secondUid)) return;
@@ -218,7 +231,7 @@ exports.createHousehold = onCall(
           ownerUid: auth.uid,
           memberUids: [auth.uid],
           pendingInviteUids: [],
-          memberLimit: MAX_HOUSEHOLD_MEMBERS,
+          memberLimit: INCLUDED_HOUSEHOLD_MEMBERS,
           schemaVersion: 1,
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
@@ -333,12 +346,13 @@ exports.inviteHouseholdMember = onCall(
         const home = householdRef(householdId);
         const invitation = inviteRef(householdId, inviteeUid);
         const [homeSnapshot, targetMembership, connectionSnapshot, targetUser,
-          existingInvite] = await Promise.all([
+          existingInvite, ownerEntitlement] = await Promise.all([
           transaction.get(home),
           transaction.get(targetMembershipRef),
           transaction.get(connection),
           transaction.get(targetUserRef),
           transaction.get(invitation),
+          transaction.get(db.collection("entitlements").doc(auth.uid)),
         ]);
         if (!homeSnapshot.exists || homeSnapshot.data().ownerUid !== auth.uid) {
           throw new HttpsError(
@@ -376,16 +390,20 @@ exports.inviteHouseholdMember = onCall(
               "That person already has a Household invite.",
           );
         }
-        if (members.length + pending.length >= MAX_HOUSEHOLD_MEMBERS) {
+        const memberLimit = householdLimitFromEntitlement(ownerEntitlement);
+        if (members.length + pending.length >= memberLimit) {
           throw new HttpsError(
               "failed-precondition",
-              "Homi Household currently supports up to four members, including pending invites.",
+              memberLimit === INCLUDED_HOUSEHOLD_MEMBERS ?
+                "Your current Household capacity is four members. Increase your Homi+ Household member count before inviting another person." :
+                `Your current Homi+ Household plan covers up to ${memberLimit} members.`,
           );
         }
 
         const nextPending = [...pending, inviteeUid];
         transaction.update(home, {
           pendingInviteUids: nextPending,
+          memberLimit,
           updatedAt: FieldValue.serverTimestamp(),
         });
         transaction.create(invitation, {
@@ -488,10 +506,14 @@ exports.respondHouseholdInvite = onCall(
         }
         const data = homeSnapshot.data();
         const members = householdMembers(data);
-        if (members.length >= MAX_HOUSEHOLD_MEMBERS) {
+        const ownerEntitlement = await transaction.get(
+            db.collection("entitlements").doc(String(data.ownerUid || "")),
+        );
+        const memberLimit = householdLimitFromEntitlement(ownerEntitlement);
+        if (members.length >= memberLimit) {
           throw new HttpsError(
               "failed-precondition",
-              "That Household is already full.",
+              "That Household has reached its current member capacity.",
           );
         }
         if (!pendingInvitees(data).includes(auth.uid)) {
@@ -505,6 +527,7 @@ exports.respondHouseholdInvite = onCall(
           memberUids: nextMembers,
           pendingInviteUids: pendingInvitees(data)
               .filter((uid) => uid !== auth.uid),
+          memberLimit,
           updatedAt: FieldValue.serverTimestamp(),
         });
         transaction.create(membershipRef(auth.uid), {

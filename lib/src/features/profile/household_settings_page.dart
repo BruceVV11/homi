@@ -125,7 +125,9 @@ class _HouseholdSettingsPageState extends State<HouseholdSettingsPage> {
         context,
         title: household.full ? 'Your Household is full' : 'No one else to add yet',
         message: household.full
-            ? 'All four Household seats are already occupied or reserved by pending invitations.'
+            ? household.memberLimit <= 4
+                ? 'All four included Household places are occupied or reserved. Increase your Homi+ Household member count in Plans & billing to add another person.'
+                : 'All ${household.memberLimit} places covered by the current Homi+ Household plan are occupied or reserved.'
             : hasReservedInvite
                 ? 'Everyone you can currently add is already in your Household or has a pending invitation. Connect with another person in People, then come back here to invite them.'
                 : 'Connect with another person in People first. Once that trusted connection is accepted, come back here to invite them to your Household.',

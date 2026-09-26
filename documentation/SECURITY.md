@@ -79,9 +79,17 @@ The safe first-sync strategy remains unchanged: an authoritative non-cache empty
 
 ## Shared one-off Tasks
 
-Personal **Me** Tasks remain local/private. Shared Tasks retain the compatibility collection, but access now requires both the safe stored audience and current canonical Household membership.
+Personal **Me** Tasks remain local/private.
 
-New canonical tasks follow current membership. Removed assignee/completion UIDs are stripped. Pre-0.12 tasks are migrated only to the intersection of their historical audience and current canonical Household, marked with the historical audience version, and are never widened when a new member joins later.
+For a new shared Task, the server derives `householdId` and `memberUids` from the creator's current canonical Household and stores the Task at `households/{householdId}/sharedTasks/{taskId}`. A caller cannot manufacture task visibility by setting a People scope. An assignee must be a current member of the same Household.
+
+Callable access requires the acting UID to be present in the Task's safe `memberUids` audience and still be a current canonical member of the Task's stored `householdId`. The original creator does **not** have to remain in the Household for remaining legitimate recipients to keep using the Task. For `audienceVersion: 1` Tasks, the current Household owner can perform owner-level reopen/remove recovery when the original creator/completer is no longer available.
+
+Firestore list authorization makes the canonical Household part of the document path. The client listens only to `households/{currentHouseholdId}/sharedTasks` and constrains `memberUids array-contains auth.uid`. Direct `get` rules explicitly require `memberUids is list`; the `list` rule deliberately follows Homi's proven Household collection pattern and does not repeat that type assertion because `array-contains` itself only matches array fields and Firestore must prove the rule from the query's potential result set. Malformed stored audiences still fail closed on direct reads and are excluded from the array query.
+
+`onHouseholdTaskMembershipChanged` updates `audienceVersion: 1` Tasks to current canonical membership. Migrated `audienceVersion: 0` Tasks are shrink-only: removed members and invalid assignee/completer attribution are stripped, while later Household joins never widen the historical audience.
+
+Safely mappable pre-0.12 root Tasks move from `sharedTasks/{taskId}` into `households/{householdId}/sharedTasks/{taskId}` with the safe historical/current-member intersection. Unmappable root Tasks remain stored but client access fails closed.
 
 ## Continuous-location abuse/cost controls
 

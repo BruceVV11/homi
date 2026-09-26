@@ -6,6 +6,10 @@ EXPECTED_PROJECT_NUMBER="883068189841"
 FUNCTION_REGION="africa-south1"
 LEGACY_CONNECTION_DELETE_FUNCTION="onConnectionDeleted"
 REPLACEMENT_CONNECTION_DELETE_FUNCTION="onTrustedConnectionDeleted"
+LEGACY_TASK_CREATED_FUNCTION="onSharedTaskCreated"
+LEGACY_TASK_UPDATED_FUNCTION="onSharedTaskUpdated"
+REPLACEMENT_TASK_CREATED_FUNCTION="onHouseholdSharedTaskCreated"
+REPLACEMENT_TASK_UPDATED_FUNCTION="onHouseholdSharedTaskUpdated"
 FUNCTION_BATCH_SIZE=5
 EXPECTED_FUNCTION_COUNT=37
 
@@ -44,6 +48,7 @@ if [ ! -f functions/package.json ] || \
    [ ! -f functions/shared_tasks_canonical.js ] || \
    [ ! -f functions/household_data_cleanup.js ] || \
    [ ! -f functions/household_task_membership_sync.js ] || \
+   [ ! -f functions/household_shared_task_notifications.js ] || \
    [ ! -f functions/migrate_legacy_shared_tasks.js ]; then
   echo "Homi Functions source is incomplete." >&2
   exit 1
@@ -163,16 +168,33 @@ reconcile_legacy_connection_delete() {
 
 deploy_canonical_task_boundary() {
   local selector
-  selector="functions:createSharedTask,functions:toggleSharedTask,functions:removeSharedTask,functions:onHouseholdTaskMembershipChanged"
+  selector="functions:createSharedTask,functions:toggleSharedTask,functions:removeSharedTask,functions:onHouseholdTaskMembershipChanged,functions:${REPLACEMENT_TASK_CREATED_FUNCTION},functions:${REPLACEMENT_TASK_UPDATED_FUNCTION}"
 
-  echo "==> Deploying canonical Homi shared-task writers before legacy migration"
+  echo "==> Deploying canonical Homi shared-task writers/triggers before legacy migration"
   run_firebase deploy --only "${selector}" --project "${PROJECT_ID}"
 
   verify_active_v2_function "createSharedTask"
   verify_active_v2_function "toggleSharedTask"
   verify_active_v2_function "removeSharedTask"
   verify_active_v2_function "onHouseholdTaskMembershipChanged"
-  echo "==> Canonical shared-task writers are ACTIVE"
+  verify_active_v2_function "${REPLACEMENT_TASK_CREATED_FUNCTION}"
+  verify_active_v2_function "${REPLACEMENT_TASK_UPDATED_FUNCTION}"
+  echo "==> Canonical nested shared-task boundary is ACTIVE"
+}
+
+delete_legacy_task_notification_triggers() {
+  local legacy_name
+  for legacy_name in     "${LEGACY_TASK_CREATED_FUNCTION}"     "${LEGACY_TASK_UPDATED_FUNCTION}"; do
+    if gcloud functions describe "${legacy_name}"         --v2         --region "${FUNCTION_REGION}"         --project "${PROJECT_ID}" >/dev/null 2>&1; then
+      echo "==> Removing retired root shared-task trigger ${legacy_name}"
+      run_firebase functions:delete "${legacy_name}"         --region "${FUNCTION_REGION}"         --project "${PROJECT_ID}"         --force
+    elif gcloud functions describe "${legacy_name}"         --region "${FUNCTION_REGION}"         --project "${PROJECT_ID}" >/dev/null 2>&1; then
+      echo "==> Removing retired 1st-gen root shared-task trigger ${legacy_name}"
+      run_firebase functions:delete "${legacy_name}"         --region "${FUNCTION_REGION}"         --project "${PROJECT_ID}"         --force
+    else
+      echo "==> Retired root shared-task trigger ${legacy_name} is already absent"
+    fi
+  done
 }
 
 deploy_function_batches() {
@@ -257,11 +279,12 @@ node functions/migrate_legacy_shared_tasks.js
 # resource into a non-interactive deployment surprise.
 reconcile_legacy_connection_delete
 
-# 0.12 tightens shared-task reads around canonical Household identity. Deploy
-# only the canonical task writers/membership synchronizer first so no new
-# preference-era task can appear during the migration window. Then apply the
-# safe intersection-only migration and prove no safely migratable task remains
-# before stricter Firestore rules/indexes are allowed to reach production.
+# 0.12 moves canonical shared Tasks under the exact Household document so the
+# Firestore list boundary is path-provable. Deploy the nested writers,
+# membership synchronizer and replacement notification triggers first so no new
+# root/preference-era Task can appear during the migration window. Then move the
+# safe historical audience into its Household subcollection and prove no safely
+# movable root Task remains before stricter rules reach production.
 deploy_canonical_task_boundary
 
 echo "==> Applying safe Homi legacy shared-task migration"
@@ -269,6 +292,11 @@ node functions/migrate_legacy_shared_tasks.js --apply
 
 echo "==> Proving Homi legacy shared-task migration is stable"
 node functions/migrate_legacy_shared_tasks.js --assert-stable
+
+# New nested notification triggers are already ACTIVE and the safe root Tasks
+# have been moved. Retire only the two exact old root notification trigger names
+# before the full non-interactive Function batches reconcile the export surface.
+delete_legacy_task_notification_triggers
 
 # Rules/indexes are one deployment surface. Functions are intentionally batched
 # because Firebase documents that large simultaneous Function deployments can

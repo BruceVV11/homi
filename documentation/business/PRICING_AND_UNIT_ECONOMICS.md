@@ -60,7 +60,7 @@ Permanent products:
 - `homi_plus_duo` — monthly + annual;
 - `homi_plus_household_4` through `homi_plus_household_10` — monthly + annual.
 
-Separate Household capacity products are deliberate because adding a paid Household person changes entitlement, not merely billing cadence.
+Separate Household capacity products are deliberate because adding a paid Household person changes entitlement, not merely billing cadence. The launch catalog therefore contains nine subscription products in total: Personal, Duo, and seven Household capacity products for 4–10 members.
 
 ## Cost guardrails
 

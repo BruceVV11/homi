@@ -83,6 +83,23 @@ function normalizedHouseholdLimit(value) {
   );
 }
 
+function householdRecipientUids(memberUids, purchaserUid, householdMemberLimit) {
+  const members = [...new Set(
+      (Array.isArray(memberUids) ? memberUids : [])
+          .filter((value) => typeof value === "string")
+          .map((value) => value.trim())
+          .filter(Boolean),
+  )];
+  const purchaser = String(purchaserUid || "").trim();
+  if (!purchaser || !members.includes(purchaser)) return [];
+
+  const limit = normalizedHouseholdLimit(householdMemberLimit);
+  return [
+    purchaser,
+    ...members.filter((uid) => uid !== purchaser),
+  ].slice(0, limit);
+}
+
 function entitlementCapabilities(plan, state, householdMemberLimit = 0) {
   const paid = grantsPaidAccess(state);
   if (!paid) {
@@ -287,6 +304,7 @@ module.exports = {
   effectivePlayState,
   grantsPaidAccess,
   normalizedHouseholdLimit,
+  householdRecipientUids,
   entitlementCapabilities,
   projectEntitlementSources,
   canAdoptCanonicalPurchase,

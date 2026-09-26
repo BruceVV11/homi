@@ -13,6 +13,7 @@ const trustedPeoplePreferences = require("./trusted_people_preferences");
 const sharedTasksCanonical = require("./shared_tasks_canonical");
 const householdDataCleanup = require("./household_data_cleanup");
 const householdTaskMembershipSync = require("./household_task_membership_sync");
+const householdSharedTaskNotifications = require("./household_shared_task_notifications");
 // Public Play product/base-plan IDs are exact release infrastructure. Load the
 // source-controlled catalog before billing.js reads its environment-shaped
 // policy input. Blank IDs keep billing fail-closed until Play Console setup.
@@ -25,12 +26,16 @@ const billing = require("./billing");
 // `onTrustedConnectionDeleted` and the deployment helper migrates it safely.
 const {
   onConnectionDeleted: deprecatedOnConnectionDeleted,
-  ...coreWithoutDeprecatedConnectionDelete
+  onSharedTaskCreated: deprecatedOnSharedTaskCreated,
+  onSharedTaskUpdated: deprecatedOnSharedTaskUpdated,
+  ...coreWithoutDeprecatedTaskTriggers
 } = core;
 void deprecatedOnConnectionDeleted;
+void deprecatedOnSharedTaskCreated;
+void deprecatedOnSharedTaskUpdated;
 
 module.exports = {
-  ...coreWithoutDeprecatedConnectionDelete,
+  ...coreWithoutDeprecatedTaskTriggers,
   ...checkIn,
   ...connectionCleanup,
   ...deviceRegistration,
@@ -48,6 +53,9 @@ module.exports = {
   ...sharedTasksCanonical,
   ...householdDataCleanup,
   ...householdTaskMembershipSync,
+  // Root shared-task triggers are retired only after these nested replacements
+  // are deployed and proven ACTIVE.
+  ...householdSharedTaskNotifications,
   // Homi+ purchase verification, lifecycle reconciliation and server-written
   // entitlement state. These exports fail closed until the durable Play
   // product/base-plan IDs and Android Publisher access are configured.

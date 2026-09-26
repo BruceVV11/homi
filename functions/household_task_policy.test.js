@@ -6,13 +6,25 @@ const {
   canRemoveBeforeHistoryExpires,
 } = require("./household_task_policy");
 
-test("migrated audience-version-0 tasks are never widened", () => {
-  const update = planCanonicalMembershipUpdate({
+test("migrated audience-version-0 tasks shrink but never widen", () => {
+  const original = {
     audienceVersion: 0,
     memberUids: ["alice", "bob"],
     assigneeUid: "bob",
-  }, ["alice", "bob", "charlie"]);
-  assert.equal(update, null);
+  };
+
+  const joinUpdate = planCanonicalMembershipUpdate(
+      original,
+      ["alice", "bob", "charlie"],
+  );
+  assert.equal(joinUpdate, null);
+
+  const leaveUpdate = planCanonicalMembershipUpdate(original, ["alice"]);
+  assert.deepEqual(leaveUpdate, {
+    memberUids: ["alice"],
+    assigneeUid: null,
+    assigneeName: "Unassigned",
+  });
 });
 
 test("canonical audience-version-1 tasks follow current Household members", () => {

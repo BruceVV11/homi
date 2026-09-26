@@ -102,6 +102,8 @@ A heart never enables or changes location sharing and is not proof that the reci
 
 ### Shared Tasks
 
+Canonical 0.12 Task notifications follow documents under `households/{householdId}/sharedTasks/{taskId}` through `onHouseholdSharedTaskCreated` and `onHouseholdSharedTaskUpdated`. The governed release deploys/proves these renamed nested triggers before retiring the two old root trigger names. Legacy Task migration copies are intentionally silent on creation; later completion changes on safely migrated Tasks can still notify normally.
+
 When a shared Task is created, the selected assignee is notified, or household-visible members are notified when the Task is for Anyone at home.
 
 When somebody other than the Task creator completes it, the creator receives a completion notification.

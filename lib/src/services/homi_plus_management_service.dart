@@ -11,7 +11,7 @@ class HomiDuoSeatResult {
 }
 
 class HomiPlusManagementService {
-  HomiPlusManagementService({required this.firebaseReady})
+  HomiPlusManagementService({required bool firebaseReady})
       : _cloudActions = HomiCloudActions(firebaseReady: firebaseReady);
 
   final HomiCloudActions _cloudActions;

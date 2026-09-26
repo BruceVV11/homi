@@ -2,16 +2,21 @@
 
 This section supersedes conflicting older state later in this handoff.
 
-- GitHub `main` contains the device/Windows-accepted 0.12 source via merge `82f8f5ba2e4fdb443142d3272c9f47cbb187f616`, but Firebase production is **still the 0.11 backend** until the governed 0.12 backend release passes.
-- Current backend-qualification PR: **#2 — Fix Homi 0.12 Firestore security qualification** on branch `homi-0.12-security-test-deps`.
-- Two qualification runs stopped before any Firebase production mutation:
-  1. the Firestore harness used an incompatible dependency pair;
-  2. after restoring the Firebase 12-compatible pair, all 23 tests executed and **21/23 passed**; the only failures were the two canonical shared-Task list-query cases.
-- The current corrective source anchors shared-Task canonical Household lookups to the authenticated user's server-owned membership pointer instead of deriving the external Household document path from query-time `resource.data.householdId`. It still requires both the membership pointer and parent Household member list, plus the Task's exact `householdId` and `memberUids` audience.
-- The existing shared-Task security test is strengthened in-place so the governed count remains **23** while proving both stale membership states fail closed.
-- Do not merge PR #2 or resume Firebase mutation until its exact live head passes **23/23** in Cloud Shell.
-- Once PR #2 is accepted/merged, carry the same security dependency/rule correction into `homi-0.13-billing-entitlements` before any 0.13 backend qualification.
-- 0.13 billing branch currently exists at `d5bf2286d9dbb7a3e55b5f9fb0eb77452acd5566`; it remains **implemented but not released** and must not skip the 0.12 production backend closure.
+- GitHub `main` contains the Windows/S25-accepted 0.12 app source via merge `82f8f5ba2e4fdb443142d3272c9f47cbb187f616`, but Firebase production is **still the 0.11 backend**. No 0.12 migration, Firestore deployment, or Function deployment has completed.
+- Current backend-qualification PR: **#2 — Fix Homi 0.12 Firestore security qualification**, branch `homi-0.12-security-test-deps`. Always re-fetch its exact live head.
+- Qualification evidence before the current correction:
+  1. Node 22, project number, runtime identity, Functions lint, task policy **5/5**, exact **37** exports and all **23** declared Firestore tests were proven.
+  2. First Firestore attempt stopped before mutation on an incompatible security-test dependency pair.
+  3. After restoring `@firebase/rules-unit-testing 5.0.2` + Firebase `12.19.0`, the emulator ran all 23 tests and produced **21/23**; both failures were the canonical shared-Task list query.
+  4. A rule-only attempt that moved the external lookup to the authenticated membership document still produced the same **21/23** signature. This demonstrated that the root-collection list design itself was not query-provable under the required canonical membership boundary.
+- The current durable correction stores canonical Tasks at `households/{householdId}/sharedTasks/{taskId}`. The Household ID is now part of the request path; the client listens to that exact subcollection with `memberUids array-contains uid`. Rules still require both the caller's membership pointer and the parent Household member list.
+- Root `sharedTasks/{taskId}` is migration-only and client access fails closed. The migration moves only safely mappable records into the exact Household subcollection and deletes each old root record in the same batch. Unsafe records remain stored but unreadable.
+- Migrated `audienceVersion: 0` Tasks may shrink when a member leaves but never widen when somebody joins later. New `audienceVersion: 1` Tasks follow current canonical membership.
+- The old root Task notification trigger exports are replaced one-for-one by `onHouseholdSharedTaskCreated` and `onHouseholdSharedTaskUpdated`. The governed export count remains **37**. The release helper deploys/proves the replacements before removing only the two retired root trigger names.
+- The security suite remains exactly **23** tests and now covers the nested Household path, recipient query, top-level fail-closed behavior, and both stale membership halves.
+- Because the same list-query failure occurred twice, do **not** perform another release/deployment attempt until the exact current PR head passes the complete pre-mutation contract: Functions syntax/lint, task policy **5/5**, exact **37** loaded exports, and Firestore **23/23**.
+- Once PR #2 is validated and merged, carry the same nested-task/security-test correction into `homi-0.13-billing-entitlements` before any 0.13 backend qualification.
+- 0.13 billing branch currently starts from `d5bf2286d9dbb7a3e55b5f9fb0eb77452acd5566`; it remains **implemented but not released** and must not skip 0.12 backend closure.
 - Current commercial contract: Personal R79.99/month or R799.99/year; Duo R129.99/month or R1,299.99/year; Household R199.99/month or R1,999.99/year for four, plus R50/month or R500/year per additional member up to ten; maximum three active live viewers per covered sender; receiving remains free.
 - Current workflow names: **mobile-app-development**, **concept-lab-delivery-integrity**, and later **app-store-deployment**. Any older `concept-lab-release-integrity` wording below is obsolete.
 

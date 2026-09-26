@@ -159,6 +159,7 @@ Personal/Duo cadence changes stay within one subscription product. Household cap
 - server rate limits for billing verification and Duo seat changes;
 - multi-source `billingCoverage` reduction into self-readable `entitlements/{uid}` so one expired source cannot erase another valid source;
 - current canonical Household derives Household coverage;
+- Household coverage always counts the purchaser inside the verified paid member limit and cannot over-cover by one when the purchaser is later in canonical member ordering;
 - accepted trusted connection derives the Duo second seat;
 - Duo cooldown cannot be reset by unassign/disconnect;
 - paid-term expiry normalization requires a future verified paid-through timestamp before active/grace/canceled state can grant capability;
@@ -169,12 +170,12 @@ Personal/Duo cadence changes stay within one subscription product. Household cap
 
 Source-level evidence already obtained in this development pass:
 
-- **DONE source-only** Node 22 pure Functions policy run: **16/16 passed** (5 shared-task + 11 billing). This does **not** replace the governed dependency-loaded Functions/export/emulator gate.
+- **DONE historical source-only** an earlier Node 22 pure Functions policy run passed **16/16** before the exact Household capacity regression guard was added. The current candidate now requires **17/17** (5 shared-task + 12 billing); that exact suite is **VERIFY**, not yet claimed.
 
 0.13 backend expected governed gates:
 
 - **VERIFY** Node 22 dependency install/lint, including the exact current `billing.js` source;
-- **VERIFY** pure Functions policy suite **16/16** under the governed dependency-loaded worker;
+- **VERIFY** pure Functions policy suite **17/17** under the governed dependency-loaded worker;
 - **VERIFY** exact **43** Function exports;
 - **VERIFY** Firestore emulator **25/25**: existing 23 + 2 billing boundary tests;
 - **BLOCKER** source-controlled Play catalog IDs are currently blank;
@@ -259,9 +260,9 @@ Permanent package: `za.co.theconceptlab.homi`.
 
 1. Resolve/update the tracked `pubspec.lock` from Bruce's real Flutter 3.41.5 toolchain because the Play Billing dependencies are new; this is the next unresolved source-validation dependency, not a diagnostic rerun.
 2. Close the final exact 0.12 validation/merge/governed Firebase deployment before any billing deployment mutates production.
-3. Create the three real Homi+ subscription products/base plans in Play Console and record the exact permanent IDs.
+3. Create the nine real Homi+ subscription products in Play Console — Personal, Duo, and Household 4–10 — with monthly and annual base plans, then record the exact permanent IDs.
 4. Populate the governed client/server catalogs with those IDs; configure Android Publisher API access and RTDN Pub/Sub.
-5. Run exact-head 0.13 Windows/Node/security gates, then S25 Ultra regression.
+5. Run exact-head 0.13 Windows/Node/security gates, including **17/17** Functions policy tests, then S25 Ultra regression.
 6. Merge/deploy 0.13 billing backend only after provider prerequisites are present.
 7. Upload/store-install the Internal Testing AAB and prove purchase, cross-tier replacement and the complete billing lifecycle.
 8. Activate paid enforcement only after that proof.

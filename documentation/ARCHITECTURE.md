@@ -132,7 +132,7 @@ Leaving/removal revokes cloud access but does not erase the local copy already d
 
 ### Household deletion
 
-`onHomiHouseholdDeletedDataCleanup` removes nested Shared Household data and newer canonical shared Tasks after legitimate parent Household deletion.
+Deleting a Firestore document does not recursively delete its subcollections. `onHomiHouseholdDeletedDataCleanup` therefore removes both nested Household `data` and canonical `sharedTasks` documents in bounded batches after the parent Household is deleted.
 
 ## People and connection codes
 
@@ -148,11 +148,11 @@ People connection subscriptions start independently of GPS initialization.
 
 Private **Me** Tasks remain local.
 
-Shared Tasks keep the existing `sharedTasks` compatibility collection/callable names, but new records derive canonical `householdId` and member audience from real Household membership.
+Canonical Shared Tasks use `households/{householdId}/sharedTasks/{taskId}`; the root `sharedTasks` collection is retained only as a fail-closed migration source for pre-0.12 records. The existing callable names `createSharedTask`, `toggleSharedTask` and `removeSharedTask` remain stable. New Tasks derive `householdId` and `memberUids` from the creator's canonical Household.
 
-New audience-version-1 Tasks follow current canonical membership. Removed assignee/completion UIDs are stripped.
+New `audienceVersion: 1` Tasks follow current canonical membership. Removed assignee/completion UIDs are stripped. Migrated `audienceVersion: 0` Tasks are shrink-only: later member removal may reduce the safe audience, but a later Household join can never widen it.
 
-Pre-0.12 Tasks use a governed intersection-only migration and `audienceVersion: 0`, so later Household joins cannot widen historical audiences.
+The UI source for Household assignees remains canonical Household membership rather than a People preference.
 
 ## Location/privacy
 

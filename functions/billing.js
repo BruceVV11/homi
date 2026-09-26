@@ -17,6 +17,7 @@ const {
   normalizePlayState,
   effectivePlayState,
   grantsPaidAccess,
+  householdRecipientUids,
   entitlementCapabilities,
   projectEntitlementSources,
   canAdoptCanonicalPurchase,
@@ -364,8 +365,16 @@ async function entitlementRecipientsForPurchase(purchase) {
     if (household) {
       householdId = household.householdId;
       const paidMemberLimit = Number(data.householdMemberLimit || 4);
-      for (const memberUid of household.memberUids.slice(0, paidMemberLimit)) {
-        recipients.set(memberUid, memberUid === purchaserUid ? "purchaser" : "household_member");
+      const coveredHouseholdUids = householdRecipientUids(
+          household.memberUids,
+          purchaserUid,
+          paidMemberLimit,
+      );
+      for (const memberUid of coveredHouseholdUids) {
+        recipients.set(
+            memberUid,
+            memberUid === purchaserUid ? "purchaser" : "household_member",
+        );
       }
     }
   }

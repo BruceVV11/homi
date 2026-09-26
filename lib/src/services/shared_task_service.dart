@@ -42,14 +42,15 @@ class SharedTaskService {
         return;
       }
 
-      // Both query constraints are deliberate security inputs. Firestore rules
-      // are not filters: householdId proves the canonical Household scope while
-      // memberUids preserves the exact audience of migrated pre-0.12 Tasks.
-      // New 0.12 Tasks use the full canonical Household audience and are kept
-      // aligned by onHouseholdTaskMembershipChanged.
+      // Shared Tasks live beneath the exact canonical Household. The collection
+      // path proves Household scope to Firestore rules; memberUids preserves
+      // the exact audience of migrated pre-0.12 Tasks. New 0.12 Tasks use the
+      // full current Household audience and are kept aligned by
+      // onHouseholdTaskMembershipChanged.
       taskSub = _firestore
+          .collection('households')
+          .doc(household.id)
           .collection('sharedTasks')
-          .where('householdId', isEqualTo: household.id)
           .where('memberUids', arrayContains: user.uid)
           .snapshots()
           .listen(

@@ -183,7 +183,7 @@ exports.createSharedTask = onCall(
       }, "You have reached today's shared-task limit.");
 
       const household = await canonicalHouseholdFor(creatorUid);
-      if (!accessHousehold) {
+      if (!household) {
         throw new HttpsError(
             "failed-precondition",
             "Create or join a Shared Household before sharing a household task.",

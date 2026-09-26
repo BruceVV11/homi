@@ -488,15 +488,30 @@ async function deleteCloudDataForUid(uid, {deleteUserDocument = true} = {}) {
       userSnapshot.exists && userSnapshot.data().homiCode,
   );
 
-  const [asA, asB, ownPreferences, ownShares, devices, sharedTasks,
-    sentHearts, receivedHearts, campaigns, rateLimits, codeDocs] =
-    await Promise.all([
+  const membershipSnapshot = await db.collection("householdMemberships")
+      .doc(uid)
+      .get();
+  const currentHouseholdId = membershipSnapshot.exists &&
+      typeof membershipSnapshot.data().householdId === "string" ?
+    membershipSnapshot.data().householdId.trim() : "";
+  const currentHouseholdTasks = currentHouseholdId ?
+    db.collection("households")
+        .doc(currentHouseholdId)
+        .collection("sharedTasks")
+        .where("memberUids", "array-contains", uid)
+        .get() :
+    Promise.resolve({docs: []});
+
+  const [asA, asB, ownPreferences, ownShares, devices, rootSharedTasks,
+    householdSharedTasks, sentHearts, receivedHearts, campaigns, rateLimits,
+    codeDocs] = await Promise.all([
       db.collection("connections").where("aUid", "==", uid).get(),
       db.collection("connections").where("bUid", "==", uid).get(),
       db.collection("peoplePreferences").doc(uid).collection("people").get(),
       db.collection("locationShares").doc(uid).collection("viewers").get(),
       userRef.collection("devices").get(),
       db.collection("sharedTasks").where("memberUids", "array-contains", uid).get(),
+      currentHouseholdTasks,
       db.collection("heartCooldowns").where("senderUid", "==", uid).get(),
       db.collection("heartCooldowns").where("recipientUid", "==", uid).get(),
       db.collection("notificationCampaigns").where("createdByUid", "==", uid).get(),
@@ -509,9 +524,14 @@ async function deleteCloudDataForUid(uid, {deleteUserDocument = true} = {}) {
     connections.set(document.id, document);
   });
 
+  const sharedTaskDocuments = new Map();
+  [...rootSharedTasks.docs, ...householdSharedTasks.docs].forEach((document) => {
+    sharedTaskDocuments.set(document.ref.path, document);
+  });
+
   let sharedTasksRemoved = 0;
   let sharedTasksDetached = 0;
-  for (const document of sharedTasks.docs) {
+  for (const document of sharedTaskDocuments.values()) {
     const data = document.data();
     if (data.createdByUid === uid) {
       await document.ref.delete();

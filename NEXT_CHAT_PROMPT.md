@@ -181,12 +181,11 @@ New 0.12 shared Tasks use the existing public callable names but derive authoriz
 
 New tasks carry canonical `householdId`, `audienceVersion: 1` and current canonical `memberUids`.
 
-The client shared-task query requires both:
+The client reads shared Tasks only from the exact canonical path:
 
-- `householdId == current Household`; and
-- `memberUids array-contains current UID`.
+`households/{currentHouseholdId}/sharedTasks`
 
-`firebase/firestore.indexes.json` contains the composite index for this query. Firestore rules additionally require current canonical Household membership.
+and constrains `memberUids array-contains current UID`. Firestore rules additionally require both the caller's membership pointer and the parent Household member list. The older root composite index is retained only to avoid coupling this release to an unnecessary index deletion; the nested query does not depend on it.
 
 Pre-0.12 Tasks are handled by `functions/migrate_legacy_shared_tasks.js` during governed deployment. The helper defaults to dry-run. A safe legacy Task is attached only to the creator's current canonical Household and keeps only the intersection of its historical recipients and current Household members. It receives `audienceVersion: 0`, so it is never silently widened to newer Household members. Unsafe/unmappable legacy Tasks fail closed rather than being deleted.
 
@@ -213,8 +212,8 @@ Key source:
 The 0.12 Functions entrypoint is governed at exactly **37 unique exports**:
 
 - the preference/task modules override existing callable names;
-- `onHomiHouseholdDeletedDataCleanup` is a new export;
-- `onHouseholdTaskMembershipChanged` is a new export.
+- `onHomiHouseholdDeletedDataCleanup` and `onHouseholdTaskMembershipChanged` are present;
+- the two old root Task notification trigger exports are removed from the entrypoint and replaced one-for-one by `onHouseholdSharedTaskCreated` and `onHouseholdSharedTaskUpdated`.
 
 `scripts/deploy-notification-backend.sh` requires:
 

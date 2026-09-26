@@ -84,7 +84,7 @@ Domains:
 - maintenance/repair events;
 - utility readings.
 
-Personal **Me** Tasks remain local/private. Shared one-off Tasks retain their compatibility collection but now use canonical Household authorization.
+Personal **Me** Tasks remain local/private. Canonical shared Tasks use `households/{householdId}/sharedTasks/{taskId}`; the root `sharedTasks` collection is migration-only and fails closed to clients.
 
 0.12 safety contracts:
 
@@ -92,15 +92,17 @@ Personal **Me** Tasks remain local/private. Shared one-off Tasks retain their co
 - **DONE in source** authoritative non-cache empty state required before the narrow first-owner migration;
 - **DONE in source** old unmatched records stay private when joining an existing/different Household;
 - **DONE in source** local-only mode suppresses Household synchronization;
-- **DONE in source** account/Household deletion cleanup and canonical shared-task membership handling;
-- **DONE in source** safe legacy shared-task migration that never widens old audiences.
+- **DONE in source** parent Household deletion cleans nested `data` and canonical nested `sharedTasks` in bounded batches;
+- **DONE in source** shared Task create/toggle/remove retain their callable names while storage is Household-path-authoritative;
+- **DONE in source** migrated historical Task audiences may shrink when members leave but never widen when later members join;
+- **DONE in source** safe root-to-Household legacy Task migration with fail-closed unmappable records.
 
 Required before calling 0.12 deployed/accepted:
 
 - **VERIFY** exact governed Node 22 backend gate;
 - **VERIFY** exact **37** Function exports;
 - **VERIFY** existing Functions task policy **5/5**;
-- **VERIFY** Firestore **23/23**;
+- **DONE source gate** Firestore **23/23** passed on accepted 0.12 PR head `709a8c92458b7b3b056e8e55e52eec05e8d8757b` before merge;
 - **VERIFY** legacy shared-task migration dry-run/apply/assert-stable;
 - **VERIFY** Firestore rules/indexes and all 37 Functions deployed from the accepted merge SHA;
 - **VERIFY** existing local Routines/Supplies/Home records survive and shared add/update/delete survives restart;

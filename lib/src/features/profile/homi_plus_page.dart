@@ -34,6 +34,7 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
   List<TrustedConnection> _connections = const <TrustedConnection>[];
   bool _loadingCatalog = true;
   bool _busy = false;
+  int _householdMembers = homiPlusHouseholdIncludedMemberLimit;
 
   User? get _user =>
       _firebaseReady ? FirebaseAuth.instance.currentUser : null;
@@ -120,11 +121,16 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
 
   Future<void> _purchase(
     HomiPlusPlanDefinition definition,
-    HomiBillingCadence cadence,
-  ) async {
+    HomiBillingCadence cadence, {
+    int? householdMemberLimit,
+  }) async {
     if (_busy) return;
     final catalog = _catalog;
-    final offer = catalog?.offerFor(definition.plan, cadence);
+    final offer = catalog?.offerFor(
+      definition.plan,
+      cadence,
+      householdMemberLimit: householdMemberLimit,
+    );
     if (offer == null) {
       await showHomiInfoSheet(
         context,
@@ -197,7 +203,13 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
   }
 
   Future<void> _manageInPlay(HomiEntitlement entitlement) async {
-    final product = HomiPlayBillingCatalog.current.forPlan(entitlement.plan);
+    final product = HomiPlayBillingCatalog.current.forPlan(
+      entitlement.plan,
+      householdMemberLimit: entitlement.plan == HomiPlusPlan.household &&
+              entitlement.householdMemberLimit > 0
+          ? entitlement.householdMemberLimit
+          : null,
+    );
     final productId = product?.productId.trim() ?? '';
     final parameters = <String, String>{
       'package': 'za.co.theconceptlab.homi',
@@ -369,41 +381,64 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
                       child: Center(child: CircularProgressIndicator()),
                     ),
                   )
-                else if (_catalog?.catalogConfigured != true)
-                  const _BillingSetupCard()
                 else ...[
-                  if (_catalog?.message != null)
+                  if (_catalog?.catalogConfigured != true)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 10),
+                      child: _BillingSetupCard(),
+                    ),
+                  if (_catalog?.message != null &&
+                      _catalog?.catalogConfigured == true)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: _SmallNotice(text: _catalog!.message!),
                     ),
                   ...HomiPlusPlans.all
                       .where((definition) => definition.isPaid)
-                      .map((definition) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: _PlanCard(
-                              definition: definition,
-                              monthlyOffer: _catalog?.offerFor(
-                                definition.plan,
-                                HomiBillingCadence.monthly,
-                              ),
-                              annualOffer: _catalog?.offerFor(
-                                definition.plan,
-                                HomiBillingCadence.annual,
-                              ),
-                              busy: _busy,
-                              onMonthly: () => _purchase(
-                                definition,
-                                HomiBillingCadence.monthly,
-                              ),
-                              onAnnual: definition.annualPriceCents == null
-                                  ? null
-                                  : () => _purchase(
-                                        definition,
-                                        HomiBillingCadence.annual,
-                                      ),
-                            ),
-                          )),
+                      .map((definition) {
+                    final householdLimit =
+                        definition.plan == HomiPlusPlan.household
+                            ? _householdMembers
+                            : null;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _PlanCard(
+                        definition: definition,
+                        monthlyOffer: _catalog?.offerFor(
+                          definition.plan,
+                          HomiBillingCadence.monthly,
+                          householdMemberLimit: householdLimit,
+                        ),
+                        annualOffer: _catalog?.offerFor(
+                          definition.plan,
+                          HomiBillingCadence.annual,
+                          householdMemberLimit: householdLimit,
+                        ),
+                        householdMembers: householdLimit,
+                        onHouseholdMembersChanged: householdLimit == null
+                            ? null
+                            : (value) => setState(
+                                  () => _householdMembers =
+                                      HomiPlusPlans.normalizeHouseholdMemberCount(
+                                    value,
+                                  ),
+                                ),
+                        busy: _busy,
+                        onMonthly: () => _purchase(
+                          definition,
+                          HomiBillingCadence.monthly,
+                          householdMemberLimit: householdLimit,
+                        ),
+                        onAnnual: definition.annualPriceCents == null
+                            ? null
+                            : () => _purchase(
+                                  definition,
+                                  HomiBillingCadence.annual,
+                                  householdMemberLimit: householdLimit,
+                                ),
+                      ),
+                    );
+                  }),
                 ],
                 const SizedBox(height: 8),
                 SizedBox(
@@ -537,17 +572,31 @@ class _PlanCard extends StatelessWidget {
     required this.busy,
     required this.onMonthly,
     required this.onAnnual,
+    this.householdMembers,
+    this.onHouseholdMembersChanged,
   });
 
   final HomiPlusPlanDefinition definition;
   final HomiStoreOffer? monthlyOffer;
   final HomiStoreOffer? annualOffer;
+  final int? householdMembers;
+  final ValueChanged<int>? onHouseholdMembersChanged;
   final bool busy;
   final VoidCallback onMonthly;
   final VoidCallback? onAnnual;
 
   @override
   Widget build(BuildContext context) {
+    final memberCount = householdMembers;
+    final monthlyCents = definition.plan == HomiPlusPlan.household &&
+            memberCount != null
+        ? HomiPlusPlans.householdMonthlyPriceCents(memberCount)
+        : definition.monthlyPriceCents;
+    final annualCents = definition.plan == HomiPlusPlan.household &&
+            memberCount != null
+        ? HomiPlusPlans.householdAnnualPriceCents(memberCount)
+        : definition.annualPriceCents;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(17),
@@ -559,6 +608,66 @@ class _PlanCard extends StatelessWidget {
             const SizedBox(height: 5),
             Text(definition.summary,
                 style: Theme.of(context).textTheme.bodyMedium),
+            if (memberCount != null &&
+                onHouseholdMembersChanged != null) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: HomiColors.sage.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: HomiColors.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Household members',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: busy ||
+                                  memberCount <=
+                                      homiPlusHouseholdIncludedMemberLimit
+                              ? null
+                              : () => onHouseholdMembersChanged!(
+                                    memberCount - 1,
+                                  ),
+                          icon: const Icon(Icons.remove_circle_outline_rounded),
+                        ),
+                        Expanded(
+                          child: Text(
+                            '$memberCount members',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: busy ||
+                                  memberCount >=
+                                      homiPlusHouseholdMaximumMemberLimit
+                              ? null
+                              : () => onHouseholdMembersChanged!(
+                                    memberCount + 1,
+                                  ),
+                          icon: const Icon(Icons.add_circle_outline_rounded),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      memberCount == homiPlusHouseholdIncludedMemberLimit
+                          ? 'Four members are included.'
+                          : '${memberCount - homiPlusHouseholdIncludedMemberLimit} additional member${memberCount - homiPlusHouseholdIncludedMemberLimit == 1 ? '' : 's'} · R50/month or R500/year each.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
@@ -566,7 +675,7 @@ class _PlanCard extends StatelessWidget {
                 onPressed: busy || monthlyOffer == null ? null : onMonthly,
                 child: Text(
                   monthlyOffer == null
-                      ? 'Monthly offer unavailable'
+                      ? '${_rands(monthlyCents)} / month'
                       : '${monthlyOffer!.displayPrice} / month',
                 ),
               ),
@@ -579,10 +688,17 @@ class _PlanCard extends StatelessWidget {
                   onPressed: busy || annualOffer == null ? null : onAnnual,
                   child: Text(
                     annualOffer == null
-                        ? 'Annual offer unavailable'
+                        ? '${annualCents == null ? 'Annual' : _rands(annualCents)} / year'
                         : '${annualOffer!.displayPrice} / year',
                   ),
                 ),
+              ),
+            ],
+            if (monthlyOffer == null && annualOffer == null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Google Play purchase setup pending. Prices shown are the approved South African launch prices.',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ],
@@ -590,6 +706,11 @@ class _PlanCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _rands(int cents) {
+  final value = cents / 100;
+  return 'R${value.toStringAsFixed(2)}';
 }
 
 class _BillingSetupCard extends StatelessWidget {

@@ -15,6 +15,7 @@ class HomiStoreOffer {
   const HomiStoreOffer({
     required this.plan,
     required this.cadence,
+    required this.householdMemberLimit,
     required this.productDetails,
     required this.basePlanId,
     required this.displayPrice,
@@ -23,6 +24,7 @@ class HomiStoreOffer {
 
   final HomiPlusPlan plan;
   final HomiBillingCadence cadence;
+  final int householdMemberLimit;
   final ProductDetails productDetails;
   final String basePlanId;
   final String displayPrice;
@@ -42,9 +44,19 @@ class HomiBillingCatalogSnapshot {
   final List<HomiStoreOffer> offers;
   final String? message;
 
-  HomiStoreOffer? offerFor(HomiPlusPlan plan, HomiBillingCadence cadence) {
+  HomiStoreOffer? offerFor(
+    HomiPlusPlan plan,
+    HomiBillingCadence cadence, {
+    int? householdMemberLimit,
+  }) {
     for (final offer in offers) {
-      if (offer.plan == plan && offer.cadence == cadence) return offer;
+      if (offer.plan != plan || offer.cadence != cadence) continue;
+      if (plan == HomiPlusPlan.household &&
+          householdMemberLimit != null &&
+          offer.householdMemberLimit != householdMemberLimit) {
+        continue;
+      }
+      return offer;
     }
     return null;
   }
@@ -173,6 +185,7 @@ class HomiBillingService {
         HomiStoreOffer(
           plan: productRef.plan,
           cadence: cadence,
+          householdMemberLimit: productRef.householdMemberLimit,
           productDetails: details,
           basePlanId: basePlanId,
           displayPrice: details.price,
@@ -196,25 +209,43 @@ class HomiBillingService {
     final user = _requireUser();
     start();
 
-    // Personal, Duo and Household have different benefits, so they are separate
-    // Play subscription products. If Play reports an existing active Homi+
-    // purchase, pass it as the old subscription so this becomes a governed
-    // upgrade/downgrade instead of accidentally selling a second concurrent
-    // Homi+ subscription. Time proration applies the new tier immediately and
-    // credits remaining value from the old tier.
+    // Household seat counts are separate subscription products. This keeps the
+    // current Flutter Billing 8 integration on Google's normal one-product
+    // replacement path while still charging the exact recurring seat tier.
+    // Monthly/annual switches within the same product intentionally omit an
+    // explicit replacement mode so the Play Console base-plan rule applies.
     final oldSubscription = await _currentHomiSubscription(user.uid);
+    ChangeSubscriptionParam? changeSubscriptionParam;
+    if (oldSubscription != null &&
+        oldSubscription.productID != offer.productDetails.id) {
+      final oldRef = catalog.forProductId(oldSubscription.productID);
+      final newRef = catalog.forProductId(offer.productDetails.id);
+      final isUpgrade = _productRank(newRef) >= _productRank(oldRef);
+      changeSubscriptionParam = ChangeSubscriptionParam(
+        oldPurchaseDetails: oldSubscription,
+        replacementMode: isUpgrade
+            ? ReplacementMode.chargeProratedPrice
+            : ReplacementMode.deferred,
+      );
+    }
+
     final parameter = GooglePlayPurchaseParam(
       productDetails: offer.productDetails,
       applicationUserName: obfuscatedAccountId(user.uid),
       offerToken: offer.offerToken,
-      changeSubscriptionParam: oldSubscription == null
-          ? null
-          : ChangeSubscriptionParam(
-              oldPurchaseDetails: oldSubscription,
-              replacementMode: ReplacementMode.withTimeProration,
-            ),
+      changeSubscriptionParam: changeSubscriptionParam,
     );
     return _inAppPurchase.buyNonConsumable(purchaseParam: parameter);
+  }
+
+  int _productRank(HomiPlayProductRef? product) {
+    if (product == null) return 0;
+    return switch (product.plan) {
+      HomiPlusPlan.free => 0,
+      HomiPlusPlan.personal => 100,
+      HomiPlusPlan.duo => 200,
+      HomiPlusPlan.household => 300 + product.householdMemberLimit,
+    };
   }
 
   Future<GooglePlayPurchaseDetails?> _currentHomiSubscription(String uid) async {

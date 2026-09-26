@@ -184,13 +184,26 @@ deploy_canonical_task_boundary() {
 
 delete_legacy_task_notification_triggers() {
   local legacy_name
-  for legacy_name in     "${LEGACY_TASK_CREATED_FUNCTION}"     "${LEGACY_TASK_UPDATED_FUNCTION}"; do
-    if gcloud functions describe "${legacy_name}"         --v2         --region "${FUNCTION_REGION}"         --project "${PROJECT_ID}" >/dev/null 2>&1; then
+  for legacy_name in \
+    "${LEGACY_TASK_CREATED_FUNCTION}" \
+    "${LEGACY_TASK_UPDATED_FUNCTION}"; do
+    if gcloud functions describe "${legacy_name}" \
+        --v2 \
+        --region "${FUNCTION_REGION}" \
+        --project "${PROJECT_ID}" >/dev/null 2>&1; then
       echo "==> Removing retired root shared-task trigger ${legacy_name}"
-      run_firebase functions:delete "${legacy_name}"         --region "${FUNCTION_REGION}"         --project "${PROJECT_ID}"         --force
-    elif gcloud functions describe "${legacy_name}"         --region "${FUNCTION_REGION}"         --project "${PROJECT_ID}" >/dev/null 2>&1; then
+      run_firebase functions:delete "${legacy_name}" \
+        --region "${FUNCTION_REGION}" \
+        --project "${PROJECT_ID}" \
+        --force
+    elif gcloud functions describe "${legacy_name}" \
+        --region "${FUNCTION_REGION}" \
+        --project "${PROJECT_ID}" >/dev/null 2>&1; then
       echo "==> Removing retired 1st-gen root shared-task trigger ${legacy_name}"
-      run_firebase functions:delete "${legacy_name}"         --region "${FUNCTION_REGION}"         --project "${PROJECT_ID}"         --force
+      run_firebase functions:delete "${legacy_name}" \
+        --region "${FUNCTION_REGION}" \
+        --project "${PROJECT_ID}" \
+        --force
     else
       echo "==> Retired root shared-task trigger ${legacy_name} is already absent"
     fi

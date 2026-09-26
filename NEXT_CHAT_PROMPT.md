@@ -164,6 +164,7 @@ Source fixes applied after that run:
 
 - constructor now accepts `required bool firebaseReady` and passes it to `HomiCloudActions`;
 - backend live-location cap changed from five to the approved three viewers;
+- `functions/package.json` lint now explicitly syntax-checks `location_share.js`;
 - commercial guardrail and Homi+ plan tests now assert the approved three-viewer and R79.99 / R129.99 / R199.99 launch contract;
 - location-safety documentation now distinguishes the current three-viewer candidate from older historical behavior.
 

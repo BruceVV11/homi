@@ -135,7 +135,7 @@ Shared data remains locally persisted while synchronized. Different IDs merge na
 
 Removing/leaving a Household revokes future cloud access but cannot reliably erase copies previously delivered to another device. Public wording must not promise retroactive endpoint erasure.
 
-Deleting a canonical Household triggers bounded cleanup of nested shared data plus newer canonical shared Tasks, but device-local copies may remain until separately erased.
+Deleting a canonical Household triggers bounded cleanup of nested synchronized `data` and canonical `sharedTasks`, but device-local copies may remain until separately erased.
 
 ## Arrival check-in minimisation
 

@@ -114,8 +114,8 @@ Implemented source contracts:
 - **DONE in source** a member joining an existing/different Household does not silently upload unrelated pre-existing local records.
 - **DONE in source** local-only mode suppresses the Household synchronizer even if Firebase still has a cached authenticated user.
 - **DONE in source** deterministic record IDs and versioned envelope.
-- **DONE in source** parent Household deletion has a bounded cleanup trigger for nested shared data and canonical new shared Tasks.
-- **DONE in source** shared Task creation/toggle/removal are bound to canonical Household membership while retaining their deployed callable names.
+- **DONE in source** parent Household deletion has a bounded cleanup trigger for nested shared `data` and canonical nested `sharedTasks`.
+- **DONE in source** shared Task creation/toggle/removal retain their callable names but read/write `households/{householdId}/sharedTasks/{taskId}`, making Household scope path-authoritative.
 - **DONE in source** canonical shared Tasks remain usable by their safe current Household audience if the original creator leaves; the current Household owner has explicit recovery actions.
 - **DONE in source** `onHouseholdTaskMembershipChanged` updates only audience-version-1 Tasks, strips removed assignee/completion UIDs, and never widens migrated audience-version-0 Tasks.
 - **DONE in source** pre-0.12 Tasks are migrated only when safely mappable and are not silently widened to a newer Household audience.
@@ -145,7 +145,7 @@ Established backend identity:
 - **DONE in source** `setTrustedPersonPreference` keeps the public name but derives Household/Friend scope server-side.
 - **DONE in source** `createSharedTask`, `toggleSharedTask`, `removeSharedTask` keep public names but use canonical Household membership and durable Household ownership semantics.
 - **DONE in source** `onHomiHouseholdDeletedDataCleanup` adds bounded orphan-data cleanup.
-- **DONE in source** `onHouseholdTaskMembershipChanged` reconciles only new canonical shared Task audiences after Household changes; migrated historical audiences remain privacy-stable.
+- **DONE in source** `onHouseholdTaskMembershipChanged` fully aligns new canonical audiences and shrink-only reconciles migrated historical audiences so departures are removed without later joins widening old Tasks.
 - **DONE in source** deployment helper source-completeness list updated.
 - **DONE in source** exact Functions export guard is **37**: two new trigger names (cleanup + Task-membership sync); preference/task modules override existing callable names.
 - **DONE source preflight only** `household_task_policy.test.js` defines five pure policy tests for historical-audience non-widening, canonical membership reconciliation, attribution cleanup and Household-owner recovery. The policy suite passed 5/5 under Node 22 during source preflight, but this does not replace the governed Cloud Shell run.
@@ -157,7 +157,7 @@ Firestore 0.12 boundary:
 - deterministic `domain--itemId` identity is enforced;
 - payload ID, schema version, authenticated actor and server request timestamp are enforced;
 - canonical shared-Task reads require both `householdId == current Household` and exact `memberUids array-contains current UID` query constraints;
-- legacy shared Tasks without a safely migrated canonical Household fail closed;
+- the pre-0.12 root `sharedTasks` collection is migration-only and fails closed to clients; safely mappable Tasks move atomically into their canonical Household subcollection;
 - outsiders and stale/forged half-memberships are denied in the source-controlled tests.
 
 Governed backend gate still required before deployment:

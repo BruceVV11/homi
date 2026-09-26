@@ -3,7 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const EXPECTED_POLICY_TEST_COUNT = 16;
+const EXPECTED_POLICY_TEST_COUNT = 17;
 const TEST_FILES = [
   "household_task_policy.test.js",
   "billing_policy.test.js",

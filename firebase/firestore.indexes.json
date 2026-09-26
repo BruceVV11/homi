@@ -1,4 +1,19 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "sharedTasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "householdId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "memberUids",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

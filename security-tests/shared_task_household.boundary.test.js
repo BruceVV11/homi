@@ -106,6 +106,21 @@ test("canonical Household task query requires Household path and recipient audie
       doc(mallory, "households/home1/sharedTasks/task1"),
   ));
 
+  // A malformed stored audience must still fail closed on direct reads even
+  // though list authorization relies on the array-contains query constraint.
+  await seed("households/home1/sharedTasks/malformedAudience", {
+    householdId: "home1",
+    audienceVersion: 1,
+    title: "Malformed audience",
+    createdByUid: "alice",
+    createdByName: "Alice",
+    memberUids: "bob",
+    createdAt: Timestamp.now(),
+  });
+  await assertFails(getDoc(
+      doc(bob, "households/home1/sharedTasks/malformedAudience"),
+  ));
+
   const visible = await assertSucceeds(getDocs(query(
       collection(bob, "households/home1/sharedTasks"),
       where("memberUids", "array-contains", "bob"),

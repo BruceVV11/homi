@@ -47,11 +47,11 @@ async function removeSeed(pathName) {
   });
 }
 
-async function seedHousehold() {
+async function seedHousehold(memberUids = ["alice", "bob"]) {
   await seed("households/home1", {
     name: "Durban Home",
     ownerUid: "alice",
-    memberUids: ["alice", "bob"],
+    memberUids,
     pendingInviteUids: [],
     memberLimit: 4,
     schemaVersion: 1,
@@ -73,7 +73,7 @@ async function seedHousehold() {
 }
 
 async function seedCanonicalTask() {
-  await seed("sharedTasks/task1", {
+  await seed("households/home1/sharedTasks/task1", {
     householdId: "home1",
     audienceVersion: 1,
     title: "Take bins out",
@@ -92,33 +92,49 @@ async function seedCanonicalTask() {
   });
 }
 
-test("canonical Household task query requires both Household and recipient constraints", async () => {
+test("canonical Household task query requires Household path and recipient audience", async () => {
   await seedHousehold();
   await seedCanonicalTask();
 
   const bob = env.authenticatedContext("bob").firestore();
   const mallory = env.authenticatedContext("mallory").firestore();
 
-  await assertSucceeds(getDoc(doc(bob, "sharedTasks/task1")));
-  await assertFails(getDoc(doc(mallory, "sharedTasks/task1")));
+  await assertSucceeds(getDoc(
+      doc(bob, "households/home1/sharedTasks/task1"),
+  ));
+  await assertFails(getDoc(
+      doc(mallory, "households/home1/sharedTasks/task1"),
+  ));
+
+  // A malformed stored audience must still fail closed on direct reads even
+  // though list authorization relies on the array-contains query constraint.
+  await seed("households/home1/sharedTasks/malformedAudience", {
+    householdId: "home1",
+    audienceVersion: 1,
+    title: "Malformed audience",
+    createdByUid: "alice",
+    createdByName: "Alice",
+    memberUids: "bob",
+    createdAt: Timestamp.now(),
+  });
+  await assertFails(getDoc(
+      doc(bob, "households/home1/sharedTasks/malformedAudience"),
+  ));
 
   const visible = await assertSucceeds(getDocs(query(
-      collection(bob, "sharedTasks"),
-      where("householdId", "==", "home1"),
+      collection(bob, "households/home1/sharedTasks"),
       where("memberUids", "array-contains", "bob"),
   )));
   assert.equal(visible.size, 1);
 
-  // Firestore rules are not filters. Omitting householdId must fail rather than
-  // allowing memberUids alone to recreate the pre-0.12 trust boundary.
-  await assertFails(getDocs(query(
-      collection(bob, "sharedTasks"),
-      where("memberUids", "array-contains", "bob"),
-  )));
+  // Firestore rules are not filters. The nested Household path supplies the
+  // canonical scope, while the exact recipient constraint is still required.
+  await assertFails(getDocs(
+      collection(bob, "households/home1/sharedTasks"),
+  ));
 
   await assertFails(getDocs(query(
-      collection(mallory, "sharedTasks"),
-      where("householdId", "==", "home1"),
+      collection(mallory, "households/home1/sharedTasks"),
       where("memberUids", "array-contains", "mallory"),
   )));
 });
@@ -137,11 +153,22 @@ test("legacy or stale shared Tasks fail closed outside canonical membership", as
   const bob = env.authenticatedContext("bob").firestore();
   await assertFails(getDoc(doc(bob, "sharedTasks/legacy")));
 
-  await removeSeed("householdMemberships/bob");
-  await assertFails(getDoc(doc(bob, "sharedTasks/task1")));
+  // A stale membership pointer alone is insufficient if the canonical
+  // Household parent has already removed this user.
+  await seedHousehold(["alice"]);
+  await assertFails(getDoc(doc(bob, "households/home1/sharedTasks/task1")));
   await assertFails(getDocs(query(
-      collection(bob, "sharedTasks"),
-      where("householdId", "==", "home1"),
+      collection(bob, "households/home1/sharedTasks"),
+      where("memberUids", "array-contains", "bob"),
+  )));
+
+  // Restore the parent list, then prove the inverse stale state also fails:
+  // parent membership alone is insufficient after the pointer is removed.
+  await seedHousehold();
+  await removeSeed("householdMemberships/bob");
+  await assertFails(getDoc(doc(bob, "households/home1/sharedTasks/task1")));
+  await assertFails(getDocs(query(
+      collection(bob, "households/home1/sharedTasks"),
       where("memberUids", "array-contains", "bob"),
   )));
 });

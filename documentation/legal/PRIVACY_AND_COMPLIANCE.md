@@ -132,7 +132,7 @@ Different record IDs merge. If two synchronized clients update the same record, 
 
 Removing a person from a Household or leaving it revokes future cloud access but does not remotely erase the copy of records already stored on that person's device. This limitation must be accurately disclosed because a system cannot reliably revoke data already delivered to another endpoint. Sensitive information should therefore not be placed in shared household records under an assumption of retroactive device erasure.
 
-Deleting a canonical Household deletes the shared Household identity and triggers bounded cleanup of its nested synchronized data plus newer shared Tasks carrying that Household ID. Individual devices may still retain previously synchronized local copies until the user erases/reinstalls/overwrites them through normal device controls.
+Deleting a canonical Household deletes the shared Household identity and triggers bounded cleanup of its nested synchronized `data` and canonical `sharedTasks` subcollections. Individual devices may still retain previously synchronized local copies until the user erases/reinstalls/overwrites them through normal device controls.
 
 ## Arrival check-in data minimisation
 

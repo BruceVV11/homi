@@ -307,9 +307,9 @@ test("legacy shared tasks fail closed and client mutations remain blocked", asyn
   await assertFails(deleteDoc(doc(bob, "sharedTasks/legacy")));
 });
 
-test("canonical shared task query requires Household and recipient constraints", async () => {
+test("canonical shared task query requires Household path and recipient audience", async () => {
   await canonicalHousehold();
-  await seed("sharedTasks/task1", {
+  await seed("households/home1/sharedTasks/task1", {
     householdId: "home1",
     audienceVersion: 1,
     title: "Feed the dogs",
@@ -328,16 +328,22 @@ test("canonical shared task query requires Household and recipient constraints",
   });
   const bob = env.authenticatedContext("bob").firestore();
   const visible = await assertSucceeds(getDocs(query(
-      collection(bob, "sharedTasks"),
-      where("householdId", "==", "home1"),
+      collection(bob, "households/home1/sharedTasks"),
       where("memberUids", "array-contains", "bob"),
   )));
   assert.equal(visible.size, 1);
+
+  // The path proves the canonical Household. Omitting the recipient constraint
+  // must still fail because rules are not post-query filters.
+  await assertFails(getDocs(
+      collection(bob, "households/home1/sharedTasks"),
+  ));
+
+  // The pre-0.12 root collection stays client-inaccessible after migration.
   await assertFails(getDocs(query(
       collection(bob, "sharedTasks"),
       where("memberUids", "array-contains", "bob"),
   )));
-  await assertFails(getDocs(collection(bob, "sharedTasks")));
 });
 
 test("developer campaign creation and admin mutation are server-only", async () => {

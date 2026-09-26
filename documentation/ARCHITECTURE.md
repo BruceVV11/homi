@@ -125,7 +125,7 @@ Leaving/removal from a Household revokes cloud access but does not erase the loc
 
 ### Household deletion
 
-Deleting a Firestore document does not recursively delete its subcollections. `onHomiHouseholdDeletedDataCleanup` therefore removes nested Household data in bounded batches after the canonical Household parent is deleted. It also removes new shared Task documents carrying that Household ID.
+Deleting a Firestore document does not recursively delete its subcollections. `onHomiHouseholdDeletedDataCleanup` therefore removes both nested Household `data` and canonical `sharedTasks` documents in bounded batches after the parent Household is deleted.
 
 ## People, Household scope and connection codes
 
@@ -143,7 +143,7 @@ People Firestore subscriptions start immediately; cached GPS loading, passive lo
 
 Private **Me** Tasks remain local-only.
 
-Shared Tasks continue using `sharedTasks`, but the existing callable names `createSharedTask`, `toggleSharedTask` and `removeSharedTask` are overridden by canonical implementations. New shared Tasks derive `householdId` and `memberUids` from the creator's canonical Household. A People preference cannot manufacture task access or make a non-member assignable.
+Canonical Shared Tasks now use `households/{householdId}/sharedTasks/{taskId}`; the root `sharedTasks` collection is retained only as a fail-closed migration source for pre-0.12 records. The existing callable names `createSharedTask`, `toggleSharedTask` and `removeSharedTask` are overridden by canonical implementations. New Tasks derive `householdId` and `memberUids` from the creator's canonical Household. A People preference cannot manufacture task access or make a non-member assignable.
 
 The canonical Household is the durable collaboration owner of a shared Task. Callable access requires the acting UID to be in the Task's stored safe audience **and** still be a current canonical member of that Task's `householdId`; it does not require the original creator to remain in the Household. For new audience-version-1 Tasks, the Household owner can perform the owner-level reopen/remove recovery actions when the creator/completer is no longer available.
 

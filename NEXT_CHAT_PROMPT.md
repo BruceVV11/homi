@@ -1,3 +1,26 @@
+# CURRENT OVERRIDE — 2026-09-26
+
+This section supersedes conflicting older state later in this handoff.
+
+- GitHub `main` contains the Windows/S25-accepted 0.12 app source via merge `82f8f5ba2e4fdb443142d3272c9f47cbb187f616`, but Firebase production is **still the 0.11 backend**. No 0.12 migration, Firestore deployment, or Function deployment has completed.
+- Current backend-qualification PR: **#2 — Fix Homi 0.12 Firestore security qualification**, branch `homi-0.12-security-test-deps`. Always re-fetch its exact live head.
+- Qualification evidence before the current correction:
+  1. Node 22, project number, runtime identity, Functions lint, task policy **5/5**, exact **37** exports and all **23** declared Firestore tests were proven.
+  2. First Firestore attempt stopped before mutation on an incompatible security-test dependency pair.
+  3. After restoring `@firebase/rules-unit-testing 5.0.2` + Firebase `12.19.0`, the emulator ran all 23 tests and produced **21/23**; both failures were the canonical shared-Task list query.
+  4. A rule-only attempt that moved the external lookup to the authenticated membership document still produced the same **21/23** signature. This demonstrated that the root-collection list design itself was not query-provable under the required canonical membership boundary.
+  5. The first full qualification of the nested Household path also produced **21/23**, but this time all direct nested Task reads passed. The only two failures were the nested Task collection queries at the `list` rule. Comparing that rule with the already-green Household collection rule exposed the remaining query-proof blocker: the Task `list` branch redundantly asserted `resource.data.memberUids is list`. The proven Household list rule omits its equivalent type assertion and relies on the `array-contains` query constraint.
+- The current durable correction stores canonical Tasks at `households/{householdId}/sharedTasks/{taskId}`. The Household ID is now part of the request path; the client listens to that exact subcollection with `memberUids array-contains uid`. Rules still require both the caller's membership pointer and the parent Household member list.
+- Root `sharedTasks/{taskId}` is migration-only and client access fails closed. The migration moves only safely mappable records into the exact Household subcollection and deletes each old root record in the same batch. Unsafe records remain stored but unreadable.
+- Migrated `audienceVersion: 0` Tasks may shrink when a member leaves but never widen when somebody joins later. New `audienceVersion: 1` Tasks follow current canonical membership.
+- The old root Task notification trigger exports are replaced one-for-one by `onHouseholdSharedTaskCreated` and `onHouseholdSharedTaskUpdated`. The governed export count remains **37**. The release helper deploys/proves the replacements before removing only the two retired root trigger names.
+- The security suite remains exactly **23** tests and covers the nested Household path, recipient query, top-level fail-closed behavior, both stale membership halves, and malformed stored audiences. Direct Task `get` retains an explicit `memberUids is list` guard; Task `list` follows the already-proven Household query pattern and omits that redundant type assertion so Firestore can prove the `array-contains` query.
+- Because the Task list-query boundary failed repeatedly, do **not** perform any release/deployment attempt until the exact current PR head passes the complete Firestore gate **23/23**. Prior exact PR head `99f031a0bc96a3f933d8e5a836d32a75746cbb2e` already passed Flutter 47/47, Functions syntax/lint, task policy **5/5**, and exact **37** loaded exports. The subsequent patch changes only Firestore rules, the Shared Task security test, and docs/handoff, so preserve that evidence only after a repository diff check proves no app/Functions source moved.
+- Once PR #2 is validated and merged, carry the same nested-task/security-test correction into `homi-0.13-billing-entitlements` before any 0.13 backend qualification.
+- 0.13 billing branch currently starts from `d5bf2286d9dbb7a3e55b5f9fb0eb77452acd5566`; it remains **implemented but not released** and must not skip 0.12 backend closure.
+- Current commercial contract: Personal R79.99/month or R799.99/year; Duo R129.99/month or R1,299.99/year; Household R199.99/month or R1,999.99/year for four, plus R50/month or R500/year per additional member up to ten; maximum three active live viewers per covered sender; receiving remains free.
+- Current workflow names: **mobile-app-development**, **concept-lab-delivery-integrity**, and later **app-store-deployment**. Any older `concept-lab-release-integrity` wording below is obsolete.
+
 # Homi — next chat handoff
 
 Continue development of **Homi** from the focused GitHub branch `homi-0.12-shared-data-plane`. GitHub is the source of truth for tracked source/docs. The focused PR title is **Homi 0.12: shared Household data plane**.
@@ -159,12 +182,11 @@ New 0.12 shared Tasks use the existing public callable names but derive authoriz
 
 New tasks carry canonical `householdId`, `audienceVersion: 1` and current canonical `memberUids`.
 
-The client shared-task query requires both:
+The client reads shared Tasks only from the exact canonical path:
 
-- `householdId == current Household`; and
-- `memberUids array-contains current UID`.
+`households/{currentHouseholdId}/sharedTasks`
 
-`firebase/firestore.indexes.json` contains the composite index for this query. Firestore rules additionally require current canonical Household membership.
+and constrains `memberUids array-contains current UID`. Firestore rules additionally require both the caller's membership pointer and the parent Household member list. The older root composite index is retained only to avoid coupling this release to an unnecessary index deletion; the nested query does not depend on it.
 
 Pre-0.12 Tasks are handled by `functions/migrate_legacy_shared_tasks.js` during governed deployment. The helper defaults to dry-run. A safe legacy Task is attached only to the creator's current canonical Household and keeps only the intersection of its historical recipients and current Household members. It receives `audienceVersion: 0`, so it is never silently widened to newer Household members. Unsafe/unmappable legacy Tasks fail closed rather than being deleted.
 
@@ -180,7 +202,7 @@ Key source:
 
 ## Household deletion cleanup
 
-Firestore parent deletion does not recursively remove subcollections. `onHomiHouseholdDeletedDataCleanup` removes nested Household data in bounded batches after a canonical Household is deleted and removes new canonical shared Tasks carrying that Household ID.
+Firestore parent deletion does not recursively remove subcollections. `onHomiHouseholdDeletedDataCleanup` removes both nested Household `data` and canonical `sharedTasks` in bounded batches after a canonical Household is deleted.
 
 Key source:
 
@@ -191,8 +213,8 @@ Key source:
 The 0.12 Functions entrypoint is governed at exactly **37 unique exports**:
 
 - the preference/task modules override existing callable names;
-- `onHomiHouseholdDeletedDataCleanup` is a new export;
-- `onHouseholdTaskMembershipChanged` is a new export.
+- `onHomiHouseholdDeletedDataCleanup` and `onHouseholdTaskMembershipChanged` are present;
+- the two old root Task notification trigger exports are removed from the entrypoint and replaced one-for-one by `onHouseholdSharedTaskCreated` and `onHouseholdSharedTaskUpdated`.
 
 `scripts/deploy-notification-backend.sh` requires:
 

@@ -34,7 +34,7 @@ Account deletion must therefore preserve other current members' access:
 
 - deleting a non-owner removes that user's membership and leaves the Household/shared Household data intact for remaining members;
 - deleting an owner with another current member transfers/reconciles ownership according to the governed Household deletion path rather than deleting everybody else's shared home;
-- deleting the sole remaining Household owner can delete the parent Household, which then activates the bounded `onHomiHouseholdDeletedDataCleanup` trigger for nested synchronized Household data and newer shared Tasks carrying that Household ID.
+- deleting the sole remaining Household owner can delete the parent Household, which then activates the bounded `onHomiHouseholdDeletedDataCleanup` trigger for nested synchronized Household `data` and `sharedTasks`.
 
 Previously synchronized local copies on another member's device cannot be guaranteed to be remotely erased. Homi must not claim retroactive erasure from third-party endpoints that already received shared content.
 
@@ -95,7 +95,7 @@ General Homi product/service topic subscriptions are installation preferences ma
 
 Deleting the canonical Household is a separate owner-controlled action from deleting an account or erasing one phone.
 
-Because Firestore does not recursively delete subcollections with the parent document, 0.12 adds `onHomiHouseholdDeletedDataCleanup`. When the parent Household is legitimately deleted, the trigger removes nested `data` documents in bounded batches and removes newer shared Tasks carrying that Household ID.
+Because Firestore does not recursively delete subcollections with the parent document, 0.12 adds `onHomiHouseholdDeletedDataCleanup`. When the parent Household is legitimately deleted, the trigger removes both nested `data` and canonical `sharedTasks` documents in bounded batches.
 
 The local copy already stored on a device is not remotely guaranteed to disappear merely because cloud membership/data is deleted. Device-local erase remains a separate control.
 

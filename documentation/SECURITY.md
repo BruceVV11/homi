@@ -118,21 +118,23 @@ If Homi is in explicit local-only mode, the Household synchronizer does not star
 
 Personal **Me** Tasks remain local/private.
 
-For a new 0.12 shared Task, the server derives `householdId` and `memberUids` from the creator's current canonical Household. A caller cannot manufacture task visibility by setting a People scope. An assignee must be a current member of the same Household.
+For a new 0.12 shared Task, the server derives `householdId` and `memberUids` from the creator's current canonical Household and stores the Task at `households/{householdId}/sharedTasks/{taskId}`. A caller cannot manufacture task visibility by setting a People scope. An assignee must be a current member of the same Household.
 
 Callable access requires the acting UID to be present in the Task's safe `memberUids` audience and still be a current canonical member of the Task's stored `householdId`. The original creator does **not** have to remain in the Household for remaining legitimate recipients to keep using the Task. For audience-version-1 Tasks, the current Household owner can perform owner-level reopen/remove recovery when the original creator/completer is no longer available.
 
-`onHouseholdTaskMembershipChanged` updates only `audienceVersion: 1` Tasks when the canonical Household member list changes. Removed assignee UIDs are cleared and removed completion UIDs are stripped. The version check is deliberate: migrated historical Tasks are never widened merely because somebody new joins later.
+Firestore list authorization preserves the same boundary by making the canonical Household part of the document path. The client listens only to `households/{currentHouseholdId}/sharedTasks` and constrains `memberUids array-contains auth.uid`. Rules can therefore evaluate the path-scoped Household membership pointer and parent member list as request-constant authorization state while the query proves the exact recipient audience. Direct `get` rules explicitly require `memberUids is list`; the `list` rule deliberately follows Homi's already-proven Household collection pattern and does not repeat that type assertion, because `array-contains` itself only matches array fields and Firestore must be able to prove the rule from the query's potential result set. Malformed stored audiences still fail closed on direct reads and are excluded from the array query. A stale pointer alone or stale parent membership alone is insufficient. The pre-0.12 root `sharedTasks` collection is migration-only and client reads/writes fail closed.
 
-Pre-0.12 Tasks are governed by the deployment migration. A safely mappable legacy Task receives the creator's current canonical Household and only the intersection of its historical recipients and current members. It is marked `audienceVersion: 0`, so the canonical audience synchronizer ignores it. Unmappable Tasks remain stored but fail closed under the 0.12 read rule.
+`onHouseholdTaskMembershipChanged` updates `audienceVersion: 1` Tasks to the current canonical member list. Migrated `audienceVersion: 0` Tasks are shrink-only: removed members and invalid assignee/completer attribution are stripped, but later Household joins never widen the historical audience.
 
-`sharedTasks` remains a separate compatibility collection in 0.12 rather than being destructively migrated into the generic data plane during the same release.
+Pre-0.12 Tasks are governed by the deployment migration. A safely mappable legacy Task is moved from the root `sharedTasks/{taskId}` collection into `households/{householdId}/sharedTasks/{taskId}`, receives the creator's current canonical Household, and keeps only the intersection of its historical recipients and current members. It is marked `audienceVersion: 0`. Unmappable root Tasks remain stored but fail closed under the 0.12 rules.
+
+Canonical shared Tasks remain a dedicated Household subcollection rather than being merged into the generic `data/{domain--itemId}` plane. This preserves their callable/notification/history behavior while making Firestore list authorization path-provable.
 
 ## Household deletion/orphan cleanup
 
 Firestore parent deletion does not recursively delete subcollections. 0.12 adds `onHomiHouseholdDeletedDataCleanup` on `households/{householdId}` deletion.
 
-The trigger deletes nested `data` documents in bounded batches and removes new shared Tasks that carry the deleted `householdId`. This prevents an intentionally deleted Household from leaving unreachable synchronized data indefinitely.
+The trigger deletes nested `data` and `sharedTasks` documents in bounded batches. This prevents an intentionally deleted Household from leaving unreachable synchronized data indefinitely.
 
 The Functions export surface is exactly **37** in the 0.12 deployment contract: one new Household-data cleanup trigger plus one new Task-membership synchronizer. The preference/task implementation modules override existing callable names rather than adding further public names.
 

@@ -75,8 +75,14 @@ void main() {
     expect(HomiPlusPlans.duo.annualPriceCents, 129999);
     expect(HomiPlusPlans.household.monthlyPriceCents, 19999);
     expect(HomiPlusPlans.household.annualPriceCents, 199999);
+    expect(HomiPlusPlans.householdMonthlyPriceCents(4), 19999);
+    expect(HomiPlusPlans.householdAnnualPriceCents(4), 199999);
     expect(HomiPlusPlans.householdMonthlyPriceCents(6), 29999);
     expect(HomiPlusPlans.householdAnnualPriceCents(6), 299999);
+    expect(HomiPlusPlans.householdMonthlyPriceCents(10), 49999);
+    expect(HomiPlusPlans.householdAnnualPriceCents(10), 499999);
+    expect(HomiPlusPlans.normalizeHouseholdMemberCount(2), 4);
+    expect(HomiPlusPlans.normalizeHouseholdMemberCount(12), 10);
     expect(homiPlusMaxTrustedLiveViewersPerSender, 3);
   });
 

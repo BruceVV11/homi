@@ -64,6 +64,31 @@ async function acceptedConnection(a = "alice", b = "bob") {
   });
 }
 
+async function canonicalHousehold() {
+  await seed("households/home1", {
+    name: "Home",
+    ownerUid: "alice",
+    memberUids: ["alice", "bob"],
+    pendingInviteUids: [],
+    memberLimit: 4,
+    schemaVersion: 1,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  });
+  await seed("householdMemberships/alice", {
+    householdId: "home1",
+    role: "owner",
+    joinedAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  });
+  await seed("householdMemberships/bob", {
+    householdId: "home1",
+    role: "member",
+    joinedAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  });
+}
+
 function validLocation() {
   return {
     latitude: -29.86,
@@ -258,9 +283,9 @@ test("shared places require selection, accepted connection and active location s
   await assertFails(deleteDoc(doc(alice, "sharedPlaces/alice/places/home")));
 });
 
-test("shared tasks are member-readable but client mutations are blocked", async () => {
-  await seed("sharedTasks/task1", {
-    title: "Feed the dogs",
+test("legacy shared tasks fail closed and client mutations remain blocked", async () => {
+  await seed("sharedTasks/legacy", {
+    title: "Old preference task",
     notes: null,
     assigneeUid: "bob",
     assigneeName: "Bob",
@@ -275,17 +300,18 @@ test("shared tasks are member-readable but client mutations are blocked", async 
     purgeAt: null,
   });
   const bob = env.authenticatedContext("bob").firestore();
-  const mallory = env.authenticatedContext("mallory").firestore();
-  await assertSucceeds(getDoc(doc(bob, "sharedTasks/task1")));
-  await assertFails(getDoc(doc(mallory, "sharedTasks/task1")));
-  await assertFails(updateDoc(doc(bob, "sharedTasks/task1"), {
+  await assertFails(getDoc(doc(bob, "sharedTasks/legacy")));
+  await assertFails(updateDoc(doc(bob, "sharedTasks/legacy"), {
     completedAt: serverTimestamp(),
   }));
-  await assertFails(deleteDoc(doc(bob, "sharedTasks/task1")));
+  await assertFails(deleteDoc(doc(bob, "sharedTasks/legacy")));
 });
 
-test("shared task membership query remains usable and unfiltered list is denied", async () => {
+test("canonical shared task query requires Household and recipient constraints", async () => {
+  await canonicalHousehold();
   await seed("sharedTasks/task1", {
+    householdId: "home1",
+    audienceVersion: 1,
     title: "Feed the dogs",
     notes: null,
     assigneeUid: "bob",
@@ -293,21 +319,6 @@ test("shared task membership query remains usable and unfiltered list is denied"
     createdByUid: "alice",
     createdByName: "Alice",
     memberUids: ["alice", "bob"],
-    createdAt: Timestamp.now(),
-    dueAt: null,
-    completedAt: null,
-    completedByName: null,
-    completedByUid: null,
-    purgeAt: null,
-  });
-  await seed("sharedTasks/task2", {
-    title: "Private other household task",
-    notes: null,
-    assigneeUid: "mallory",
-    assigneeName: "Mallory",
-    createdByUid: "charlie",
-    createdByName: "Charlie",
-    memberUids: ["charlie", "mallory"],
     createdAt: Timestamp.now(),
     dueAt: null,
     completedAt: null,
@@ -318,9 +329,14 @@ test("shared task membership query remains usable and unfiltered list is denied"
   const bob = env.authenticatedContext("bob").firestore();
   const visible = await assertSucceeds(getDocs(query(
       collection(bob, "sharedTasks"),
+      where("householdId", "==", "home1"),
       where("memberUids", "array-contains", "bob"),
   )));
   assert.equal(visible.size, 1);
+  await assertFails(getDocs(query(
+      collection(bob, "sharedTasks"),
+      where("memberUids", "array-contains", "bob"),
+  )));
   await assertFails(getDocs(collection(bob, "sharedTasks")));
 });
 

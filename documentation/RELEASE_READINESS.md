@@ -1,77 +1,202 @@
 # Homi — Release readiness
 
-Date: 2026-09-11
-Current source candidate: **0.10.0+14**
+Date: 2026-09-12
+Current source candidate: **0.12.0+16**
+Development branch: `homi-0.12-shared-data-plane`
+Production/backend baseline before this branch: `3b26f3120864146f4ad3d2949e5a1a1416694b5c`
 
 Status markers: **DONE**, **VERIFY**, **OPEN**, **BLOCKER**.
 
 ## Gate 1 — Source and device stability
 
-- **DONE (0.9.2)** Google Places dependency migrated to maintained `google_places_sdk_plus`; Windows dependency resolution succeeded.
-- **DONE (0.9.2)** Windows analyzer clean and 32 Flutter tests passed after the Places migration.
-- **DONE (0.10.0)** `flutter pub get` succeeded on Bruce's Windows toolchain.
-- **DONE (0.10.0)** `flutter analyze` clean on exact app/runtime source `11df198bfc5801257cef45dc4bba64e9d37772d7`.
-- **DONE (0.10.0)** `flutter test` passed **41/41** on the same exact app/runtime source.
-- **DONE (0.10.0)** no tracked local source drift was reported after the Windows gate.
-- **VERIFY** S25 Ultra launch/regression after backend deployment.
-- **OPEN** fresh-install and returning-user paths.
-- **OPEN** background/resume/swipe-away/reopen/network-loss recovery.
-- **OPEN** keyboard/safe-area/Android navigation insets.
-- **OPEN** screen-off/several-hours/process recreation/reboot/Samsung power-saving tests.
+Established accepted baselines:
 
-Later deployment-tool/documentation commits do not modify Flutter app source, Functions runtime source, Firestore rules, or the validated dependency graph; the Windows gate remains valid and should not be repeated for tooling-only head movement.
+- **DONE (0.10.0)** Windows `flutter analyze` clean and **41/41** Flutter tests passed on the accepted 0.10 app/runtime source.
+- **DONE (0.10.0)** governed Firebase deployment passed Node 22, project-number guard, Firestore emulator **13/13**, and deployed 24 Functions/rules.
+- **DONE (0.11 operator/device review)** Bruce reported the governed backend deployed and confirmed on the S25 Ultra that the emergency-sheet overflow was resolved, country flags displayed, Shared Household creation worked and a connected person could be invited. True second-device invitation acceptance/realtime propagation remains unproven because no second physical device is currently available.
+- **DONE as historical 0.12 evidence only** Bruce's Windows Flutter gate passed the exact earlier 0.12 head `6ac25b464fe5ee25d940416783148b88bb6cdc78`. Subsequent S25 Ultra review drove the Add-person empty-state and Homi-code recovery fixes. A later S25 review confirmed the established Homi code loads and the revised Connections controls work; Bruce then approved the screen with one final cosmetic request: remove the persistent code card and keep the code behind **My code**.
+
+Required for the final exact 0.12 candidate:
+
+- **VERIFY** Windows `flutter pub get` on the final PR head.
+- **VERIFY** Windows `flutter analyze` clean on the final PR head.
+- **VERIFY** full Flutter test suite including `household_data_sync_controller_test.dart` on the final PR head.
+- **VERIFY** one focused S25 Ultra cosmetic check that the persistent code card is gone and **My code** still opens/copies the established code.
+- **OPEN** broader fresh-install/returning-user/background/reboot/Samsung-power tests before store release.
+
+No 0.12 source is production state until the final branch passes the exact-SHA gates, is merged deliberately and the affected Firebase surfaces are deployed from the accepted merge SHA.
 
 ## Gate 2 — People/location/safety
 
-Implemented source contracts:
+Previously implemented and preserved:
 
-- **DONE** map-first People inside normal Homi shell;
-- **DONE** per-person explicit location sharing;
-- **DONE** latest-state cloud model; no route history by default;
-- **DONE** one foreground location stream shared by independent Live updates / Arrival check-ins;
-- **DONE** first-arrival sample primes state; outside->inside only; +100 m exit hysteresis; one-hour local cooldown;
-- **DONE** arrival delivery contains no Home/Work address/coordinate;
-- **DONE** exact Home/Work visibility separate opt-in + selected viewer + accepted connection + active current-location share;
-- **DONE** emergency actions use external phone-app handoff rather than silent direct call;
-- **DONE in 0.10.0 source/deployed** client cloud-write floor 90 seconds;
-- **DONE in 0.10.0 source/deployed** Firestore server floor 90 seconds;
-- **DONE in 0.10.0 source/deployed** five-active-live-viewer server cap;
-- **DONE in 0.10.0 source/deployed** privacy deactivation path not trapped by activation cap/rate limit.
+- **DONE** map-first People inside the normal Homi shell;
+- **DONE** per-person opt-in location sharing;
+- **DONE** latest-state cloud location with no default route history;
+- **DONE** local arrival detection with initial-state priming, outside->inside transition, exit hysteresis and cooldown;
+- **DONE** arrival payload excludes saved Home/Work coordinates/address;
+- **DONE** exact Home/Work visibility is a separate grant requiring accepted connection + active location share;
+- **DONE** emergency actions hand off to the external phone app;
+- **DONE** 90-second client/server location-write floor and five-active-viewer cap.
 
-Device verification still required:
+0.12 source changes:
 
-- **VERIFY** People auth recovery / Homi code / connection / relationship / heart flows;
-- **VERIFY** Google Places autocomplete and saved address;
-- **VERIFY** five active viewers allowed and sixth rejected cleanly;
-- **VERIFY** stopping/deactivating a viewer works while capped and after disconnect;
-- **VERIFY** two-device live location remains healthy;
-- **VERIFY** Home and Work real transitions send exactly once;
-- **VERIFY** check-in-only monitoring does not refresh cloud latest location;
+- **DONE in source / observed on device / VERIFY final exact head** People connection/preference streams bind immediately instead of waiting for location startup and identity provisioning.
+- **DONE in source / established on device before final cosmetic patch / VERIFY final exact head** **My code** remains available in the populated Connections state. An already-provisioned account reads its valid code from the signed-in user's self-readable `users/{uid}` profile before falling back to the protected `ensureHomiIdentity` callable. A fresh Auth/App Check callable is therefore not required merely to display an established code.
+- **DONE in final source / VERIFY final exact head** the reusable code is no longer duplicated in a persistent orange Connections card. **My code** is the deliberate on-demand access point; a genuine loading failure is surfaced in the branded information-sheet pattern.
+- **DONE in source / observed UI / VERIFY final head** Household/Friend connection type is no longer user-selectable; it is displayed from canonical Household membership and the edit sheet explains how to create/invite/join a Household.
+- **DONE in source** shared-task assignee discovery uses canonical Household membership rather than the old editable preference scope.
+
+Still required before production:
+
+- **VERIFY** final exact-head **My code** sheet/copy and **Connect** remain healthy after the persistent-card removal.
+- **VERIFY** existing live location, Places, check-ins, hearts and share/revoke behavior remains healthy if the final cosmetic check exposes any regression; otherwise prior device evidence stands for unchanged flows.
+- **VERIFY** true two-account/two-device current-location and Household propagation when hardware/test setup permits.
 - **BLOCKER** Google Play background-location declaration/prominent disclosure/review evidence.
 
 ## Gate 3 — Emergency-region launch data
 
-- **DONE in source** offline Emergency region catalog/model.
-- **DONE in source** onboarding region confirmation and local persistence.
-- **DONE in source** Safety page uses selected regional numbers.
-- **DONE in source** full map uses selected regional numbers and omits invented SOS for service-specific countries.
-- **DONE in source** leading-zero numbers are stored as strings.
-- **DONE in source** unsupported regions have no South Africa fallback.
-- **VERIFY** representative S25 Ultra dialer targets without placing test emergency calls.
-- **VERIFY** region changes update Safety/full map immediately.
-- **BLOCKER per public country** verify the bundled entry against ITU-T E.129 and/or that country's official emergency authority before enabling/marketing that country in store rollout.
+- **DONE in source/device review** emergency-region flags and scroll-safe S25 Ultra emergency sheet.
+- **DONE in source** leading-zero numbers stored as strings and unsupported regions do not silently fall back to South Africa.
+- **VERIFY** representative dialer targets without placing test emergency calls.
+- **BLOCKER per public country** verify every enabled emergency-number entry against ITU-T E.129 and/or the relevant national authority before broad country rollout.
 
-## Gate 4 — Shared Household product contract
+## Gate 4 — Canonical Shared Household identity
 
-Current cloud collaboration covers trusted People, selected shared Tasks, live/latest location, arrival events and optional exact Home/Work.
+0.11 established:
 
-**BLOCKER if Homi is marketed as a fully shared household system:** implement canonical Household identity/membership plus conflict-safe cloud sync for Routines, Supplies, Home records and supported shared household state.
+- `households/{householdId}`;
+- `households/{householdId}/members/{uid}`;
+- `householdMemberships/{uid}`;
+- `householdInvites/{householdId}_{inviteeUid}`;
+- one Household per account;
+- four occupied/reserved seats;
+- owner/member roles;
+- accepted trusted connection required before invite;
+- explicit invite acceptance;
+- server-owned create/rename/invite/respond/cancel/remove/leave/transfer/delete mutations;
+- ownership-change pending-invite rebinding;
+- account-deletion Household cleanup/transfer;
+- connection, Household membership and location sharing remain independent.
 
-A local-first launch is possible only if product/store copy states current boundaries accurately.
+0.12 removes the old authorization ambiguity: a People preference can no longer manufacture Household status. The protected relationship callable derives scope from canonical membership and the client displays the same canonical state.
 
-## Gate 5 — Homi+ / payments
+The S25 Ultra review also exposed an interaction-quality issue when the owner tapped **Add person** but no additional accepted trusted connection was eligible. The old implementation injected a low-visibility inline notice after the tap. The final source uses the branded informational bottom-sheet pattern and distinguishes a full Household, existing member/pending invite, and the need to connect another person first.
 
-Approved commercial model is recorded in `documentation/MONETIZATION.md`:
+- **DONE in source** canonical scope derivation.
+- **DONE in source / VERIFY final head** graceful Add-person informational sheet when no candidate exists or connections cannot be loaded.
+- **VERIFY** no-Household connection edit shows Household muted/disabled with explanation.
+- **VERIFY** connected non-member remains in Friends & trusted people.
+- **VERIFY** invited/joined canonical member appears in Household after membership is real.
+
+## Gate 5 — Shared Household data plane
+
+0.12 introduces the first synchronized data plane at:
+
+`households/{householdId}/data/{domain--itemId}`
+
+Current 0.12 domains:
+
+- Routines;
+- Supplies;
+- Home Things;
+- maintenance/repair events;
+- utility readings.
+
+Personal **Me** Tasks remain local/private. Shared one-off Tasks keep their existing collection/UI but their server authorization and assignee source derive from canonical Household membership.
+
+Implemented source contracts:
+
+- **DONE in source** local device persistence remains first; cloud sync is additive.
+- **DONE in source** Firestore snapshot application persists locally without echo loops.
+- **DONE in source** first owner + first-ever Household + authoritative empty server collection can import existing local Household-domain records once.
+- **DONE in source** cached-empty Firestore state is not accepted as proof that the server Household is empty.
+- **DONE in source** a member joining an existing/different Household does not silently upload unrelated pre-existing local records.
+- **DONE in source** local-only mode suppresses the Household synchronizer even if Firebase still has a cached authenticated user.
+- **DONE in source** deterministic record IDs and versioned envelope.
+- **DONE in source** parent Household deletion has a bounded cleanup trigger for nested shared data and canonical new shared Tasks.
+- **DONE in source** shared Task creation/toggle/removal are bound to canonical Household membership while retaining their deployed callable names.
+- **DONE in source** canonical shared Tasks remain usable by their safe current Household audience if the original creator leaves; the current Household owner has explicit recovery actions.
+- **DONE in source** `onHouseholdTaskMembershipChanged` updates only audience-version-1 Tasks, strips removed assignee/completion UIDs, and never widens migrated audience-version-0 Tasks.
+- **DONE in source** pre-0.12 Tasks are migrated only when safely mappable and are not silently widened to a newer Household audience.
+
+Validation required:
+
+- **VERIFY** existing local Routines/Supplies/Home records survive update to the final 0.12 candidate.
+- **VERIFY after backend deploy** first-owner migration does not visually clear records while initial upload is acknowledged.
+- **VERIFY after backend deploy** add/update/delete survives app restart with the 0.12 rules/data plane active.
+- **VERIFY** local-only mode does not start Household synchronization.
+- **VERIFY** switching/removing Household membership does not erase the device's local copy.
+- **VERIFY when second client available** remote changes appear on another Household member's device and same-record conflicts settle to the server-acknowledged version.
+
+The release must not claim a two-device proof until that test is actually possible.
+
+## Gate 6 — Backend/security
+
+Established backend identity:
+
+- Firebase/GCP `homi-ee80a` / project `883068189841`;
+- Functions region `africa-south1`;
+- Node 22;
+- runtime identity `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`.
+
+0.12 backend source:
+
+- **DONE in source** `setTrustedPersonPreference` keeps the public name but derives Household/Friend scope server-side.
+- **DONE in source** `createSharedTask`, `toggleSharedTask`, `removeSharedTask` keep public names but use canonical Household membership and durable Household ownership semantics.
+- **DONE in source** `onHomiHouseholdDeletedDataCleanup` adds bounded orphan-data cleanup.
+- **DONE in source** `onHouseholdTaskMembershipChanged` reconciles only new canonical shared Task audiences after Household changes; migrated historical audiences remain privacy-stable.
+- **DONE in source** deployment helper source-completeness list updated.
+- **DONE in source** exact Functions export guard is **37**: two new trigger names (cleanup + Task-membership sync); preference/task modules override existing callable names.
+- **DONE source preflight only** `household_task_policy.test.js` defines five pure policy tests for historical-audience non-widening, canonical membership reconciliation, attribution cleanup and Household-owner recovery. The policy suite passed 5/5 under Node 22 during source preflight, but this does not replace the governed Cloud Shell run.
+
+Firestore 0.12 boundary:
+
+- member must have both canonical membership pointer and current parent `memberUids` membership;
+- allowed data domains are fixed;
+- deterministic `domain--itemId` identity is enforced;
+- payload ID, schema version, authenticated actor and server request timestamp are enforced;
+- canonical shared-Task reads require both `householdId == current Household` and exact `memberUids array-contains current UID` query constraints;
+- legacy shared Tasks without a safely migrated canonical Household fail closed;
+- outsiders and stale/forged half-memberships are denied in the source-controlled tests.
+
+Governed backend gate still required before deployment:
+
+- **VERIFY** Node 22 dependency install/lint.
+- **VERIFY** Functions policy suite **5/5** under the dependency-loaded governed worker.
+- **VERIFY** exactly **37** entrypoint exports.
+- **VERIFY** Firestore emulator suite **23/23**: 13 established + 8 Household + 2 canonical shared-Task tests. The helper refuses to run a stale/omitted suite if those three files do not declare exactly 23 tests.
+- **VERIFY** legacy shared-Task migration dry-run/apply/stability sequence.
+- **VERIFY** known legacy `onConnectionDeleted` drift is reconciled before any new 0.12 Function deployment if that old resource still exists.
+- **VERIFY** Firestore rules/index deploy.
+- **VERIFY** all 37 Functions deploy in controlled batches.
+- **VERIFY** final exact-SHA/worktree status ends PASS.
+- **BLOCKER before public release** Play Integrity App Check and deliberately staged Firestore App Check enforcement after valid-client metrics.
+- **BLOCKER before public release** Cloud Billing budgets/alerts/spend controls.
+
+## Gate 7 — Authentication/account lifecycle
+
+- **DONE** email/password + Google sign-in.
+- **DONE** verification/reset/provider-aware password/sign-out.
+- **DONE** recent reauthentication for account deletion.
+- **DONE** local erase/sign-out/account deletion remain distinct product actions.
+- **VERIFY** Play-installed Google Sign-In after Play App Signing fingerprints are registered.
+- **VERIFY** account deletion for sole Household owner, non-owner member and owner-with-member transfer cases after 0.12 shared data exists.
+
+## Gate 8 — Privacy/legal
+
+- **DONE in source** no emergency-dispatch/crash-detection/proof-of-safety claims.
+- **DONE in source** Household membership does not silently enable location or exact-place sharing.
+- **DONE in 0.12 source** local-only mode prevents the new Household data sync from activating from a cached Firebase identity.
+- **DONE in source draft** privacy/account-deletion documentation distinguishes synchronized Household records from private/device-only data and records the non-retroactive local-copy limitation.
+- **BLOCKER** public Privacy Policy URL.
+- **BLOCKER** public Terms URL.
+- **BLOCKER** external account-deletion page/process.
+- **OPEN** POPIA/privacy wording professional review.
+
+## Gate 9 — Homi+ / payments
+
+Approved commercial contract remains:
 
 - Free R0;
 - Personal R19.99/month: 1 sender seat;
@@ -81,59 +206,19 @@ Approved commercial model is recorded in `documentation/MONETIZATION.md`:
 - receiving live location remains free;
 - privacy/revoke/delete controls never paywalled.
 
-- **DONE in 0.10.0 source** typed plan definitions and cost constants.
-- **BLOCKER** create Google Play subscription catalog/base plans.
-- **BLOCKER** add official Flutter Play Billing purchase flow.
-- **BLOCKER** server-side Google Play Developer API verification.
-- **BLOCKER** authoritative entitlement storage/capability checks.
+The definitions are planning/source contracts only. No paid entitlement is active.
+
+- **BLOCKER** Google Play subscription catalog/base plans.
+- **BLOCKER** official Flutter Play Billing flow.
+- **BLOCKER** server Play Developer API verification.
+- **BLOCKER** authoritative entitlement/capability state.
 - **BLOCKER** RTDN/Pub/Sub lifecycle handling.
-- **BLOCKER** purchase acknowledgement/restore/reinstall/account mapping.
-- **BLOCKER** Internal Testing proof for purchase, renewal, cancellation, grace, hold, expiry and refund/revoke.
+- **BLOCKER** acknowledgement/restore/reinstall/account mapping.
+- **BLOCKER** Internal Testing lifecycle proof.
 
-Do not enforce paid live sending until the secure server entitlement path exists. Do not unlock based only on a client purchase callback.
+Do not enforce paid live sending or shared-Household entitlement from client purchase state.
 
-## Gate 6 — Backend/security
-
-- **DONE previously** sensitive collaboration mutation behind Auth/App-Check-protected Functions.
-- **DONE previously** verified-email requirement for password-provider sensitive sharing.
-- **DONE previously** server-side limits for connections, shared Tasks, hearts, arrivals and campaigns.
-- **DONE previously** dedicated bounded runtime identity.
-- **DONE previously** 0.9.2 Firestore security suite passed 13/13 and governed backend deployment completed.
-- **DONE (0.10.0)** governed Cloud Shell deployment ran from exact source/tooling SHA `fba7479a8304aec30a964f32cfd8b3e268b6c78e` with Node `v22.23.2` and verified project `homi-ee80a` / `883068189841`.
-- **DONE (0.10.0)** exactly **24** local Homi Function exports validated before deployment.
-- **DONE (0.10.0)** updated Firestore emulator suite passed **13/13**, including the 90-second location update boundary.
-- **DONE (0.10.0)** Firestore rules compiled/released and indexes deployed successfully.
-- **DONE (0.10.0)** all 24 Node 22 Gen2 Functions deployed in five controlled batches.
-- **DONE (0.10.0)** `setLocationShare(africa-south1)` updated and verified **ACTIVE** after deployment.
-- **DONE (0.10.0)** refresh-safe worker ended **PASS**.
-- **VERIFY** active debug devices have registered private App Check debug tokens.
-- **BLOCKER** Play Integrity App Check for release traffic.
-- **BLOCKER** Firestore App Check enforcement only after known-good valid-client metrics.
-- **BLOCKER** Cloud Billing budgets/alerts/spend controls.
-
-The earlier failed Cloud Shell workers were release-tooling/preflight issues and did not reach Firebase deployment. The third worker is the accepted 0.10 backend deployment evidence. The repeated quota-project warning was non-fatal; source upload and all deployment batches succeeded.
-
-## Gate 7 — Authentication/account lifecycle
-
-- **DONE** email/password + Google sign-in.
-- **DONE** verification/reset/provider-aware password/sign-out.
-- **DONE** recent reauthentication for account deletion.
-- **DONE** local erase/sign-out/account deletion are distinct.
-- **VERIFY** Play-installed Google Sign-In after Play App Signing fingerprints are registered.
-- **VERIFY** disposable email/Google account deletion and optional shared-place cleanup.
-
-## Gate 8 — Privacy/legal
-
-- **DONE in source** no emergency-dispatch/crash-detection/proof-of-safety claims.
-- **DONE in source** arrival payload coordinate/address-free.
-- **DONE in source** exact Home/Work separately opt-in/server-rule gated.
-- **BLOCKER** public Privacy Policy URL.
-- **BLOCKER** public Terms URL.
-- **BLOCKER** external account-deletion page/process.
-- **BLOCKER** Play Data Safety matches background location + optional precise saved-place sharing + paid subscription behavior.
-- **OPEN** POPIA/privacy wording professional review.
-
-## Gate 9 — Production Android identity/signing
+## Gate 10 — Production Android identity/signing
 
 - **BLOCKER** permanent upload key + secure backup.
 - **BLOCKER** release signing without committed secrets.
@@ -146,8 +231,10 @@ Permanent package: `za.co.theconceptlab.homi`.
 
 ## Immediate sequence
 
-1. Pull current `main` on Windows; the new commits after the backend source are documentation-only.
-2. Run Homi on the S25 Ultra with the existing private Places dart-define configuration.
-3. Perform focused 0.10 device acceptance: Emergency region UI/dialer handoff, People/Maps/Places regression, existing live/check-in/privacy behavior, and the five-viewer boundary when enough test accounts are available.
-4. After device acceptance, begin canonical Shared Household implementation.
-5. Then implement Google Play Billing + server-authoritative Homi+ entitlements and lifecycle handling.
+1. Bruce fast-forwards the local `homi-0.12-shared-data-plane` branch to the final exact PR head and runs one final Windows gate: dependency resolution, analyzer, full Flutter tests, final SHA/worktree check.
+2. If green, run that same exact source on the S25 Ultra and verify only the final cosmetic delta: the persistent orange Homi-code card is gone, while **My code** still opens and copies the established reusable code. Repeat broader flows only if this check exposes a regression.
+3. Re-fetch the PR and merge only the exact Windows/device-accepted head using expected-head protection.
+4. Run the governed refresh-safe Cloud Shell backend worker against the exact merge SHA. Required evidence includes Node 22, Functions policy **5/5**, project-number guard, exactly 37 exports, Firestore **23/23**, legacy Function drift reconciliation and safe legacy Task migration before the stricter rules/remaining Functions deployment proceeds.
+5. After backend deployment passes, re-test the affected Household data-plane flows and record the exact deployed SHA in release docs.
+6. Start the next focused release for centralized capability/entitlement state, Google Play Billing, server-side purchase verification/acknowledgement, RTDN/Pub/Sub lifecycle handling and Internal Testing subscription proof.
+7. Only after the paid lifecycle and the remaining store/compliance/signing gates are proven may Homi move to production rollout.

@@ -7,7 +7,7 @@ FUNCTION_REGION="africa-south1"
 LEGACY_CONNECTION_DELETE_FUNCTION="onConnectionDeleted"
 REPLACEMENT_CONNECTION_DELETE_FUNCTION="onTrustedConnectionDeleted"
 FUNCTION_BATCH_SIZE=5
-EXPECTED_FUNCTION_COUNT=35
+EXPECTED_FUNCTION_COUNT=37
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FUNCTIONS_DIR="${REPO_ROOT}/functions"
@@ -33,7 +33,18 @@ if [ "${ACTUAL_PROJECT_NUMBER}" != "${EXPECTED_PROJECT_NUMBER}" ]; then
   exit 1
 fi
 
-if [ ! -f functions/package.json ] || [ ! -f functions/index.js ] || [ ! -f functions/entrypoint.js ] || [ ! -f functions/households.js ] || [ ! -f functions/household_invite_owner_sync.js ]; then
+if [ ! -f functions/package.json ] || \
+   [ ! -f functions/index.js ] || \
+   [ ! -f functions/entrypoint.js ] || \
+   [ ! -f functions/households.js ] || \
+   [ ! -f functions/household_invite_owner_sync.js ] || \
+   [ ! -f functions/trusted_people_preferences.js ] || \
+   [ ! -f functions/household_task_policy.js ] || \
+   [ ! -f functions/household_task_policy.test.js ] || \
+   [ ! -f functions/shared_tasks_canonical.js ] || \
+   [ ! -f functions/household_data_cleanup.js ] || \
+   [ ! -f functions/household_task_membership_sync.js ] || \
+   [ ! -f functions/migrate_legacy_shared_tasks.js ]; then
   echo "Homi Functions source is incomplete." >&2
   exit 1
 fi
@@ -99,6 +110,71 @@ load_function_exports() {
   printf '    %s\n' "${FUNCTION_NAMES[@]}"
 }
 
+verify_active_v2_function() {
+  local function_name="$1"
+  local state
+  state="$(gcloud functions describe "${function_name}" \
+    --v2 \
+    --region "${FUNCTION_REGION}" \
+    --project "${PROJECT_ID}" \
+    --format='value(state)' 2>/dev/null || true)"
+  if [ "${state}" != "ACTIVE" ]; then
+    echo "Homi Function ${function_name} is not ACTIVE after deployment; refusing to continue." >&2
+    exit 1
+  fi
+}
+
+reconcile_legacy_connection_delete() {
+  local legacy_present=false
+
+  if gcloud functions describe "${LEGACY_CONNECTION_DELETE_FUNCTION}" \
+      --v2 \
+      --region "${FUNCTION_REGION}" \
+      --project "${PROJECT_ID}" >/dev/null 2>&1; then
+    legacy_present=true
+  elif gcloud functions describe "${LEGACY_CONNECTION_DELETE_FUNCTION}" \
+      --region "${FUNCTION_REGION}" \
+      --project "${PROJECT_ID}" >/dev/null 2>&1; then
+    legacy_present=true
+  fi
+
+  if [ "${legacy_present}" != true ]; then
+    echo "==> No legacy Homi connection-delete Function needs migration"
+    return
+  fi
+
+  # Firebase cannot change an existing Function from HTTPS to an event trigger
+  # in place. Deploy/prove the renamed Firestore trigger before deleting only
+  # the exact stale name/region. This reconciliation runs before any 0.12
+  # Function deployment so stale codebase drift cannot block later batches.
+  echo "==> Migrating legacy Homi connection-delete trigger"
+  run_firebase deploy \
+    --only "functions:${REPLACEMENT_CONNECTION_DELETE_FUNCTION}" \
+    --project "${PROJECT_ID}"
+
+  verify_active_v2_function "${REPLACEMENT_CONNECTION_DELETE_FUNCTION}"
+
+  echo "Replacement trigger is ACTIVE. Removing exact stale HTTPS function."
+  run_firebase functions:delete "${LEGACY_CONNECTION_DELETE_FUNCTION}" \
+    --region "${FUNCTION_REGION}" \
+    --project "${PROJECT_ID}" \
+    --force
+}
+
+deploy_canonical_task_boundary() {
+  local selector
+  selector="functions:createSharedTask,functions:toggleSharedTask,functions:removeSharedTask,functions:onHouseholdTaskMembershipChanged"
+
+  echo "==> Deploying canonical Homi shared-task writers before legacy migration"
+  run_firebase deploy --only "${selector}" --project "${PROJECT_ID}"
+
+  verify_active_v2_function "createSharedTask"
+  verify_active_v2_function "toggleSharedTask"
+  verify_active_v2_function "removeSharedTask"
+  verify_active_v2_function "onHouseholdTaskMembershipChanged"
+  echo "==> Canonical shared-task writers are ACTIVE"
+}
+
 deploy_function_batches() {
   local -a batch=()
   local function_name
@@ -157,11 +233,10 @@ npm ci \
   --no-audit \
   --no-fund
 npm run lint --prefix functions
+npm test --prefix functions
 
 # Load and validate the exact export surface only after dependencies exist, but
-# before security tests or any Firebase deployment begins. This prevents a
-# Cloud Shell with a clean/disposable node_modules directory from failing its
-# preflight merely because firebase-functions has not been installed yet.
+# before security tests or any Firebase deployment begins.
 load_function_exports
 
 if [ -f scripts/test-firestore-security.sh ]; then
@@ -172,47 +247,28 @@ else
   exit 1
 fi
 
-# Firebase cannot change an existing Function from HTTPS to an event trigger in
-# place. Homi had a stale HTTPS function named onConnectionDeleted, while the
-# 0.8.2 source needs a Firestore deletion backstop. Migrate safely and
-# idempotently: deploy the renamed trigger, prove it ACTIVE, then delete only
-# the exact stale name/region before normal deployment continues.
-#
-# Cloud Shell's current gcloud Functions v2 selector is --v2 (not --gen2).
-LEGACY_PRESENT=false
-if gcloud functions describe "${LEGACY_CONNECTION_DELETE_FUNCTION}" \
-    --v2 \
-    --region "${FUNCTION_REGION}" \
-    --project "${PROJECT_ID}" >/dev/null 2>&1; then
-  LEGACY_PRESENT=true
-elif gcloud functions describe "${LEGACY_CONNECTION_DELETE_FUNCTION}" \
-    --region "${FUNCTION_REGION}" \
-    --project "${PROJECT_ID}" >/dev/null 2>&1; then
-  LEGACY_PRESENT=true
-fi
+# Inspect the legacy production task data without changing it before any 0.12
+# task boundary reaches production.
+echo "==> Dry-running Homi legacy shared-task migration"
+node functions/migrate_legacy_shared_tasks.js
 
-if [ "${LEGACY_PRESENT}" = true ]; then
-  echo "==> Migrating legacy Homi connection-delete trigger"
-  run_firebase deploy \
-    --only "functions:${REPLACEMENT_CONNECTION_DELETE_FUNCTION}" \
-    --project "${PROJECT_ID}"
+# Resolve the only known stale Function migration before any new 0.12 Function
+# deployment. This prevents codebase reconciliation from turning a known legacy
+# resource into a non-interactive deployment surprise.
+reconcile_legacy_connection_delete
 
-  REPLACEMENT_STATE="$(gcloud functions describe "${REPLACEMENT_CONNECTION_DELETE_FUNCTION}" \
-    --v2 \
-    --region "${FUNCTION_REGION}" \
-    --project "${PROJECT_ID}" \
-    --format='value(state)' 2>/dev/null || true)"
-  if [ "${REPLACEMENT_STATE}" != "ACTIVE" ]; then
-    echo "Replacement connection-delete trigger is not ACTIVE; refusing to delete the legacy function." >&2
-    exit 1
-  fi
+# 0.12 tightens shared-task reads around canonical Household identity. Deploy
+# only the canonical task writers/membership synchronizer first so no new
+# preference-era task can appear during the migration window. Then apply the
+# safe intersection-only migration and prove no safely migratable task remains
+# before stricter Firestore rules/indexes are allowed to reach production.
+deploy_canonical_task_boundary
 
-  echo "Replacement trigger is ACTIVE. Removing exact stale HTTPS function."
-  run_firebase functions:delete "${LEGACY_CONNECTION_DELETE_FUNCTION}" \
-    --region "${FUNCTION_REGION}" \
-    --project "${PROJECT_ID}" \
-    --force
-fi
+echo "==> Applying safe Homi legacy shared-task migration"
+node functions/migrate_legacy_shared_tasks.js --apply
+
+echo "==> Proving Homi legacy shared-task migration is stable"
+node functions/migrate_legacy_shared_tasks.js --assert-stable
 
 # Rules/indexes are one deployment surface. Functions are intentionally batched
 # because Firebase documents that large simultaneous Function deployments can

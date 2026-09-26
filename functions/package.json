@@ -6,7 +6,8 @@
     "node": "22"
   },
   "scripts": {
-    "lint": "node --check index.js && node --check check_in.js && node --check connection_cleanup.js && node --check device_registration.js && node --check saved_places.js && node --check households.js && node --check household_invite_owner_sync.js && node --check entrypoint.js"
+    "lint": "node --check index.js && node --check check_in.js && node --check connection_cleanup.js && node --check device_registration.js && node --check saved_places.js && node --check households.js && node --check household_invite_owner_sync.js && node --check trusted_people_preferences.js && node --check household_task_policy.js && node --check household_task_policy.test.js && node --check shared_tasks_canonical.js && node --check household_data_cleanup.js && node --check household_task_membership_sync.js && node --check migrate_legacy_shared_tasks.js && node --check entrypoint.js",
+    "test": "node --test household_task_policy.test.js"
   },
   "dependencies": {
     "firebase-admin": "14.1.0",

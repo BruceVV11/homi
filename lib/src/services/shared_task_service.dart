@@ -3,15 +3,19 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../domain/homi_household.dart';
 import '../domain/household_task.dart';
 import 'homi_cloud_actions.dart';
+import 'household_service.dart';
 
 class SharedTaskService {
   SharedTaskService({required this.firebaseReady})
-      : _cloudActions = HomiCloudActions(firebaseReady: firebaseReady);
+      : _cloudActions = HomiCloudActions(firebaseReady: firebaseReady),
+        _householdService = HouseholdService(firebaseReady: firebaseReady);
 
   final bool firebaseReady;
   final HomiCloudActions _cloudActions;
+  final HouseholdService _householdService;
 
   FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
@@ -22,38 +26,83 @@ class SharedTaskService {
     final user = currentUser;
     if (user == null) return Stream.value(const <HouseholdTask>[]);
 
-    return _firestore
-        .collection('sharedTasks')
-        .where('memberUids', arrayContains: user.uid)
-        .snapshots()
-        .map((snapshot) {
-      final now = DateTime.now();
-      final allTasks = snapshot.docs
-          .map(_taskFromDocument)
-          .whereType<HouseholdTask>()
-          .toList(growable: false);
-      final expiredIds = allTasks
-          .where((task) => task.shouldPurge(now))
-          .map((task) => task.id)
-          .toList(growable: false);
-      if (expiredIds.isNotEmpty) {
-        unawaited(_deleteExpired(expiredIds));
+    late final StreamController<List<HouseholdTask>> controller;
+    StreamSubscription<HomiHousehold?>? householdSub;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? taskSub;
+    var generation = 0;
+
+    Future<void> bindHousehold(HomiHousehold? household) async {
+      final currentGeneration = ++generation;
+      await taskSub?.cancel();
+      taskSub = null;
+      if (currentGeneration != generation) return;
+
+      if (household == null) {
+        controller.add(const <HouseholdTask>[]);
+        return;
       }
 
-      final tasks = allTasks
-          .where((task) => !task.shouldPurge(now))
-          .toList(growable: false);
-      tasks.sort((a, b) {
-        if (a.completed != b.completed) return a.completed ? 1 : -1;
-        final aDue = a.dueAt;
-        final bDue = b.dueAt;
-        if (aDue == null && bDue != null) return 1;
-        if (aDue != null && bDue == null) return -1;
-        if (aDue != null && bDue != null) return aDue.compareTo(bDue);
-        return b.createdAt.compareTo(a.createdAt);
-      });
-      return tasks;
+      // Both query constraints are deliberate security inputs. Firestore rules
+      // are not filters: householdId proves the canonical Household scope while
+      // memberUids preserves the exact audience of migrated pre-0.12 Tasks.
+      // New 0.12 Tasks use the full canonical Household audience and are kept
+      // aligned by onHouseholdTaskMembershipChanged.
+      taskSub = _firestore
+          .collection('sharedTasks')
+          .where('householdId', isEqualTo: household.id)
+          .where('memberUids', arrayContains: user.uid)
+          .snapshots()
+          .listen(
+        (snapshot) => controller.add(_tasksFromSnapshot(snapshot)),
+        onError: controller.addError,
+      );
+    }
+
+    controller = StreamController<List<HouseholdTask>>(
+      onListen: () {
+        householdSub = _householdService.watchCurrentHousehold().listen(
+          (household) => unawaited(bindHousehold(household)),
+          onError: controller.addError,
+        );
+      },
+      onCancel: () async {
+        generation += 1;
+        await householdSub?.cancel();
+        await taskSub?.cancel();
+      },
+    );
+    return controller.stream;
+  }
+
+  List<HouseholdTask> _tasksFromSnapshot(
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    final now = DateTime.now();
+    final allTasks = snapshot.docs
+        .map(_taskFromDocument)
+        .whereType<HouseholdTask>()
+        .toList(growable: false);
+    final expiredIds = allTasks
+        .where((task) => task.shouldPurge(now))
+        .map((task) => task.id)
+        .toList(growable: false);
+    if (expiredIds.isNotEmpty) {
+      unawaited(_deleteExpired(expiredIds));
+    }
+
+    final tasks = allTasks
+        .where((task) => !task.shouldPurge(now))
+        .toList(growable: false);
+    tasks.sort((a, b) {
+      if (a.completed != b.completed) return a.completed ? 1 : -1;
+      final aDue = a.dueAt;
+      final bDue = b.dueAt;
+      if (aDue == null && bDue != null) return 1;
+      if (aDue != null && bDue == null) return -1;
+      if (aDue != null && bDue != null) return aDue.compareTo(bDue);
+      return b.createdAt.compareTo(a.createdAt);
     });
+    return tasks;
   }
 
   Future<void> createHouseholdTask({
@@ -83,10 +132,9 @@ class SharedTaskService {
       throw StateError('Keep task notes under 1000 characters.');
     }
 
-    // The server derives the actual household member list from accepted
-    // Household relationships. The caller-provided iterable is intentionally
-    // not trusted as an authorisation source; it remains in this signature so
-    // existing UI call sites do not need to know about the security boundary.
+    // The server derives the actual member list from canonical Household
+    // membership. The caller-provided iterable remains only for compatibility
+    // with the existing UI signature and is never trusted for authorization.
     await _cloudActions.call('createSharedTask', <String, dynamic>{
       'title': trimmedTitle,
       'notes': cleanNotes,

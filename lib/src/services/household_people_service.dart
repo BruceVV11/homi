@@ -1,32 +1,39 @@
 import 'dart:async';
 
+import '../domain/homi_household.dart';
+import 'household_service.dart';
 import 'trusted_people_service.dart';
 
-/// Trusted-people view used by household collaboration surfaces such as task
-/// assignment. Friends remain visible on People/location but are omitted here.
+/// Trusted-people view used by Household collaboration surfaces such as task
+/// assignment. A People label can never promote a friend into this list: an
+/// accepted connection must also be a current member of the same canonical
+/// Household.
 class HouseholdPeopleService extends TrustedPeopleService {
-  HouseholdPeopleService({required super.firebaseReady});
+  HouseholdPeopleService({required super.firebaseReady})
+      : _householdService = HouseholdService(firebaseReady: firebaseReady);
+
+  final HouseholdService _householdService;
 
   @override
   Stream<List<TrustedConnection>> watchConnections() {
     final baseConnections = super.watchConnections();
-    final basePreferences = super.watchPreferences();
+    final householdStream = _householdService.watchCurrentHousehold();
     late final StreamController<List<TrustedConnection>> controller;
     StreamSubscription<List<TrustedConnection>>? connectionSub;
-    StreamSubscription<Map<String, TrustedPersonPreference>>? preferenceSub;
+    StreamSubscription<HomiHousehold?>? householdSub;
     List<TrustedConnection>? connections;
-    Map<String, TrustedPersonPreference>? preferences;
+    HomiHousehold? household;
+    var householdReady = false;
 
     void emit() {
       final current = connections;
-      final prefs = preferences;
       final user = currentUser;
-      if (current == null || prefs == null || user == null) return;
+      if (current == null || !householdReady || user == null) return;
+      final memberUids = household?.memberUids.toSet() ?? const <String>{};
       controller.add(
         current.where((connection) {
-          if (!connection.accepted) return true;
-          final otherUid = connection.otherUid(user.uid);
-          return prefs[otherUid]?.household == true;
+          if (!connection.accepted) return false;
+          return memberUids.contains(connection.otherUid(user.uid));
         }).toList(growable: false),
       );
     }
@@ -40,9 +47,10 @@ class HouseholdPeopleService extends TrustedPeopleService {
           },
           onError: controller.addError,
         );
-        preferenceSub = basePreferences.listen(
+        householdSub = householdStream.listen(
           (value) {
-            preferences = value;
+            household = value;
+            householdReady = true;
             emit();
           },
           onError: controller.addError,
@@ -50,7 +58,7 @@ class HouseholdPeopleService extends TrustedPeopleService {
       },
       onCancel: () async {
         await connectionSub?.cancel();
-        await preferenceSub?.cancel();
+        await householdSub?.cancel();
       },
     );
     return controller.stream;

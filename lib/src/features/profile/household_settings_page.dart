@@ -97,7 +97,15 @@ class _HouseholdSettingsPageState extends State<HouseholdSettingsPage> {
     try {
       connections = await widget.trustedPeopleService.getConnections();
     } catch (error) {
-      if (mounted) setState(() => _message = _friendly(error));
+      if (!mounted) return;
+      await showHomiInfoSheet(
+        context,
+        title: 'Could not load your connections',
+        message:
+            '${_friendly(error)} Your Household has not been changed. Try again when your connection is stable.',
+        actionLabel: 'Okay',
+        icon: Icons.cloud_off_outlined,
+      );
       return;
     }
     final currentUid = _user?.uid;
@@ -111,11 +119,21 @@ class _HouseholdSettingsPageState extends State<HouseholdSettingsPage> {
     }).toList(growable: false);
 
     if (candidates.isEmpty) {
-      setState(() {
-        _message = household.full
-            ? 'This Household already has four members or reserved invitations.'
-            : 'Connect with another person in People before adding them to your Household.';
-      });
+      if (_message != null) setState(() => _message = null);
+      final hasReservedInvite = household.pendingInviteUids.isNotEmpty;
+      await showHomiInfoSheet(
+        context,
+        title: household.full ? 'Your Household is full' : 'No one else to add yet',
+        message: household.full
+            ? 'All four Household seats are already occupied or reserved by pending invitations.'
+            : hasReservedInvite
+                ? 'Everyone you can currently add is already in your Household or has a pending invitation. Connect with another person in People, then come back here to invite them.'
+                : 'Connect with another person in People first. Once that trusted connection is accepted, come back here to invite them to your Household.',
+        actionLabel: 'Got it',
+        icon: household.full
+            ? Icons.groups_outlined
+            : Icons.person_add_disabled_outlined,
+      );
       return;
     }
 

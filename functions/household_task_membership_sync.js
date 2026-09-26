@@ -22,9 +22,8 @@ function sameUids(first, second) {
 
 // New 0.12 Tasks are audienceVersion 1 and intentionally follow the current
 // canonical Household membership. Migrated pre-0.12 Tasks are audienceVersion
-// 0: their safe recipient list is the intersection of the historic audience
-// and the Household at migration time, so this trigger must never widen them
-// when somebody joins later.
+// 0: their safe recipient list may shrink when somebody leaves but must never
+// widen when somebody joins later.
 exports.onHouseholdTaskMembershipChanged = onDocumentUpdated(
     "households/{householdId}",
     async (event) => {
@@ -38,8 +37,9 @@ exports.onHouseholdTaskMembershipChanged = onDocumentUpdated(
 
       const householdId = event.params.householdId;
       try {
-        const tasks = await db.collection("sharedTasks")
-            .where("householdId", "==", householdId)
+        const tasks = await db.collection("households")
+            .doc(householdId)
+            .collection("sharedTasks")
             .get();
         const planned = tasks.docs
             .map((document) => ({

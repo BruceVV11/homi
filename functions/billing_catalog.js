@@ -1,25 +1,38 @@
 "use strict";
 
 // Google Play product/base-plan IDs are public durable store identifiers, not
-// secrets. Keep the backend/client catalogs source-controlled and identical
-// once the products have actually been created and verified in Play Console.
-// Blank values deliberately keep all paid purchase verification fail-closed
-// during development before that external setup exists.
+// secrets. Keep backend/client catalogs source-controlled and identical once
+// the permanent products have actually been created and verified in Play.
 const CURRENT_PLAY_CATALOG = Object.freeze({
   HOMI_PLAY_PERSONAL_PRODUCT_ID: "",
   HOMI_PLAY_PERSONAL_MONTHLY_BASE_PLAN_ID: "",
+  HOMI_PLAY_PERSONAL_ANNUAL_BASE_PLAN_ID: "",
   HOMI_PLAY_DUO_PRODUCT_ID: "",
   HOMI_PLAY_DUO_MONTHLY_BASE_PLAN_ID: "",
-  HOMI_PLAY_HOUSEHOLD_PRODUCT_ID: "",
-  HOMI_PLAY_HOUSEHOLD_MONTHLY_BASE_PLAN_ID: "",
-  HOMI_PLAY_HOUSEHOLD_ANNUAL_BASE_PLAN_ID: "",
+  HOMI_PLAY_DUO_ANNUAL_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_4_PRODUCT_ID: "",
+  HOMI_PLAY_HOUSEHOLD_4_MONTHLY_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_4_ANNUAL_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_5_PRODUCT_ID: "",
+  HOMI_PLAY_HOUSEHOLD_5_MONTHLY_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_5_ANNUAL_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_6_PRODUCT_ID: "",
+  HOMI_PLAY_HOUSEHOLD_6_MONTHLY_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_6_ANNUAL_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_7_PRODUCT_ID: "",
+  HOMI_PLAY_HOUSEHOLD_7_MONTHLY_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_7_ANNUAL_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_8_PRODUCT_ID: "",
+  HOMI_PLAY_HOUSEHOLD_8_MONTHLY_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_8_ANNUAL_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_9_PRODUCT_ID: "",
+  HOMI_PLAY_HOUSEHOLD_9_MONTHLY_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_9_ANNUAL_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_10_PRODUCT_ID: "",
+  HOMI_PLAY_HOUSEHOLD_10_MONTHLY_BASE_PLAN_ID: "",
+  HOMI_PLAY_HOUSEHOLD_10_ANNUAL_BASE_PLAN_ID: "",
 });
 
-// billing_policy.js deliberately accepts an environment-shaped object so the
-// pure policy tests remain independent of Firebase. Seed that shape from this
-// source-controlled catalog before billing.js is loaded. This avoids runtime
-// drift from shell-only environment variables while keeping the values public
-// and reviewable in the exact release SHA.
 for (const [key, value] of Object.entries(CURRENT_PLAY_CATALOG)) {
   process.env[key] = value;
 }

@@ -1,7 +1,8 @@
 "use strict";
 
-const MAX_TRUSTED_LIVE_VIEWERS = 5;
-const HOUSEHOLD_MEMBER_LIMIT = 4;
+const MAX_TRUSTED_LIVE_VIEWERS = 3;
+const HOUSEHOLD_INCLUDED_MEMBER_LIMIT = 4;
+const HOUSEHOLD_MAXIMUM_MEMBER_LIMIT = 10;
 const DUO_REASSIGNMENT_COOLDOWN_DAYS = 7;
 
 const PLAN_PRIORITY = Object.freeze({
@@ -56,10 +57,6 @@ function timestampMillis(value) {
 }
 
 function effectivePlayState(state, validUntil, nowMs = Date.now()) {
-  // Paid capability requires both a Play state that can grant access and a
-  // verified paid-through timestamp still in the future. This prevents a stale
-  // ACTIVE/GRACE/CANCELED record from outliving its known Play term if RTDN is
-  // delayed, and it fails closed when the paid-through boundary is missing.
   if (
     state === "active" ||
     state === "grace_period" ||
@@ -77,11 +74,22 @@ function grantsPaidAccess(state) {
     state === "canceled";
 }
 
-function entitlementCapabilities(plan, state) {
+function normalizedHouseholdLimit(value) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric)) return HOUSEHOLD_INCLUDED_MEMBER_LIMIT;
+  return Math.max(
+      HOUSEHOLD_INCLUDED_MEMBER_LIMIT,
+      Math.min(HOUSEHOLD_MAXIMUM_MEMBER_LIMIT, Math.trunc(numeric)),
+  );
+}
+
+function entitlementCapabilities(plan, state, householdMemberLimit = 0) {
   const paid = grantsPaidAccess(state);
   if (!paid) {
     return {
       continuousLocationSender: false,
+      sharedTasks: false,
+      sharedRoutines: false,
       sharedHousehold: false,
       maxTrustedLiveViewers: 0,
       householdMemberLimit: 0,
@@ -93,6 +101,8 @@ function entitlementCapabilities(plan, state) {
     case "duo":
       return {
         continuousLocationSender: true,
+        sharedTasks: true,
+        sharedRoutines: true,
         sharedHousehold: false,
         maxTrustedLiveViewers: MAX_TRUSTED_LIVE_VIEWERS,
         householdMemberLimit: 0,
@@ -100,13 +110,17 @@ function entitlementCapabilities(plan, state) {
     case "household":
       return {
         continuousLocationSender: true,
+        sharedTasks: true,
+        sharedRoutines: true,
         sharedHousehold: true,
         maxTrustedLiveViewers: MAX_TRUSTED_LIVE_VIEWERS,
-        householdMemberLimit: HOUSEHOLD_MEMBER_LIMIT,
+        householdMemberLimit: normalizedHouseholdLimit(householdMemberLimit),
       };
     default:
       return {
         continuousLocationSender: false,
+        sharedTasks: false,
+        sharedRoutines: false,
         sharedHousehold: false,
         maxTrustedLiveViewers: 0,
         householdMemberLimit: 0,
@@ -139,10 +153,16 @@ function projectEntitlementSources(rawSources, nowMs = Date.now()) {
   const capabilities = paidSources.length === 0 ?
     entitlementCapabilities("free", "free") :
     paidSources.reduce((result, source) => {
-      const current = entitlementCapabilities(source.plan, source.state);
+      const current = entitlementCapabilities(
+          source.plan,
+          source.state,
+          source.householdMemberLimit,
+      );
       return {
         continuousLocationSender:
           result.continuousLocationSender || current.continuousLocationSender,
+        sharedTasks: result.sharedTasks || current.sharedTasks,
+        sharedRoutines: result.sharedRoutines || current.sharedRoutines,
         sharedHousehold: result.sharedHousehold || current.sharedHousehold,
         maxTrustedLiveViewers: Math.max(
             result.maxTrustedLiveViewers,
@@ -179,20 +199,9 @@ function canAdoptCanonicalPurchase({
   incomingSupersededByTokenHash,
   nowMs = Date.now(),
 }) {
-  // Once Homi has marked a token as superseded, replaying that old token may
-  // refresh historical state but must never make it canonical again.
   if (incomingSupersededByTokenHash) return false;
-
   if (!currentTokenHash || currentTokenHash === incomingTokenHash) return true;
-
-  // Play issues a new token for an in-app upgrade/downgrade/resubscribe before
-  // expiry and links it to the replaced purchase. Require that linkage while
-  // the currently canonical purchase is still entitled so an unrelated second
-  // subscription cannot silently displace it.
   if (linkedTokenHash && linkedTokenHash === currentTokenHash) return true;
-
-  // A dangling account pointer is an integrity problem, not permission to let a
-  // new unlinked token take over. Fail closed until the server state is repaired.
   if (!currentPurchaseKnown) return false;
 
   const currentEffectiveState = effectivePlayState(
@@ -204,49 +213,80 @@ function canAdoptCanonicalPurchase({
 }
 
 function configuredCatalog(env) {
+  const singleProduct = (plan, prefix) => ({
+    plan,
+    productId: String(env[`${prefix}_PRODUCT_ID`] || "").trim(),
+    basePlans: [
+      {
+        cadence: "monthly",
+        basePlanId: String(env[`${prefix}_MONTHLY_BASE_PLAN_ID`] || "").trim(),
+        householdMemberLimit: 0,
+      },
+      {
+        cadence: "annual",
+        basePlanId: String(env[`${prefix}_ANNUAL_BASE_PLAN_ID`] || "").trim(),
+        householdMemberLimit: 0,
+      },
+    ],
+  });
+
   const products = [
-    {
-      plan: "personal",
-      productId: String(env.HOMI_PLAY_PERSONAL_PRODUCT_ID || "").trim(),
-      allowedBasePlans: [
-        String(env.HOMI_PLAY_PERSONAL_MONTHLY_BASE_PLAN_ID || "").trim(),
-      ],
-    },
-    {
-      plan: "duo",
-      productId: String(env.HOMI_PLAY_DUO_PRODUCT_ID || "").trim(),
-      allowedBasePlans: [
-        String(env.HOMI_PLAY_DUO_MONTHLY_BASE_PLAN_ID || "").trim(),
-      ],
-    },
-    {
-      plan: "household",
-      productId: String(env.HOMI_PLAY_HOUSEHOLD_PRODUCT_ID || "").trim(),
-      allowedBasePlans: [
-        String(env.HOMI_PLAY_HOUSEHOLD_MONTHLY_BASE_PLAN_ID || "").trim(),
-        String(env.HOMI_PLAY_HOUSEHOLD_ANNUAL_BASE_PLAN_ID || "").trim(),
-      ],
-    },
+    singleProduct("personal", "HOMI_PLAY_PERSONAL"),
+    singleProduct("duo", "HOMI_PLAY_DUO"),
   ];
 
+  for (
+    let members = HOUSEHOLD_INCLUDED_MEMBER_LIMIT;
+    members <= HOUSEHOLD_MAXIMUM_MEMBER_LIMIT;
+    members += 1
+  ) {
+    const prefix = `HOMI_PLAY_HOUSEHOLD_${members}`;
+    products.push({
+      plan: "household",
+      productId: String(env[`${prefix}_PRODUCT_ID`] || "").trim(),
+      basePlans: [
+        {
+          cadence: "monthly",
+          basePlanId: String(env[`${prefix}_MONTHLY_BASE_PLAN_ID`] || "").trim(),
+          householdMemberLimit: members,
+        },
+        {
+          cadence: "annual",
+          basePlanId: String(env[`${prefix}_ANNUAL_BASE_PLAN_ID`] || "").trim(),
+          householdMemberLimit: members,
+        },
+      ],
+    });
+  }
+
   const configured = products.every((item) =>
-    item.productId && item.allowedBasePlans.every(Boolean));
+    item.productId && item.basePlans.every((basePlan) => basePlan.basePlanId));
   return {configured, products};
 }
 
 function productFor(catalog, productId, basePlanId) {
   if (!catalog || !catalog.configured) return null;
-  return catalog.products.find((item) =>
-    item.productId === productId && item.allowedBasePlans.includes(basePlanId)) || null;
+  const product = catalog.products.find((item) => item.productId === productId);
+  if (!product) return null;
+  const basePlan = product.basePlans.find((item) => item.basePlanId === basePlanId);
+  if (!basePlan) return null;
+  return {
+    plan: product.plan,
+    productId: product.productId,
+    cadence: basePlan.cadence,
+    householdMemberLimit: basePlan.householdMemberLimit || 0,
+  };
 }
 
 module.exports = {
   MAX_TRUSTED_LIVE_VIEWERS,
-  HOUSEHOLD_MEMBER_LIMIT,
+  HOUSEHOLD_INCLUDED_MEMBER_LIMIT,
+  HOUSEHOLD_MAXIMUM_MEMBER_LIMIT,
   DUO_REASSIGNMENT_COOLDOWN_DAYS,
   normalizePlayState,
   effectivePlayState,
   grantsPaidAccess,
+  normalizedHouseholdLimit,
   entitlementCapabilities,
   projectEntitlementSources,
   canAdoptCanonicalPurchase,

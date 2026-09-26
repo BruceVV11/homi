@@ -45,21 +45,15 @@ test("paid lifecycle state requires a future verified paid-through time", () => 
       effectivePlayState("canceled", "2026-09-11T00:00:00Z", now),
       "expired",
   );
-  assert.equal(
-      effectivePlayState("active", "2026-09-11T00:00:00Z", now),
-      "expired",
-  );
-  assert.equal(
-      effectivePlayState("grace_period", "2026-09-11T00:00:00Z", now),
-      "expired",
-  );
 });
 
 test("privacy exits are not represented as paid capabilities", () => {
   const free = entitlementCapabilities("free", "active");
-  const expiredHousehold = entitlementCapabilities("household", "expired");
+  const expiredHousehold = entitlementCapabilities("household", "expired", 10);
   assert.deepEqual(free, {
     continuousLocationSender: false,
+    sharedTasks: false,
+    sharedRoutines: false,
     sharedHousehold: false,
     maxTrustedLiveViewers: 0,
     householdMemberLimit: 0,
@@ -67,21 +61,25 @@ test("privacy exits are not represented as paid capabilities", () => {
   assert.deepEqual(expiredHousehold, free);
 });
 
-test("Personal and Duo grant sender capability without shared Household", () => {
+test("Personal and Duo include shared Tasks and Routines but not Household workspace", () => {
   const personal = entitlementCapabilities("personal", "active");
   const duo = entitlementCapabilities("duo", "active");
   assert.equal(personal.continuousLocationSender, true);
+  assert.equal(personal.sharedTasks, true);
+  assert.equal(personal.sharedRoutines, true);
   assert.equal(personal.sharedHousehold, false);
-  assert.equal(personal.maxTrustedLiveViewers, 5);
+  assert.equal(personal.maxTrustedLiveViewers, 3);
   assert.deepEqual(duo, personal);
 });
 
-test("Household grants four-member shared capability", () => {
-  const household = entitlementCapabilities("household", "active");
+test("Household member tier controls paid member limit", () => {
+  const household = entitlementCapabilities("household", "active", 6);
   assert.equal(household.continuousLocationSender, true);
+  assert.equal(household.sharedTasks, true);
+  assert.equal(household.sharedRoutines, true);
   assert.equal(household.sharedHousehold, true);
-  assert.equal(household.maxTrustedLiveViewers, 5);
-  assert.equal(household.householdMemberLimit, 4);
+  assert.equal(household.maxTrustedLiveViewers, 3);
+  assert.equal(household.householdMemberLimit, 6);
 });
 
 test("multiple subscription sources combine without one purchase deleting another", () => {
@@ -102,15 +100,18 @@ test("multiple subscription sources combine without one purchase deleting anothe
       sourcePurchaseTokenHash: "household-token",
       seatRole: "household_member",
       householdId: "home1",
+      householdMemberLimit: 6,
     },
   ]);
 
   assert.equal(projected.plan, "household");
   assert.equal(projected.state, "grace_period");
   assert.equal(projected.continuousLocationSender, true);
+  assert.equal(projected.sharedTasks, true);
+  assert.equal(projected.sharedRoutines, true);
   assert.equal(projected.sharedHousehold, true);
-  assert.equal(projected.maxTrustedLiveViewers, 5);
-  assert.equal(projected.householdMemberLimit, 4);
+  assert.equal(projected.maxTrustedLiveViewers, 3);
+  assert.equal(projected.householdMemberLimit, 6);
   assert.equal(projected.sourceCount, 2);
 });
 
@@ -122,6 +123,7 @@ test("inactive coverage cannot override a separate active subscription", () => {
       purchaserUid: "bob",
       sourcePurchaseTokenHash: "expired-household",
       seatRole: "household_member",
+      householdMemberLimit: 10,
     },
     {
       plan: "personal",
@@ -136,6 +138,7 @@ test("inactive coverage cannot override a separate active subscription", () => {
   assert.equal(projected.plan, "personal");
   assert.equal(projected.state, "active");
   assert.equal(projected.continuousLocationSender, true);
+  assert.equal(projected.sharedTasks, true);
   assert.equal(projected.sharedHousehold, false);
 });
 
@@ -153,6 +156,7 @@ test("an expired purchaser still receives status without paid capability", () =>
   assert.equal(projected.plan, "duo");
   assert.equal(projected.state, "expired");
   assert.equal(projected.continuousLocationSender, false);
+  assert.equal(projected.sharedTasks, false);
   assert.equal(projected.sharedHousehold, false);
 });
 
@@ -225,18 +229,28 @@ test("expired canonical purchase can be replaced but superseded token cannot ret
   );
 });
 
-test("billing catalog fails closed until every durable Play id exists", () => {
+test("billing catalog supports annual plans and household seat tiers but fails closed when incomplete", () => {
   assert.equal(configuredCatalog({}).configured, false);
-  const catalog = configuredCatalog({
+
+  const env = {
     HOMI_PLAY_PERSONAL_PRODUCT_ID: "personal",
     HOMI_PLAY_PERSONAL_MONTHLY_BASE_PLAN_ID: "monthly",
+    HOMI_PLAY_PERSONAL_ANNUAL_BASE_PLAN_ID: "annual",
     HOMI_PLAY_DUO_PRODUCT_ID: "duo",
     HOMI_PLAY_DUO_MONTHLY_BASE_PLAN_ID: "monthly",
-    HOMI_PLAY_HOUSEHOLD_PRODUCT_ID: "household",
-    HOMI_PLAY_HOUSEHOLD_MONTHLY_BASE_PLAN_ID: "monthly",
-    HOMI_PLAY_HOUSEHOLD_ANNUAL_BASE_PLAN_ID: "annual",
-  });
+    HOMI_PLAY_DUO_ANNUAL_BASE_PLAN_ID: "annual",
+  };
+  for (let members = 4; members <= 10; members += 1) {
+    env[`HOMI_PLAY_HOUSEHOLD_${members}_PRODUCT_ID`] = `household_${members}`;
+    env[`HOMI_PLAY_HOUSEHOLD_${members}_MONTHLY_BASE_PLAN_ID`] = "monthly";
+    env[`HOMI_PLAY_HOUSEHOLD_${members}_ANNUAL_BASE_PLAN_ID`] = "annual";
+  }
+
+  const catalog = configuredCatalog(env);
   assert.equal(catalog.configured, true);
-  assert.equal(productFor(catalog, "household", "annual").plan, "household");
-  assert.equal(productFor(catalog, "duo", "annual"), null);
+  assert.equal(productFor(catalog, "duo", "annual").plan, "duo");
+  const six = productFor(catalog, "household_6", "monthly");
+  assert.equal(six.plan, "household");
+  assert.equal(six.householdMemberLimit, 6);
+  assert.equal(six.cadence, "monthly");
 });

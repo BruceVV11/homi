@@ -36,6 +36,8 @@ class HomiEntitlement {
     required this.plan,
     required this.state,
     required this.continuousLocationSender,
+    required this.sharedTasks,
+    required this.sharedRoutines,
     required this.sharedHousehold,
     required this.maxTrustedLiveViewers,
     required this.householdMemberLimit,
@@ -49,6 +51,8 @@ class HomiEntitlement {
   final HomiPlusPlan plan;
   final HomiBillingState state;
   final bool continuousLocationSender;
+  final bool sharedTasks;
+  final bool sharedRoutines;
   final bool sharedHousehold;
   final int maxTrustedLiveViewers;
   final int householdMemberLimit;
@@ -59,16 +63,17 @@ class HomiEntitlement {
   final DateTime? validUntil;
 
   bool get isPaid => plan != HomiPlusPlan.free && state.grantsPaidAccess;
-
-  bool get canSendContinuousLocation =>
-      isPaid && continuousLocationSender;
-
+  bool get canSendContinuousLocation => isPaid && continuousLocationSender;
+  bool get canCreateSharedTasks => isPaid && sharedTasks;
+  bool get canCreateSharedRoutines => isPaid && sharedRoutines;
   bool get canUseSharedHousehold => isPaid && sharedHousehold;
 
   static const free = HomiEntitlement(
     plan: HomiPlusPlan.free,
     state: HomiBillingState.free,
     continuousLocationSender: false,
+    sharedTasks: false,
+    sharedRoutines: false,
     sharedHousehold: false,
     maxTrustedLiveViewers: 0,
     householdMemberLimit: 0,
@@ -86,6 +91,7 @@ class HomiEntitlement {
             (validUntil == null || !validUntil.isAfter(DateTime.now()))
         ? HomiBillingState.expired
         : reportedState;
+
     if (definition == null || !state.grantsPaidAccess) {
       return HomiEntitlement(
         plan: definition?.plan ?? HomiPlusPlan.free,
@@ -93,6 +99,8 @@ class HomiEntitlement {
             ? HomiBillingState.free
             : state,
         continuousLocationSender: false,
+        sharedTasks: false,
+        sharedRoutines: false,
         sharedHousehold: false,
         maxTrustedLiveViewers: 0,
         householdMemberLimit: 0,
@@ -108,6 +116,8 @@ class HomiEntitlement {
       plan: definition.plan,
       state: state,
       continuousLocationSender: data['continuousLocationSender'] == true,
+      sharedTasks: data['sharedTasks'] == true,
+      sharedRoutines: data['sharedRoutines'] == true,
       sharedHousehold: data['sharedHousehold'] == true,
       maxTrustedLiveViewers:
           (data['maxTrustedLiveViewers'] as num?)?.toInt() ?? 0,

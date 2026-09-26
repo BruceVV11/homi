@@ -175,22 +175,29 @@ function expiryFrom(lineItems) {
 function purchaseIdentity(playPurchase, expectedProductId = null) {
   const catalog = catalogOrThrow();
   const lineItems = Array.isArray(playPurchase.lineItems) ? playPurchase.lineItems : [];
-  const candidates = lineItems.filter((item) => {
-    if (!item || typeof item.productId !== "string") return false;
-    if (expectedProductId && item.productId !== expectedProductId) return false;
+  const candidates = lineItems.map((item) => {
+    if (!item || typeof item.productId !== "string") return null;
+    if (expectedProductId && item.productId !== expectedProductId) return null;
     const basePlanId = item.offerDetails && item.offerDetails.basePlanId;
-    return Boolean(productFor(catalog, item.productId, basePlanId));
-  });
+    const product = productFor(catalog, item.productId, basePlanId);
+    if (!product) return null;
+    return {item, product, basePlanId};
+  }).filter(Boolean);
   if (candidates.length === 0) {
     throw new HttpsError("failed-precondition", "That Google Play subscription is not a Homi+ plan.");
   }
-  const item = candidates[0];
-  const basePlanId = item.offerDetails.basePlanId;
-  const product = productFor(catalog, item.productId, basePlanId);
+
+  // Homi intentionally sells one canonical Homi+ tier at a time. Household
+  // seat-count variants are separate Play subscription products so the current
+  // Flutter Billing 8 integration can use the normal one-product replacement
+  // flow while still charging the exact recurring seat tier.
+  const candidate = candidates[0];
   return {
-    plan: product.plan,
-    productId: item.productId,
-    basePlanId,
+    plan: candidate.product.plan,
+    productId: candidate.item.productId,
+    basePlanId: candidate.basePlanId,
+    cadence: candidate.product.cadence,
+    householdMemberLimit: candidate.product.householdMemberLimit || 0,
     validUntil: expiryFrom(lineItems),
   };
 }
@@ -242,6 +249,7 @@ function coverageDocument({
   householdId = null,
   duoSeatAssigneeUid = null,
   validUntil = null,
+  householdMemberLimit = 0,
 }) {
   return {
     plan,
@@ -253,7 +261,7 @@ function coverageDocument({
     householdId,
     duoSeatAssigneeUid,
     validUntil,
-    ...entitlementCapabilities(plan, state),
+    ...entitlementCapabilities(plan, state, householdMemberLimit),
     updatedAt: FieldValue.serverTimestamp(),
   };
 }
@@ -322,7 +330,8 @@ async function entitlementRecipientsForPurchase(purchase) {
     const household = await canonicalHouseholdFor(purchaserUid);
     if (household) {
       householdId = household.householdId;
-      for (const memberUid of household.memberUids.slice(0, 4)) {
+      const paidMemberLimit = Number(data.householdMemberLimit || 4);
+      for (const memberUid of household.memberUids.slice(0, paidMemberLimit)) {
         recipients.set(memberUid, memberUid === purchaserUid ? "purchaser" : "household_member");
       }
     }
@@ -371,6 +380,7 @@ async function reconcilePurchaseEntitlements(purchase) {
           householdId: result.householdId,
           duoSeatAssigneeUid: result.duoSeatAssigneeUid,
           validUntil: data.validUntil || null,
+          householdMemberLimit: Number(data.householdMemberLimit || 0),
         }),
         {merge: false},
     );
@@ -516,6 +526,8 @@ async function persistVerifiedPurchase({
       packageName: PACKAGE_NAME,
       productId: identity.productId,
       basePlanId: identity.basePlanId,
+      cadence: identity.cadence,
+      householdMemberLimit: identity.householdMemberLimit,
       plan: identity.plan,
       state,
       validUntil: identity.validUntil,
@@ -571,6 +583,8 @@ async function persistVerifiedPurchase({
     state,
     productId: identity.productId,
     basePlanId: identity.basePlanId,
+    cadence: identity.cadence,
+    householdMemberLimit: identity.householdMemberLimit,
   };
 }
 

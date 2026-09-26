@@ -7,82 +7,140 @@ class HomiPlayProductRef {
     required this.plan,
     required this.productId,
     required this.monthlyBasePlanId,
-    this.annualBasePlanId,
+    required this.annualBasePlanId,
+    this.householdMemberLimit = 0,
   });
 
   final HomiPlusPlan plan;
   final String productId;
   final String monthlyBasePlanId;
-  final String? annualBasePlanId;
+  final String annualBasePlanId;
+  final int householdMemberLimit;
 
   bool get configured =>
-      productId.trim().isNotEmpty && monthlyBasePlanId.trim().isNotEmpty;
+      productId.trim().isNotEmpty &&
+      monthlyBasePlanId.trim().isNotEmpty &&
+      annualBasePlanId.trim().isNotEmpty;
 
-  String? basePlanIdFor(HomiBillingCadence cadence) {
+  String basePlanIdFor(HomiBillingCadence cadence) {
     return switch (cadence) {
       HomiBillingCadence.monthly => monthlyBasePlanId,
       HomiBillingCadence.annual => annualBasePlanId,
     };
   }
+
+  bool matchesBasePlan(String value) =>
+      monthlyBasePlanId == value || annualBasePlanId == value;
+
+  HomiBillingCadence? cadenceFor(String value) {
+    if (value == monthlyBasePlanId) return HomiBillingCadence.monthly;
+    if (value == annualBasePlanId) return HomiBillingCadence.annual;
+    return null;
+  }
 }
 
-/// Public Google Play identifiers are deliberately injected after the Play
-/// catalog has been created and verified. They are not secrets, but product and
-/// base-plan IDs are durable store infrastructure and should not be guessed by
-/// the client before that external setup exists.
+/// Public Google Play identifiers are durable release infrastructure. The
+/// catalog deliberately stays blank until each permanent subscription product
+/// and base plan has been created and verified in Play Console.
 class HomiPlayBillingCatalog {
-  const HomiPlayBillingCatalog({
-    required this.personal,
-    required this.duo,
-    required this.household,
-  });
+  const HomiPlayBillingCatalog({required this.products});
 
-  final HomiPlayProductRef personal;
-  final HomiPlayProductRef duo;
-  final HomiPlayProductRef household;
+  final List<HomiPlayProductRef> products;
 
   static const unconfigured = HomiPlayBillingCatalog(
-    personal: HomiPlayProductRef(
-      plan: HomiPlusPlan.personal,
-      productId: '',
-      monthlyBasePlanId: '',
-    ),
-    duo: HomiPlayProductRef(
-      plan: HomiPlusPlan.duo,
-      productId: '',
-      monthlyBasePlanId: '',
-    ),
-    household: HomiPlayProductRef(
-      plan: HomiPlusPlan.household,
-      productId: '',
-      monthlyBasePlanId: '',
-      annualBasePlanId: '',
-    ),
+    products: <HomiPlayProductRef>[
+      HomiPlayProductRef(
+        plan: HomiPlusPlan.personal,
+        productId: '',
+        monthlyBasePlanId: '',
+        annualBasePlanId: '',
+      ),
+      HomiPlayProductRef(
+        plan: HomiPlusPlan.duo,
+        productId: '',
+        monthlyBasePlanId: '',
+        annualBasePlanId: '',
+      ),
+      HomiPlayProductRef(
+        plan: HomiPlusPlan.household,
+        productId: '',
+        monthlyBasePlanId: '',
+        annualBasePlanId: '',
+        householdMemberLimit: 4,
+      ),
+      HomiPlayProductRef(
+        plan: HomiPlusPlan.household,
+        productId: '',
+        monthlyBasePlanId: '',
+        annualBasePlanId: '',
+        householdMemberLimit: 5,
+      ),
+      HomiPlayProductRef(
+        plan: HomiPlusPlan.household,
+        productId: '',
+        monthlyBasePlanId: '',
+        annualBasePlanId: '',
+        householdMemberLimit: 6,
+      ),
+      HomiPlayProductRef(
+        plan: HomiPlusPlan.household,
+        productId: '',
+        monthlyBasePlanId: '',
+        annualBasePlanId: '',
+        householdMemberLimit: 7,
+      ),
+      HomiPlayProductRef(
+        plan: HomiPlusPlan.household,
+        productId: '',
+        monthlyBasePlanId: '',
+        annualBasePlanId: '',
+        householdMemberLimit: 8,
+      ),
+      HomiPlayProductRef(
+        plan: HomiPlusPlan.household,
+        productId: '',
+        monthlyBasePlanId: '',
+        annualBasePlanId: '',
+        householdMemberLimit: 9,
+      ),
+      HomiPlayProductRef(
+        plan: HomiPlusPlan.household,
+        productId: '',
+        monthlyBasePlanId: '',
+        annualBasePlanId: '',
+        householdMemberLimit: 10,
+      ),
+    ],
   );
 
-  // This is the one client-side switch used by the billing UI. It deliberately
-  // remains disabled until the exact Play product/base-plan IDs have been
-  // created and checked in Play Console. Once verified, replace this alias with
-  // the source-controlled live catalog rather than scattering IDs through UI.
   static const current = unconfigured;
 
-  List<HomiPlayProductRef> get products => <HomiPlayProductRef>[
-        personal,
-        duo,
-        household,
-      ];
-
-  bool get configured => products.every((item) => item.configured) &&
-      household.annualBasePlanId?.trim().isNotEmpty == true;
+  bool get configured => products.isNotEmpty && products.every((item) => item.configured);
 
   Set<String> get productIds => products
       .map((item) => item.productId.trim())
       .where((id) => id.isNotEmpty)
       .toSet();
 
-  HomiPlayProductRef? forPlan(HomiPlusPlan plan) {
+  HomiPlayProductRef? forProductId(String productId) {
     for (final item in products) {
-      if (item.plan == plan) return item;
+      if (item.productId == productId) return item;
+    }
+    return null;
+  }
+
+  HomiPlayProductRef? forPlan(
+    HomiPlusPlan plan, {
+    int? householdMemberLimit,
+  }) {
+    for (final item in products) {
+      if (item.plan != plan) continue;
+      if (plan == HomiPlusPlan.household &&
+          householdMemberLimit != null &&
+          item.householdMemberLimit != householdMemberLimit) {
+        continue;
+      }
+      return item;
     }
     return null;
   }

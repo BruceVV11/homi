@@ -1,3 +1,20 @@
+# CURRENT OVERRIDE — 2026-09-26
+
+This section supersedes conflicting older state later in this handoff.
+
+- GitHub `main` contains the device/Windows-accepted 0.12 source via merge `82f8f5ba2e4fdb443142d3272c9f47cbb187f616`, but Firebase production is **still the 0.11 backend** until the governed 0.12 backend release passes.
+- Current backend-qualification PR: **#2 — Fix Homi 0.12 Firestore security qualification** on branch `homi-0.12-security-test-deps`.
+- Two qualification runs stopped before any Firebase production mutation:
+  1. the Firestore harness used an incompatible dependency pair;
+  2. after restoring the Firebase 12-compatible pair, all 23 tests executed and **21/23 passed**; the only failures were the two canonical shared-Task list-query cases.
+- The current corrective source anchors shared-Task canonical Household lookups to the authenticated user's server-owned membership pointer instead of deriving the external Household document path from query-time `resource.data.householdId`. It still requires both the membership pointer and parent Household member list, plus the Task's exact `householdId` and `memberUids` audience.
+- The existing shared-Task security test is strengthened in-place so the governed count remains **23** while proving both stale membership states fail closed.
+- Do not merge PR #2 or resume Firebase mutation until its exact live head passes **23/23** in Cloud Shell.
+- Once PR #2 is accepted/merged, carry the same security dependency/rule correction into `homi-0.13-billing-entitlements` before any 0.13 backend qualification.
+- 0.13 billing branch currently exists at `d5bf2286d9dbb7a3e55b5f9fb0eb77452acd5566`; it remains **implemented but not released** and must not skip the 0.12 production backend closure.
+- Current commercial contract: Personal R79.99/month or R799.99/year; Duo R129.99/month or R1,299.99/year; Household R199.99/month or R1,999.99/year for four, plus R50/month or R500/year per additional member up to ten; maximum three active live viewers per covered sender; receiving remains free.
+- Current workflow names: **mobile-app-development**, **concept-lab-delivery-integrity**, and later **app-store-deployment**. Any older `concept-lab-release-integrity` wording below is obsolete.
+
 # Homi — next chat handoff
 
 Continue development of **Homi** from the focused GitHub branch `homi-0.12-shared-data-plane`. GitHub is the source of truth for tracked source/docs. The focused PR title is **Homi 0.12: shared Household data plane**.

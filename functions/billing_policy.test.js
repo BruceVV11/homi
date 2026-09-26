@@ -7,6 +7,7 @@ const {
   effectivePlayState,
   grantsPaidAccess,
   entitlementCapabilities,
+  householdRecipientUids,
   projectEntitlementSources,
   canAdoptCanonicalPurchase,
   configuredCatalog,
@@ -80,6 +81,17 @@ test("Household member tier controls paid member limit", () => {
   assert.equal(household.sharedHousehold, true);
   assert.equal(household.maxTrustedLiveViewers, 3);
   assert.equal(household.householdMemberLimit, 6);
+});
+
+test("Household coverage always includes the purchaser without exceeding paid capacity", () => {
+  const covered = householdRecipientUids(
+      ["owner", "member-a", "member-b", "payer", "member-c", "member-d"],
+      "payer",
+      4,
+  );
+
+  assert.deepEqual(covered, ["payer", "owner", "member-a", "member-b"]);
+  assert.equal(covered.length, 4);
 });
 
 test("multiple subscription sources combine without one purchase deleting another", () => {

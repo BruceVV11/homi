@@ -13,6 +13,7 @@ const trustedPeoplePreferences = require("./trusted_people_preferences");
 const sharedTasksCanonical = require("./shared_tasks_canonical");
 const householdDataCleanup = require("./household_data_cleanup");
 const householdTaskMembershipSync = require("./household_task_membership_sync");
+const householdSharedTaskNotifications = require("./household_shared_task_notifications");
 
 // A stale deployed HTTPS function already owned the historical
 // `onConnectionDeleted` name. Do not export that obsolete endpoint from the
@@ -20,12 +21,16 @@ const householdTaskMembershipSync = require("./household_task_membership_sync");
 // `onTrustedConnectionDeleted` and the deployment helper migrates it safely.
 const {
   onConnectionDeleted: deprecatedOnConnectionDeleted,
-  ...coreWithoutDeprecatedConnectionDelete
+  onSharedTaskCreated: deprecatedOnSharedTaskCreated,
+  onSharedTaskUpdated: deprecatedOnSharedTaskUpdated,
+  ...coreWithoutDeprecatedTaskTriggers
 } = core;
 void deprecatedOnConnectionDeleted;
+void deprecatedOnSharedTaskCreated;
+void deprecatedOnSharedTaskUpdated;
 
 module.exports = {
-  ...coreWithoutDeprecatedConnectionDelete,
+  ...coreWithoutDeprecatedTaskTriggers,
   ...checkIn,
   ...connectionCleanup,
   ...deviceRegistration,
@@ -43,4 +48,7 @@ module.exports = {
   ...sharedTasksCanonical,
   ...householdDataCleanup,
   ...householdTaskMembershipSync,
+  // Root shared-task triggers are retired only after these nested replacements
+  // are deployed and proven ACTIVE.
+  ...householdSharedTaskNotifications,
 };

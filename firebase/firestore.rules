@@ -57,14 +57,6 @@ service cloud.firestore {
         && get(householdPath).data.memberUids.hasAny([request.auth.uid]);
     }
 
-    function isCanonicalSharedTaskMember(data) {
-      return signedIn()
-        && data.householdId is string
-        && data.memberUids is list
-        && data.memberUids.hasAny([request.auth.uid])
-        && isCanonicalHouseholdMember(data.householdId);
-    }
-
     function isHouseholdOwner(householdId) {
       let membershipPath = /databases/$(database)/documents/householdMemberships/$(request.auth.uid);
       let householdPath = /databases/$(database)/documents/households/$(householdId);
@@ -214,14 +206,12 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    // Shared one-off Tasks are readable only when both the task's exact
-    // recipient list and the canonical Household agree. The client queries by
-    // householdId plus array-contains auth.uid, so Firestore can prove this
-    // boundary without treating rules as post-query filters. Legacy tasks that
-    // have not been safely attached to a canonical Household fail closed.
+    // The pre-0.12 root collection is a migration source only. Mobile clients
+    // never read or mutate it after the canonical Household data-plane release.
+    // Safely mappable legacy documents are moved into the exact Household
+    // subcollection before these stricter rules reach production.
     match /sharedTasks/{taskId} {
-      allow get, list: if isCanonicalSharedTaskMember(resource.data);
-      allow create, update, delete: if false;
+      allow read, write: if false;
     }
 
     // Canonical Household identity is server-managed. A user may read the one
@@ -261,6 +251,28 @@ service cloud.firestore {
         allow create, update: if isCanonicalHouseholdMember(householdId)
           && validHouseholdDataRecord(recordId, request.resource.data);
         allow delete: if isCanonicalHouseholdMember(householdId);
+      }
+
+      // Canonical shared Tasks are nested under their owning Household so the
+      // Household ID is part of the request path rather than a query-derived
+      // resource field. This lets list authorization prove current canonical
+      // membership while memberUids still preserves the exact safe audience of
+      // migrated historical Tasks.
+      match /sharedTasks/{taskId} {
+        // Direct reads can validate the stored audience shape explicitly.
+        allow get: if isCanonicalHouseholdMember(householdId)
+          && resource.data.memberUids is list
+          && resource.data.memberUids.hasAny([request.auth.uid]);
+
+        // For collection reads, Firestore must prove the rule from the query's
+        // potential result set. The client query uses array-contains on
+        // memberUids, which already guarantees the matching field is an array
+        // containing this UID; repeating an explicit `is list` assertion makes
+        // that list query non-provable in the rules engine.
+        allow list: if isCanonicalHouseholdMember(householdId)
+          && resource.data.memberUids.hasAny([request.auth.uid]);
+
+        allow create, update, delete: if false;
       }
     }
 

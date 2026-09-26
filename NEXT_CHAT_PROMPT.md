@@ -133,6 +133,7 @@ The Android billing plugin is pinned to 0.5.0 because it moves Homi onto the Pla
 The client:
 
 - queries Play products/base plans and displays Play-localized prices;
+- seeds the untouched Household member-count selector from the current server-written entitlement capacity rather than always showing four;
 - starts purchase/restore only once the governed catalog is real/configured;
 - uses SHA-256(`homi:<uid>`) rather than raw UID as Play's obfuscated account identifier;
 - uses Google Play `ChangeSubscriptionParam` for cross-tier replacement rather than intentionally creating a second concurrent Homi+ subscription;

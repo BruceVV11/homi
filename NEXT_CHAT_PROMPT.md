@@ -201,7 +201,7 @@ Key source:
 
 ## Household deletion cleanup
 
-Firestore parent deletion does not recursively remove subcollections. `onHomiHouseholdDeletedDataCleanup` removes nested Household data in bounded batches after a canonical Household is deleted and removes new canonical shared Tasks carrying that Household ID.
+Firestore parent deletion does not recursively remove subcollections. `onHomiHouseholdDeletedDataCleanup` removes both nested Household `data` and canonical `sharedTasks` in bounded batches after a canonical Household is deleted.
 
 Key source:
 

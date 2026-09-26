@@ -102,7 +102,7 @@ Exact Home/Work sharing remains an independent explicit grant requiring an accep
 
 The client has one source-controlled `HomiPlayBillingCatalog.current`. It is deliberately blank/unconfigured until the real Play product/base-plan IDs exist. An unconfigured catalog cannot start a purchase.
 
-Personal, Duo and Household are different subscription benefits and therefore use three permanent Play subscription products. The client uses Google Play subscription replacement when moving between those products instead of intentionally creating a concurrent Homi+ purchase.
+Personal, Duo and Household are different subscription benefits. The launch Play catalog uses nine permanent subscription products: Personal, Duo, and seven Household capacity products for 4–10 members. The client uses Google Play subscription replacement when moving between products instead of intentionally creating a concurrent Homi+ purchase.
 
 The client uses the maintained Flutter `in_app_purchase` integration. Homi sends Google Play a SHA-256-derived opaque account identifier rather than the raw Firebase UID.
 
@@ -171,7 +171,7 @@ A state of `active`, `grace_period` or `canceled` grants capability only when th
 
 ### Household coverage safety
 
-Household coverage is derived from the purchaser's **current canonical Household**, never a client-supplied arbitrary Household ID. Four members are included; verified Household subscription variants may raise the server-written member limit up to the launch cap of ten. Existing members are not silently removed if paid capacity later drops.
+Household coverage is derived from the purchaser's **current canonical Household**, never a client-supplied arbitrary Household ID. Four members are included; verified Household subscription variants may raise the server-written member limit up to the launch cap of ten. The purchaser is always counted inside that verified paid limit, so canonical member ordering cannot grant an accidental extra seat. Existing members are not silently removed if paid capacity later drops.
 
 Membership changes trigger entitlement reconciliation. Losing Household coverage does not remove another valid subscription source that the user owns/receives separately.
 
@@ -216,14 +216,14 @@ The billing tests prove:
 
 ## Functions policy/export gates
 
-The dependency-loaded pure Node policy suite is expected to contain **16/16** tests:
+The dependency-loaded pure Node policy suite is expected to contain **17/17** tests:
 
 - 5 Household/shared-task policy tests;
-- 11 billing policy tests covering state/capability semantics, verified paid-term expiry, multi-source reduction, fail-closed catalog mapping and canonical purchase-token replacement/replay rules.
+- 12 billing policy tests covering state/capability semantics, verified paid-term expiry, exact Household paid-capacity selection, multi-source reduction, fail-closed catalog mapping and canonical purchase-token replacement/replay rules.
 
 The source includes `check_policy_test_count.js`; the Functions `pretest` refuses to run a stale suite unless those two policy files declare exactly 16 tests.
 
-The current source-level pure-policy preflight was run under Node 22 and passed **16/16**. That is source evidence only and does not replace the governed dependency-loaded lint/export/emulator/deployment gate.
+An earlier source-level pure-policy preflight passed **16/16** under Node 22 before the exact Household paid-capacity regression test was added. The current candidate requires **17/17** and has not yet been claimed against the exact post-fix head.
 
 0.13 adds six billing exports to the 0.12 expected 37, giving an exact expected Functions surface of **43**.
 
@@ -232,7 +232,7 @@ The deploy helper refuses billing deployment until it proves:
 - Node 22;
 - immutable project number;
 - complete billing source;
-- Functions lint + 16 policy tests;
+- Functions lint + 17 policy tests;
 - exactly 43 exports;
 - Firestore 25/25;
 - source-controlled Play catalog is configured;
@@ -252,7 +252,7 @@ Enforcement must not activate until real Play Internal Testing proves purchase, 
 ## Production security/compliance gates still required
 
 - 0.12 exact-head merge/governed Firebase deployment and runtime acceptance;
-- final 0.13 Windows analyzer/tests plus Node 22 / 16 policy / 43-export / Firestore 25 gates;
+- final 0.13 Windows analyzer/tests plus Node 22 / 17 policy / 43-export / Firestore 25 gates;
 - real Play product/base-plan catalog and Play API access;
 - RTDN Pub/Sub setup;
 - store-installed billing lifecycle proof including out-of-app resubscribe/account resolution;

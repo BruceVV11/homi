@@ -40,16 +40,15 @@ Use **mobile-app-development** first for app/source work, **concept-lab-delivery
 
 ## Production and stacked source state
 
-Production/backend remains deployed 0.11 at:
+Firebase production/backend is still the previously deployed 0.11 runtime; the accepted 0.12 source has now been merged to GitHub `main` but is **not yet deployed**.
 
-`3b26f3120864146f4ad3d2949e5a1a1416694b5c`
+Accepted 0.12 merge SHA:
 
-0.12 final candidate used as the 0.13 base:
+`6a97eb23956da97cfe8266008c0827a303eec72c`
 
-`233c6ab16caa3a9c5951251d7805f57a68ca440c`
+Its exact pre-merge PR head passed Flutter 47/47, Functions policy 5/5, exact 37 Functions and Firestore 23/23. 0.12 version remains `0.12.0+16`.
 
-0.12 version: `0.12.0+16`.
-0.12 is **not yet recorded as a governed Firebase production deployment**. Do not let 0.13 billing deployment skip that data-plane deployment/acceptance gate.
+Do not let 0.13 billing deployment skip the 0.12 provider preflight, migration, production deployment and acceptance gate.
 
 0.13 version: `0.13.0+17`.
 Branch: `homi-0.13-billing-entitlements`.
@@ -85,14 +84,15 @@ Domains:
 
 Local-first controller remains immediate device authority. Safe first-owner migration requires an authoritative non-cache empty server collection. Older unmatched data stays private when joining another/existing Household. Explicit local-only mode suppresses sync.
 
-Personal **Me** Tasks remain local/private. Shared one-off Tasks use canonical Household membership; pre-0.12 task migration is intersection-only and never widens old audiences.
+Personal **Me** Tasks remain local/private. Canonical shared Tasks use `households/{householdId}/sharedTasks/{taskId}`; the root `sharedTasks` collection is migration-only and client access fails closed. Pre-0.12 safe audiences move into the exact Household subcollection, may shrink when members leave, and never widen on later joins.
 
-0.12 backend contract before billing additions:
+Accepted 0.12 source contract before billing additions:
 
 - exactly **37** Functions;
 - pure shared-task policy **5/5**;
 - Firestore emulator **23/23**;
-- governed safe legacy task migration and old Function drift reconciliation.
+- nested Task notification trigger replacements;
+- governed root-to-Household legacy task migration and old Function drift reconciliation.
 
 ## Approved Homi+ commercial contract
 

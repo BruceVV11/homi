@@ -57,20 +57,6 @@ service cloud.firestore {
         && get(householdPath).data.memberUids.hasAny([request.auth.uid]);
     }
 
-    function isCanonicalSharedTaskMember(data) {
-      let membershipPath = /databases/$(database)/documents/householdMemberships/$(request.auth.uid);
-      return signedIn()
-        && exists(membershipPath)
-        && get(membershipPath).data.householdId is string
-        && data.householdId is string
-        && data.householdId == get(membershipPath).data.householdId
-        && data.memberUids is list
-        && data.memberUids.hasAny([request.auth.uid])
-        && exists(/databases/$(database)/documents/households/$(get(membershipPath).data.householdId))
-        && get(/databases/$(database)/documents/households/$(get(membershipPath).data.householdId)).data.memberUids is list
-        && get(/databases/$(database)/documents/households/$(get(membershipPath).data.householdId)).data.memberUids.hasAny([request.auth.uid]);
-    }
-
     function isHouseholdOwner(householdId) {
       let membershipPath = /databases/$(database)/documents/householdMemberships/$(request.auth.uid);
       let householdPath = /databases/$(database)/documents/households/$(householdId);
@@ -199,16 +185,12 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    // Shared one-off Tasks are readable only when both the task's exact
-    // recipient list and the canonical Household agree. For list queries,
-    // canonical lookups are anchored to the authenticated user's membership
-    // document rather than to a resource-derived document path. This keeps the
-    // rule provable from the client's householdId + array-contains query while
-    // still requiring both the membership pointer and parent Household list.
-    // Legacy tasks without a canonical Household continue to fail closed.
+    // The pre-0.12 root collection is a migration source only. Mobile clients
+    // never read or mutate it after the canonical Household data-plane release.
+    // Safely mappable legacy documents are moved into the exact Household
+    // subcollection before these stricter rules reach production.
     match /sharedTasks/{taskId} {
-      allow get, list: if isCanonicalSharedTaskMember(resource.data);
-      allow create, update, delete: if false;
+      allow read, write: if false;
     }
 
     // Canonical Household identity is server-managed. A user may read the one
@@ -248,6 +230,18 @@ service cloud.firestore {
         allow create, update: if isCanonicalHouseholdMember(householdId)
           && validHouseholdDataRecord(recordId, request.resource.data);
         allow delete: if isCanonicalHouseholdMember(householdId);
+      }
+
+      // Canonical shared Tasks are nested under their owning Household so the
+      // Household ID is part of the request path rather than a query-derived
+      // resource field. This lets list authorization prove current canonical
+      // membership while memberUids still preserves the exact safe audience of
+      // migrated historical Tasks.
+      match /sharedTasks/{taskId} {
+        allow get, list: if isCanonicalHouseholdMember(householdId)
+          && resource.data.memberUids is list
+          && resource.data.memberUids.hasAny([request.auth.uid]);
+        allow create, update, delete: if false;
       }
     }
 

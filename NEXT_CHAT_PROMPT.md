@@ -17,7 +17,7 @@ Before changing anything, re-fetch the live branch head and inspect:
 - `documentation/business/PRICING_AND_UNIT_ECONOMICS.md`
 - latest affected source
 
-Use **mobile-app-development** first for app/source work, **concept-lab-release-integrity** for validation/merge/deployment, and **app-store-deployment** for Play Console/store work. Preserve approved behavior/design, brand assets and existing user data. Never claim a pass compiled/worked on-device until Bruce's real Flutter/Android toolchain proves it. A user rerun is not a diagnostic tool.
+Use **mobile-app-development** first for app/source work, **concept-lab-delivery-integrity** for validation/merge/deployment, and **app-store-deployment** for Play Console/store work. Preserve approved behavior/design, brand assets and existing user data. Never claim a pass compiled/worked on-device until Bruce's real Flutter/Android toolchain proves it. A user rerun is not a diagnostic tool.
 
 ## Permanent project context
 
@@ -189,6 +189,7 @@ Current backend behavior:
 - multi-source `billingCoverage` is reduced into `entitlements/{uid}`, so one source ending cannot erase a separate valid source;
 - Duo second seat requires accepted connection and seven-day reassignment cooldown cannot be bypassed by unassign/disconnect;
 - Household coverage derives from the current canonical Household; four are included and verified paid capacity can scale to ten;
+- the purchaser always counts inside that verified paid member limit, so member ordering cannot accidentally cover one extra person;
 - a new token replacing another still-entitled canonical purchase must be linked by Play's `linkedPurchaseToken`;
 - a token already marked superseded cannot become canonical again;
 - a fresh verified purchase may become canonical after the previous one is no longer entitled;
@@ -210,11 +211,11 @@ Backend-only:
 
 0.13 Firestore expected count: **25/25** = existing 23 + 2 billing boundary tests.
 
-Pure Functions policy expected count: **16/16** = 5 shared-task + 11 billing tests.
+Pure Functions policy expected count: **17/17** = 5 shared-task + 12 billing tests.
 
-`functions/check_policy_test_count.js` is wired into Functions `pretest`, so a stale/omitted pure policy suite fails closed unless it declares exactly 16 tests.
+`functions/check_policy_test_count.js` is wired into Functions `pretest`, so a stale/omitted pure policy suite fails closed unless it declares exactly 17 tests.
 
-**Actual evidence in this development pass:** source-level pure policy tests were run under Node 22 and passed **16/16**. This is NOT the governed dependency-loaded Functions lint/export/emulator/deployment gate.
+**Historical evidence:** the source-level pure policy suite passed **16/16** under Node 22 before the exact Household paid-capacity regression test was added. The current candidate now requires **17/17** and still needs that exact post-fix validation.
 
 ## Account deletion UX/source
 
@@ -264,10 +265,10 @@ Then activate final server-authoritative capability enforcement in the launch ca
 1. Re-fetch the branch head; current source/document preflight has been narrowed to real-toolchain/provider validation rather than another speculative source pass.
 2. On Bruce's real Flutter 3.41.5 toolchain, resolve/update the tracked `pubspec.lock`, then run exact-head analyzer/full Flutter tests. Treat `pubspec.lock` as an expected change but stop if unrelated tracked files become dirty.
 3. Close final 0.12 exact-head validation/merge/governed Firebase deployment before any 0.13 billing deployment reaches production.
-4. Create the three permanent Homi+ subscription products/base plans in Play Console and record exact IDs.
+4. Create the nine permanent Homi+ subscription products in Play Console — Personal, Duo, and Household 4–10 — with monthly and annual base plans, and record the exact IDs.
 5. Populate both client/backend governed catalogs with those IDs.
 6. Configure Android Publisher API, Play Console API access and RTDN Pub/Sub.
-7. Run exact-head 0.13 governed Node 22 dependency lint/policy **16/16**, exact **43** exports and Firestore **25/25**, then S25 Ultra regression including Household Cancel no-refresh and balanced Add-to-Household sheet.
+7. Run exact-head 0.13 governed Node 22 dependency lint/policy **17/17**, exact **43** exports and Firestore **25/25**, then S25 Ultra regression including Household Cancel no-refresh and balanced Add-to-Household sheet.
 8. Merge/deploy the exact accepted 0.13 billing source only after provider prerequisites are present.
 9. Upload/store-install an Internal Testing AAB and prove the complete billing lifecycle, including client/server acknowledgement behavior, replacement modes, out-of-app resubscribe and token-lineage behavior.
 10. Activate paid enforcement only after lifecycle proof.

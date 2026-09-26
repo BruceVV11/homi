@@ -128,7 +128,7 @@ Added:
 
 The Android billing plugin is pinned to 0.5.0 because it moves Homi onto the Play Billing Library 8 integration line while remaining compatible with Dart 3.11.3. Later 0.5.x versions raise the Dart floor beyond the current Homi toolchain.
 
-**Important:** tracked `pubspec.lock` has not yet been regenerated for these new dependencies. This is now the next unresolved app-source validation dependency.
+**Important:** Bruce's Windows validation on 2026-09-26 regenerated `pubspec.lock` successfully with the new billing dependencies, and `pubspec.lock` was the only tracked local change. It has **not yet been committed** because the source candidate moved while validation findings were fixed.
 
 The client:
 
@@ -143,6 +143,31 @@ The client:
 - reads only server-written `entitlements/{uid}`;
 - fails closed when active/grace/canceled state has no future verified paid-through timestamp;
 - provides Google Play subscription management and Duo seat UI.
+
+## 2026-09-26 Windows validation/fix checkpoint
+
+Bruce ran the exact local validation against predecessor head `4349791983bd8ed1f15a71cf79a1a285edecd54b`.
+
+Observed directly:
+
+- branch/head reconciliation succeeded;
+- Flutter 3.41.5 / Dart 3.11.3 confirmed;
+- `flutter pub get` regenerated only `pubspec.lock` and resolved `in_app_purchase`, `in_app_purchase_android` and related packages;
+- analyzer found the invalid `HomiPlusManagementService({required this.firebaseReady})` initializing formal;
+- full Flutter tests ran to completion with three failures, all tied to the retired five-viewer/old-price contract;
+- Functions source lint completed;
+- pure Functions policy tests passed **17/17**;
+- the pasted validator's Functions dependency-install branch was malformed for interactive PowerShell, so that dependency-loaded stage is not proven;
+- the pasted export regex returned zero because Homi's `entrypoint.js` uses `module.exports = { ...moduleSpreads }`, not direct `exports.foo =` declarations.
+
+Source fixes applied after that run:
+
+- constructor now accepts `required bool firebaseReady` and passes it to `HomiCloudActions`;
+- backend live-location cap changed from five to the approved three viewers;
+- commercial guardrail and Homi+ plan tests now assert the approved three-viewer and R79.99 / R129.99 / R199.99 launch contract;
+- location-safety documentation now distinguishes the current three-viewer candidate from older historical behavior.
+
+Do **not** ask Bruce for more diagnosis. The next local action is one corrected exact-head validation block. It must preserve his locally regenerated `pubspec.lock`, fast-forward the branch, run Flutter analyze/tests, install Functions dependencies without an interactive `else` parser trap, run lint + 17/17 policy tests, and verify 43 exports by loading `entrypoint.js` and counting `Object.keys()`.
 
 ## Permanent Play catalog direction
 

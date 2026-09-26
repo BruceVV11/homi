@@ -221,7 +221,7 @@ The dependency-loaded pure Node policy suite is expected to contain **17/17** te
 - 5 Household/shared-task policy tests;
 - 12 billing policy tests covering state/capability semantics, verified paid-term expiry, exact Household paid-capacity selection, multi-source reduction, fail-closed catalog mapping and canonical purchase-token replacement/replay rules.
 
-The source includes `check_policy_test_count.js`; the Functions `pretest` refuses to run a stale suite unless those two policy files declare exactly 16 tests.
+The source includes `check_policy_test_count.js`; the Functions `pretest` refuses to run a stale suite unless those two policy files declare exactly 17 tests.
 
 An earlier source-level pure-policy preflight passed **16/16** under Node 22 before the exact Household paid-capacity regression test was added. The current candidate requires **17/17** and has not yet been claimed against the exact post-fix head.
 

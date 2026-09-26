@@ -26,14 +26,12 @@ exports.onHomiHouseholdDeletedDataCleanup = onDocumentDeleted(
     async (event) => {
       const householdId = event.params.householdId;
       try {
-        const householdData = db.collection("households")
-            .doc(householdId).collection("data");
+        const householdRef = db.collection("households").doc(householdId);
+        const householdData = householdRef.collection("data");
+        const householdTasks = householdRef.collection("sharedTasks");
         const [dataRemoved, tasksRemoved] = await Promise.all([
           deleteQueryInBatches(householdData),
-          deleteQueryInBatches(
-              db.collection("sharedTasks")
-                  .where("householdId", "==", householdId),
-          ),
+          deleteQueryInBatches(householdTasks),
         ]);
         logger.info("Deleted Homi Household shared data", {
           householdId,

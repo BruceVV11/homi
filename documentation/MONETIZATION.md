@@ -130,7 +130,7 @@ Permanent IDs to create:
 
 The source catalogs remain deliberately blank until those exact Play products exist. Purchases fail closed before that provider setup.
 
-Same-subscription monthly/annual changes use the Play Console base-plan replacement rule. Cross-product plan/Household-capacity changes use Google Play subscription replacement rather than intentionally creating concurrent Homi+ subscriptions. Upgrade/downgrade behavior must be proven with license testers before public sale.
+Same-subscription monthly/annual changes use the Play Console base-plan replacement rule. Cross-product plan/Household-capacity upgrades request an immediate prorated charge; cross-product downgrades use time-proration so the new entitlement is immediate while remaining value is carried into the next billing date. Every transition must still be proven with license testers before public sale.
 
 ## Lifecycle and security
 

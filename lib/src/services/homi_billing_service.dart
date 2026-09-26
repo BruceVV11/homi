@@ -225,7 +225,7 @@ class HomiBillingService {
         oldPurchaseDetails: oldSubscription,
         replacementMode: isUpgrade
             ? ReplacementMode.chargeProratedPrice
-            : ReplacementMode.deferred,
+            : ReplacementMode.withTimeProration,
       );
     }
 

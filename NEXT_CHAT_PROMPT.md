@@ -136,7 +136,7 @@ The client:
 - starts purchase/restore only once the governed catalog is real/configured;
 - uses SHA-256(`homi:<uid>`) rather than raw UID as Play's obfuscated account identifier;
 - uses Google Play `ChangeSubscriptionParam` for cross-tier replacement rather than intentionally creating a second concurrent Homi+ subscription;
-- uses Play Console's same-subscription base-plan replacement rule for monthly/annual changes and explicit Google Play replacement modes for cross-product tier/capacity changes; license-test every transition before public sale;
+- uses Play Console's same-subscription base-plan replacement rule for monthly/annual changes; cross-product upgrades use `chargeProratedPrice` and downgrades use `withTimeProration`; license-test every transition before public sale;
 - sends purchase token to the protected backend;
 - never grants itself entitlement from local purchase state;
 - reads only server-written `entitlements/{uid}`;

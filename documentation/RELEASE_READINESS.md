@@ -130,6 +130,7 @@ Approved contract:
 - opaque SHA-256-derived Homi account association instead of raw UID as Play obfuscated account ID;
 - dedicated **Homi+ → Plans & billing** surface in Profile Settings;
 - Play-localized price display once products exist;
+- Household member-count selection starts from the current server-written Household capacity until the user intentionally changes the requested 4–10 member tier;
 - explicit purchase confirmation and Play subscription-management handoff;
 - Google Play cross-product subscription replacement for Homi+ tier changes;
 - server-written entitlement reader that fails closed to Free and treats active/grace/canceled state as expired when its verified paid-through timestamp is missing or no longer in the future;

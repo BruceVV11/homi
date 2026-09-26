@@ -99,20 +99,26 @@ async function sendTaskNotification(uid, {
   }
 }
 
-function isCanonicalNewTask(data, householdId) {
+function isHouseholdTask(data, householdId) {
+  const audienceVersion = Number(data && data.audienceVersion);
   return Boolean(
       data &&
       data.householdId === householdId &&
-      Number(data.audienceVersion) === 1 &&
-      !data.topLevelMigratedAt,
+      (audienceVersion === 0 || audienceVersion === 1),
   );
+}
+
+function isNewCanonicalTask(data, householdId) {
+  return isHouseholdTask(data, householdId) &&
+    Number(data.audienceVersion) === 1 &&
+    !data.topLevelMigratedAt;
 }
 
 exports.onHouseholdSharedTaskCreated = onDocumentCreated(
     "households/{householdId}/sharedTasks/{taskId}",
     async (event) => {
       const data = event.data && event.data.data();
-      if (!isCanonicalNewTask(data, event.params.householdId)) return;
+      if (!isNewCanonicalTask(data, event.params.householdId)) return;
 
       const creatorUid = data.createdByUid;
       const creatorName = data.createdByName || "Someone at home";
@@ -155,7 +161,7 @@ exports.onHouseholdSharedTaskUpdated = onDocumentUpdated(
     async (event) => {
       const before = event.data && event.data.before.data();
       const after = event.data && event.data.after.data();
-      if (!before || !isCanonicalNewTask(after, event.params.householdId)) {
+      if (!before || !isHouseholdTask(after, event.params.householdId)) {
         return;
       }
       if (before.completedAt || !after.completedAt) return;

@@ -97,13 +97,13 @@ Personal **Me** Tasks remain local/private. Shared one-off Tasks use canonical H
 ## Approved Homi+ commercial contract
 
 - Free — R0
-- Personal — R19.99/month: one sender seat
-- Duo — R34.99/month: purchaser + one accepted trusted Homi connection as second sender seat
-- Household — R49.99/month or R499.99/year: up to four canonical Household members
-- every paid sender: maximum five active live viewers
+- Personal — R79.99/month or R799.99/year: one sender seat + trusted-person Shared Task/Routine creator capability
+- Duo — R129.99/month or R1,299.99/year: purchaser + one accepted trusted Homi connection, both covered
+- Household — R199.99/month or R1,999.99/year: four canonical Household members included
+- extra Household members — R50/month or R500/year each, launch maximum ten
+- every paid sender: maximum three active live viewers
 - receiving live location is free
 - Duo reassignment cooldown: seven days
-- no annual Personal/Duo pricing is approved
 - Household membership never turns on location sharing
 - deleting Homi is separate from canceling Google Play billing
 
@@ -136,7 +136,7 @@ The client:
 - starts purchase/restore only once the governed catalog is real/configured;
 - uses SHA-256(`homi:<uid>`) rather than raw UID as Play's obfuscated account identifier;
 - uses Google Play `ChangeSubscriptionParam` for cross-tier replacement rather than intentionally creating a second concurrent Homi+ subscription;
-- currently requests `ReplacementMode.withTimeProration`; license-test it before public sale;
+- uses Play Console's same-subscription base-plan replacement rule for monthly/annual changes and explicit Google Play replacement modes for cross-product tier/capacity changes; license-test every transition before public sale;
 - sends purchase token to the protected backend;
 - never grants itself entitlement from local purchase state;
 - reads only server-written `entitlements/{uid}`;
@@ -145,14 +145,13 @@ The client:
 
 ## Permanent Play catalog direction
 
-Personal, Duo and Household are different subscription benefits, so use three permanent Google Play subscription products:
+Permanent Play catalog direction:
 
-- `homi_plus_personal`
-  - base plan `monthly`
-- `homi_plus_duo`
-  - base plan `monthly`
-- `homi_plus_household`
-  - base plans `monthly`, `annual`
+- `homi_plus_personal` — base plans `monthly`, `annual`;
+- `homi_plus_duo` — base plans `monthly`, `annual`;
+- `homi_plus_household_4` through `homi_plus_household_10` — base plans `monthly`, `annual`.
+
+Household capacity variants are separate products because capacity changes the entitlement.
 
 Do not populate source catalogs until these exact IDs exist in Play Console. Do not create temporary duplicate products.
 
@@ -189,7 +188,7 @@ Current backend behavior:
 - active/grace/canceled state grants capability only with a future verified paid-through timestamp;
 - multi-source `billingCoverage` is reduced into `entitlements/{uid}`, so one source ending cannot erase a separate valid source;
 - Duo second seat requires accepted connection and seven-day reassignment cooldown cannot be bypassed by unassign/disconnect;
-- Household coverage derives from current canonical Household and caps at four;
+- Household coverage derives from the current canonical Household; four are included and verified paid capacity can scale to ten;
 - a new token replacing another still-entitled canonical purchase must be linked by Play's `linkedPurchaseToken`;
 - a token already marked superseded cannot become canonical again;
 - a fresh verified purchase may become canonical after the previous one is no longer entitled;

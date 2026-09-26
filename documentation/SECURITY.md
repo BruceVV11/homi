@@ -90,7 +90,7 @@ Existing controls remain:
 - Firestore enforces at least 90 seconds between direct latest-location updates;
 - the client independently uses the same cloud-write gap;
 - Android requests background positions roughly every two minutes with a 100 m movement filter;
-- one sender can authorize at most five active trusted viewers;
+- one paid sender can authorize at most three active trusted viewers;
 - stopping/revoking sharing is never blocked by a paid state or viewer limit;
 - default location storage is latest state, not route history.
 
@@ -171,7 +171,7 @@ A state of `active`, `grace_period` or `canceled` grants capability only when th
 
 ### Household coverage safety
 
-Household coverage is derived from the purchaser's **current canonical Household**, never a client-supplied arbitrary Household ID. Only current canonical members are covered, with the product cap of four members.
+Household coverage is derived from the purchaser's **current canonical Household**, never a client-supplied arbitrary Household ID. Four members are included; verified Household subscription variants may raise the server-written member limit up to the launch cap of ten. Existing members are not silently removed if paid capacity later drops.
 
 Membership changes trigger entitlement reconciliation. Losing Household coverage does not remove another valid subscription source that the user owns/receives separately.
 

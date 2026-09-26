@@ -52,7 +52,7 @@ Implemented and preserved:
 - **DONE** arrival check-ins are locally detected and contain no saved precise Home/Work address/coordinate in the arrival delivery payload;
 - **DONE** exact saved Home/Work sharing is separately controlled;
 - **DONE** emergency actions hand off to the system dialer;
-- **DONE** existing 90-second cloud-write floor and five-active-viewer limit.
+- **DONE** existing 90-second cloud-write floor; 0.13 revises the paid sender limit to three active viewers.
 
 Before production:
 
@@ -111,14 +111,14 @@ Required before calling 0.12 deployed/accepted:
 Approved contract:
 
 - Free — R0;
-- Personal — R19.99/month, one sender seat;
-- Duo — R34.99/month, purchaser + one assigned accepted trusted Homi connection;
-- Household — R49.99/month or R499.99/year, up to four canonical Household members;
-- every paid sender: maximum five active trusted live viewers;
+- Personal — R79.99/month or R799.99/year, one sender seat plus trusted-person Shared Task/Routine creator capability;
+- Duo — R129.99/month or R1,299.99/year, purchaser + one assigned accepted trusted Homi connection, both covered;
+- Household — R199.99/month or R1,999.99/year, four members included;
+- Household extras — R50/month or R500/year per member above four, launch maximum ten;
+- every paid sender: maximum three active trusted live viewers;
 - receiving live location remains free;
 - privacy/revoke/leave/erase/delete controls never paywalled;
-- Duo seat reassignment cooldown: seven days;
-- no annual Personal/Duo price is approved.
+- Duo seat reassignment cooldown: seven days.
 
 ## Gate 5 — 0.13 billing client and entitlement architecture
 
@@ -136,13 +136,13 @@ Approved contract:
 - Duo seat management UI/service;
 - client never grants itself entitlement from local purchase state.
 
-The permanent Play catalog to create/verify is three subscription products:
+The permanent Play catalog to create/verify is:
 
-- `homi_plus_personal` → base plan `monthly`;
-- `homi_plus_duo` → base plan `monthly`;
-- `homi_plus_household` → base plans `monthly` and `annual`.
+- `homi_plus_personal` → `monthly`, `annual`;
+- `homi_plus_duo` → `monthly`, `annual`;
+- `homi_plus_household_4` through `homi_plus_household_10` → `monthly`, `annual`.
 
-Personal, Duo and Household are different subscription benefits; their base plans are billing options rather than unrelated entitlement tiers. Cross-tier changes use Play subscription replacement, not an intentional second concurrent Homi+ purchase.
+Personal/Duo cadence changes stay within one subscription product. Household capacity is an entitlement change, so each capacity uses its own product and cross-product changes use Play subscription replacement rather than a concurrent purchase.
 
 **BLOCKER before 0.13 billing can be exercised:** create/verify these permanent store IDs in Play Console and then populate the source-controlled Flutter + Functions catalogs with the exact same identifiers.
 

@@ -168,7 +168,7 @@ Existing cost/privacy controls remain:
 - roughly two-minute / 100 m Android background request behavior;
 - 90-second client cloud write floor;
 - 90-second Firestore update floor;
-- maximum five active viewers per sender;
+- maximum three active viewers per paid sender;
 - no push simply because a coordinate changed.
 
 Stopping/revoking sharing is always available.
@@ -182,10 +182,11 @@ Arrival detection runs locally. The arrival callable receives Home/Work label + 
 Approved contract:
 
 - Free: R0;
-- Personal: R19.99/month, 1 sender seat;
-- Duo: R34.99/month, purchaser + 1 accepted trusted account as second sender seat;
-- Household: R49.99/month or R499.99/year, up to 4 canonical Household members;
-- each sender: max 5 active live viewers;
+- Personal: R79.99/month or R799.99/year, 1 sender seat plus trusted-person Shared Task/Routine creation;
+- Duo: R129.99/month or R1,299.99/year, purchaser + 1 accepted trusted account, both with Shared Task/Routine creator capability;
+- Household: R199.99/month or R1,999.99/year, 4 members included;
+- additional Household members: R50/month or R500/year each, launch maximum 10;
+- each paid sender: max 3 active live viewers;
 - receiving live location: free;
 - Duo seat reassignment cooldown: 7 days;
 - privacy/revoke/erase/delete controls: never paywalled.
@@ -196,14 +197,11 @@ Paid enforcement remains off until Internal Testing proves the full billing life
 
 ### Store catalog
 
-Personal, Duo and Household are separate subscription benefits, so Homi uses three Google Play subscription products with only the approved billing base plans:
+Personal and Duo each use one Google Play subscription product with monthly and annual base plans. Household capacity changes the entitlement itself, so Homi uses permanent capacity products for 4 through 10 members:
 
-- product `homi_plus_personal`
-  - base plan `monthly`
-- product `homi_plus_duo`
-  - base plan `monthly`
-- product `homi_plus_household`
-  - base plans `monthly`, `annual`
+- `homi_plus_personal` — `monthly`, `annual`;
+- `homi_plus_duo` — `monthly`, `annual`;
+- `homi_plus_household_4` through `homi_plus_household_10` — `monthly`, `annual`.
 
 Homi has one governed client catalog and one governed Functions catalog. Both remain blank/unconfigured until the real permanent Play IDs exist. Blank catalog means purchase UI is disabled/fail-closed.
 

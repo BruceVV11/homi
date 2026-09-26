@@ -238,9 +238,19 @@ service cloud.firestore {
       // membership while memberUids still preserves the exact safe audience of
       // migrated historical Tasks.
       match /sharedTasks/{taskId} {
-        allow get, list: if isCanonicalHouseholdMember(householdId)
+        // Direct reads can validate the stored audience shape explicitly.
+        allow get: if isCanonicalHouseholdMember(householdId)
           && resource.data.memberUids is list
           && resource.data.memberUids.hasAny([request.auth.uid]);
+
+        // For collection reads, Firestore must prove the rule from the query's
+        // potential result set. The client query uses array-contains on
+        // memberUids, which already guarantees the matching field is an array
+        // containing this UID; repeating an explicit `is list` assertion makes
+        // that list query non-provable in the rules engine.
+        allow list: if isCanonicalHouseholdMember(householdId)
+          && resource.data.memberUids.hasAny([request.auth.uid]);
+
         allow create, update, delete: if false;
       }
     }

@@ -101,7 +101,7 @@ Android location permission itself is not silently changed by local erase.
 
 Deleting the canonical Household is separate from deleting one account or one phone.
 
-`onHomiHouseholdDeletedDataCleanup` removes nested Shared Household data and newer canonical shared Tasks after a legitimate parent Household deletion. Device-local copies already delivered may remain until separately erased.
+`onHomiHouseholdDeletedDataCleanup` removes both nested Shared Household `data` and canonical `sharedTasks` after a legitimate parent Household deletion. Device-local copies already delivered may remain until separately erased.
 
 0.13 Homi+ Household coverage follows canonical membership/Household existence. Household deletion removes that coverage source but does not cancel the payer's Google Play subscription automatically; the purchaser must manage the Play subscription separately.
 

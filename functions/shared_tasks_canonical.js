@@ -105,7 +105,11 @@ async function canonicalHouseholdFor(uid) {
   };
 }
 
-async function sharedTaskAccessContext(uid, data) {
+function householdTaskCollection(householdId) {
+  return db.collection("households").doc(householdId).collection("sharedTasks");
+}
+
+async function sharedTaskAccessContext(uid, data, knownHousehold = null) {
   if (!data || !Array.isArray(data.memberUids) || !data.memberUids.includes(uid)) {
     return null;
   }
@@ -117,7 +121,7 @@ async function sharedTaskAccessContext(uid, data) {
   // account that happened to create it. This keeps a Task usable by its safe
   // remaining audience after the creator leaves while still requiring the
   // acting account to be a current canonical member of that exact Household.
-  const actorHousehold = await canonicalHouseholdFor(uid);
+  const actorHousehold = knownHousehold || await canonicalHouseholdFor(uid);
   if (!actorHousehold || actorHousehold.id !== storedHouseholdId) return null;
   return actorHousehold;
 }
@@ -201,7 +205,7 @@ exports.createSharedTask = onCall(
 
       const creatorName = displayNameFromAuth(auth);
       const assigneeName = assigneeUid ? await displayNameFor(assigneeUid) : null;
-      const ref = db.collection("sharedTasks").doc();
+      const ref = householdTaskCollection(household.id).doc();
       await ref.create({
         householdId: household.id,
         audienceVersion: CANONICAL_AUDIENCE_VERSION,
@@ -239,7 +243,14 @@ exports.toggleSharedTask = onCall(
         windowMs: HOUR_MS,
       }, "Too many task changes. Try again shortly.");
 
-      const ref = db.collection("sharedTasks").doc(taskId);
+      const household = await canonicalHouseholdFor(auth.uid);
+      if (!household) {
+        throw new HttpsError(
+            "permission-denied",
+            "That household task is not available to your account.",
+        );
+      }
+      const ref = householdTaskCollection(household.id).doc(taskId);
       const snapshot = await ref.get();
       if (!snapshot.exists) {
         throw new HttpsError(
@@ -248,14 +259,18 @@ exports.toggleSharedTask = onCall(
         );
       }
       const data = snapshot.data();
-      const household = await sharedTaskAccessContext(auth.uid, data);
-      if (!household) {
+      const accessHousehold = await sharedTaskAccessContext(
+          auth.uid,
+          data,
+          household,
+      );
+      if (!accessHousehold) {
         throw new HttpsError(
             "permission-denied",
             "That household task is not available to your account.",
         );
       }
-      const isHouseholdOwner = household.data.ownerUid === auth.uid;
+      const isHouseholdOwner = accessHousehold.data.ownerUid === auth.uid;
 
       if (data.completedAt) {
         if (!canReopenTask(data, auth.uid, isHouseholdOwner)) {
@@ -302,18 +317,29 @@ exports.removeSharedTask = onCall(
         windowMs: HOUR_MS,
       }, "Too many task removals. Try again shortly.");
 
-      const ref = db.collection("sharedTasks").doc(taskId);
-      const snapshot = await ref.get();
-      if (!snapshot.exists) return {removed: true};
-      const data = snapshot.data();
-      const household = await sharedTaskAccessContext(auth.uid, data);
+      const household = await canonicalHouseholdFor(auth.uid);
       if (!household) {
         throw new HttpsError(
             "permission-denied",
             "That household task is not available to your account.",
         );
       }
-      const isHouseholdOwner = household.data.ownerUid === auth.uid;
+      const ref = householdTaskCollection(household.id).doc(taskId);
+      const snapshot = await ref.get();
+      if (!snapshot.exists) return {removed: true};
+      const data = snapshot.data();
+      const accessHousehold = await sharedTaskAccessContext(
+          auth.uid,
+          data,
+          household,
+      );
+      if (!accessHousehold) {
+        throw new HttpsError(
+            "permission-denied",
+            "That household task is not available to your account.",
+        );
+      }
+      const isHouseholdOwner = accessHousehold.data.ownerUid === auth.uid;
       const purgeAtMs = data.purgeAt &&
           typeof data.purgeAt.toMillis === "function" ?
         data.purgeAt.toMillis() : 0;

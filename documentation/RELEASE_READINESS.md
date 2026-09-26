@@ -147,7 +147,7 @@ Established backend identity:
 - **DONE in source** `onHomiHouseholdDeletedDataCleanup` adds bounded orphan-data cleanup.
 - **DONE in source** `onHouseholdTaskMembershipChanged` fully aligns new canonical audiences and shrink-only reconciles migrated historical audiences so departures are removed without later joins widening old Tasks.
 - **DONE in source** deployment helper source-completeness list updated.
-- **DONE in source** exact Functions export guard is **37**: two new trigger names (cleanup + Task-membership sync); preference/task modules override existing callable names.
+- **DONE in source** exact Functions export guard remains **37**: cleanup + Task-membership sync are present, canonical task callables override their historic names, and the two retired root Task notification triggers are replaced one-for-one by nested Household trigger names.
 - **DONE source preflight only** `household_task_policy.test.js` defines five pure policy tests for historical-audience non-widening, canonical membership reconciliation, attribution cleanup and Household-owner recovery. The policy suite passed 5/5 under Node 22 during source preflight, but this does not replace the governed Cloud Shell run.
 
 Firestore 0.12 boundary:
@@ -156,7 +156,7 @@ Firestore 0.12 boundary:
 - allowed data domains are fixed;
 - deterministic `domain--itemId` identity is enforced;
 - payload ID, schema version, authenticated actor and server request timestamp are enforced;
-- canonical shared-Task reads require both `householdId == current Household` and exact `memberUids array-contains current UID` query constraints;
+- canonical shared-Task reads use the exact `households/{householdId}/sharedTasks` path plus `memberUids array-contains current UID`; rules independently require both halves of canonical Household membership;
 - the pre-0.12 root `sharedTasks` collection is migration-only and fails closed to clients; safely mappable Tasks move atomically into their canonical Household subcollection;
 - outsiders and stale/forged half-memberships are denied in the source-controlled tests.
 

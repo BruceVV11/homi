@@ -175,9 +175,9 @@ Source-level evidence already obtained in this development pass:
 
 0.13 backend expected governed gates:
 
-- **VERIFY** Node 22 dependency install/lint, including the exact current `billing.js` source;
-- **VERIFY** pure Functions policy suite **17/17** under the governed dependency-loaded worker;
-- **VERIFY** exact **43** Function exports;
+- **VERIFY exact current head** Node 22 dependency install/lint, including the exact current `billing.js` and three-viewer `location_share.js` source. A predecessor-head source-level lint completed on 2026-09-26, but the dependency-install step in the pasted PowerShell validator did not complete;
+- **VERIFY exact current head** pure Functions policy suite **17/17**. The suite passed 17/17 on predecessor head `4349791983bd8ed1f15a71cf79a1a285edecd54b`, but the candidate moved afterward;
+- **VERIFY** exact **43** Function exports by loading `functions/entrypoint.js` after dependencies are installed; do not use a regex that only counts `exports.foo =` because the entrypoint composes module spreads;
 - **VERIFY** Firestore emulator **25/25**: existing 23 + 2 billing boundary tests;
 - **BLOCKER** source-controlled Play catalog IDs are currently blank;
 - **BLOCKER** Android Publisher API must be enabled on `homi-ee80a`;

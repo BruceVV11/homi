@@ -7,16 +7,25 @@ void main() {
     expect(HomiPlusPlans.personal.continuousLocationSenderSeats, 1);
     expect(HomiPlusPlans.duo.continuousLocationSenderSeats, 2);
     expect(HomiPlusPlans.household.continuousLocationSenderSeats, 4);
-    expect(homiPlusMaxTrustedLiveViewersPerSender, 5);
+    expect(homiPlusMaxTrustedLiveViewersPerSender, 3);
     expect(homiPlusDuoSeatReassignmentCooldownDays, 7);
   });
 
-  test('approved South African monthly prices are represented in cents', () {
+  test('approved South African launch prices are represented in cents', () {
     expect(HomiPlusPlans.free.monthlyPriceCents, 0);
-    expect(HomiPlusPlans.personal.monthlyPriceCents, 1999);
-    expect(HomiPlusPlans.duo.monthlyPriceCents, 3499);
-    expect(HomiPlusPlans.household.monthlyPriceCents, 4999);
-    expect(HomiPlusPlans.household.annualPriceCents, 49999);
+
+    expect(HomiPlusPlans.personal.monthlyPriceCents, 7999);
+    expect(HomiPlusPlans.personal.annualPriceCents, 79999);
+
+    expect(HomiPlusPlans.duo.monthlyPriceCents, 12999);
+    expect(HomiPlusPlans.duo.annualPriceCents, 129999);
+
+    expect(HomiPlusPlans.household.monthlyPriceCents, 19999);
+    expect(HomiPlusPlans.household.annualPriceCents, 199999);
+    expect(HomiPlusPlans.householdMonthlyPriceCents(5), 24999);
+    expect(HomiPlusPlans.householdAnnualPriceCents(5), 249999);
+    expect(HomiPlusPlans.householdMonthlyPriceCents(10), 49999);
+    expect(HomiPlusPlans.householdAnnualPriceCents(10), 499999);
   });
 
   test('only Household includes the shared household product', () {

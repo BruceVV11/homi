@@ -1,12 +1,14 @@
 # Homi Location & Safety
 
-Date: 2026-09-26
+Date: 2026-09-27
 Current source candidate: `0.13.0+17`
 
 ## Non-negotiable privacy model
 
 **Connection, relationship/scope, current-location sharing, arrival delivery and exact saved-place visibility are separate choices.**
 
+- The People/location surface requires a signed-in Homi account with a verified email; local-only and signed-in-but-unverified states cannot view maps, trusted connections, sharing controls or Safety/check-in controls.
+- Location Firestore reads/writes and the per-viewer sharing callable enforce the same verified-account boundary; this is not only a UI overlay.
 - A Homi connection never starts location sharing automatically.
 - Household/Friend classification never starts location sharing.
 - Live location is granted per viewer by the sender.

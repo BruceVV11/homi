@@ -184,7 +184,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               value: preferences.householdAttention,
               enabled: preferences.enabled,
               onChanged: (value) =>
-                  _save(preferences.copyWith(householdAttention: value)),
+                  _save(_preferences.copyWith(householdAttention: value)),
             ),
             _PreferenceCard(
               icon: Icons.task_alt_outlined,
@@ -194,7 +194,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               value: preferences.tasksAndRoutines,
               enabled: preferences.enabled,
               onChanged: (value) =>
-                  _save(preferences.copyWith(tasksAndRoutines: value)),
+                  _save(_preferences.copyWith(tasksAndRoutines: value)),
             ),
             _PreferenceCard(
               icon: Icons.favorite_outline_rounded,
@@ -204,7 +204,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               value: preferences.people,
               enabled: preferences.enabled,
               onChanged: (value) =>
-                  _save(preferences.copyWith(people: value)),
+                  _save(_preferences.copyWith(people: value)),
             ),
             _PreferenceCard(
               icon: Icons.auto_awesome_outlined,
@@ -214,7 +214,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               value: preferences.homiUpdates,
               enabled: preferences.enabled,
               onChanged: (value) =>
-                  _save(preferences.copyWith(homiUpdates: value)),
+                  _save(_preferences.copyWith(homiUpdates: value)),
             ),
             _PreferenceCard(
               icon: Icons.shield_outlined,
@@ -224,7 +224,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               value: preferences.serviceNotices,
               enabled: preferences.enabled,
               onChanged: (value) =>
-                  _save(preferences.copyWith(serviceNotices: value)),
+                  _save(_preferences.copyWith(serviceNotices: value)),
             ),
             const SizedBox(height: 16),
             Container(

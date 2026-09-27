@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 PROJECT_ID="homi-ee80a"
 EXPECTED_PROJECT_NUMBER="883068189841"
-EXPECTED_TEST_COUNT=25
+EXPECTED_TEST_COUNT=26
 TEST_FILES=(
   "server.boundary.test.js"
   "household.boundary.test.js"

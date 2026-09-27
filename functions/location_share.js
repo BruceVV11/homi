@@ -9,9 +9,7 @@ function requireVerifiedCloudAccount(request) {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Sign in to continue.");
   }
-  const provider = request.auth.token && request.auth.token.firebase &&
-    request.auth.token.firebase.sign_in_provider;
-  if (provider === "password" && request.auth.token.email_verified !== true) {
+  if (!request.auth.token || request.auth.token.email_verified !== true) {
     throw new HttpsError(
         "failed-precondition",
         "Verify your email before using Homi sharing features.",

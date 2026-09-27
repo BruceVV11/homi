@@ -936,11 +936,35 @@ class _PlanCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(definition.name,
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 5),
-            Text(definition.summary,
-                style: Theme.of(context).textTheme.bodyMedium),
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: HomiColors.peach.withValues(alpha: 0.20),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    _planIcon(definition.plan),
+                    color: HomiColors.coral,
+                    size: 21,
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Text(
+                    definition.name,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              definition.summary,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
             if (memberCount != null &&
                 onHouseholdMembersChanged != null) ...[
               const SizedBox(height: 14),

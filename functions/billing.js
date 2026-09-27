@@ -175,6 +175,24 @@ function expiryFrom(lineItems) {
   return latest === null ? null : Timestamp.fromMillis(latest);
 }
 
+function startedAtFrom(playPurchase) {
+  const raw = playPurchase && typeof playPurchase.startTime === "string" ?
+    playPurchase.startTime : "";
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? Timestamp.fromMillis(parsed) : null;
+}
+
+function autoRenewEnabledFrom(lineItems) {
+  let sawAutoRenewingPlan = false;
+  for (const item of lineItems || []) {
+    const plan = item && item.autoRenewingPlan;
+    if (!plan || typeof plan.autoRenewEnabled !== "boolean") continue;
+    sawAutoRenewingPlan = true;
+    if (plan.autoRenewEnabled === true) return true;
+  }
+  return sawAutoRenewingPlan ? false : null;
+}
+
 function purchaseIdentity(playPurchase, expectedProductId = null) {
   const catalog = catalogOrThrow();
   const lineItems = Array.isArray(playPurchase.lineItems) ? playPurchase.lineItems : [];
@@ -201,7 +219,9 @@ function purchaseIdentity(playPurchase, expectedProductId = null) {
     basePlanId: candidate.basePlanId,
     cadence: candidate.product.cadence,
     householdMemberLimit: candidate.product.householdMemberLimit || 0,
+    startedAt: startedAtFrom(playPurchase),
     validUntil: expiryFrom(lineItems),
+    autoRenewEnabled: autoRenewEnabledFrom(lineItems),
   };
 }
 
@@ -282,7 +302,10 @@ function coverageDocument({
   seatRole,
   householdId = null,
   duoSeatAssigneeUid = null,
+  cadence = null,
+  startedAt = null,
   validUntil = null,
+  autoRenewEnabled = null,
   householdMemberLimit = 0,
 }) {
   return {
@@ -294,7 +317,10 @@ function coverageDocument({
     seatRole,
     householdId,
     duoSeatAssigneeUid,
+    cadence,
+    startedAt,
     validUntil,
+    autoRenewEnabled,
     ...entitlementCapabilities(plan, state, householdMemberLimit),
     updatedAt: FieldValue.serverTimestamp(),
   };
@@ -423,7 +449,11 @@ async function reconcilePurchaseEntitlements(purchase) {
           seatRole,
           householdId: result.householdId,
           duoSeatAssigneeUid: result.duoSeatAssigneeUid,
+          cadence: data.cadence || null,
+          startedAt: data.startedAt || null,
           validUntil: data.validUntil || null,
+          autoRenewEnabled: typeof data.autoRenewEnabled === "boolean" ?
+            data.autoRenewEnabled : null,
           householdMemberLimit: Number(data.householdMemberLimit || 0),
         }),
         {merge: false},
@@ -588,7 +618,9 @@ async function persistVerifiedPurchase({
       householdMemberLimit: identity.householdMemberLimit,
       plan: identity.plan,
       state,
+      startedAt: identity.startedAt,
       validUntil: identity.validUntil,
+      autoRenewEnabled: identity.autoRenewEnabled,
       linkedPurchaseTokenHash: linkedTokenHash,
       acknowledgementState: playPurchase.acknowledgementState || null,
       latestOrderId: playPurchase.latestOrderId || null,
@@ -659,7 +691,10 @@ async function refreshStoredPurchase(purchaseToken, purchaserUid = null) {
   if (stored.exists && stored.data().supersededByTokenHash) {
     await stored.ref.set({
       state: freshState,
+      cadence: identity.cadence,
+      startedAt: identity.startedAt,
       validUntil: identity.validUntil,
+      autoRenewEnabled: identity.autoRenewEnabled,
       acknowledgementState: playPurchase.acknowledgementState || null,
       updatedAt: FieldValue.serverTimestamp(),
     }, {merge: true});
@@ -757,6 +792,22 @@ exports.setHomiPlusDuoSeat = onCall(
       const accountRef = db.collection("billingAccounts").doc(user.uid);
       const account = await accountRef.get();
       const currentUid = account.exists ? String(account.data().duoSecondaryUid || "").trim() : "";
+
+      if (requestedUid && requestedUid !== currentUid) {
+        const targetPurchase = await currentPurchaseForPurchaser(requestedUid);
+        const targetState = targetPurchase ?
+          effectivePlayState(
+              targetPurchase.data.state,
+              targetPurchase.data.validUntil,
+          ) : null;
+        if (targetPurchase && grantsPaidAccess(targetState)) {
+          throw new HttpsError(
+              "failed-precondition",
+              "This person already has their own active Homi+ subscription. They need to cancel it and reach the end of the paid term before using your Duo seat.",
+          );
+        }
+      }
+
       const canReassignAt = account.exists && account.data().duoCanReassignAt &&
         typeof account.data().duoCanReassignAt.toMillis === "function" ?
         account.data().duoCanReassignAt.toMillis() : 0;

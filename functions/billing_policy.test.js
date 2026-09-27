@@ -13,6 +13,7 @@ const {
   configuredCatalog,
   productFor,
 } = require("./billing_policy");
+const {CURRENT_PLAY_CATALOG} = require("./billing_catalog");
 
 test("active grace and unexpired canceled states grant paid access", () => {
   assert.equal(normalizePlayState("SUBSCRIPTION_STATE_ACTIVE"), "active");
@@ -243,6 +244,23 @@ test("expired canonical purchase can be replaced but superseded token cannot ret
 
 test("billing catalog supports annual plans and household seat tiers but fails closed when incomplete", () => {
   assert.equal(configuredCatalog({}).configured, false);
+
+  const liveCatalog = configuredCatalog(CURRENT_PLAY_CATALOG);
+  assert.equal(liveCatalog.configured, true);
+  assert.equal(liveCatalog.products.length, 9);
+  assert.equal(
+      productFor(liveCatalog, "homi_plus_personal", "monthly").plan,
+      "personal",
+  );
+  assert.equal(
+      productFor(liveCatalog, "homi_plus_duo", "annual").cadence,
+      "annual",
+  );
+  assert.equal(
+      productFor(liveCatalog, "homi_plus_household_10", "monthly")
+          .householdMemberLimit,
+      10,
+  );
 
   const env = {
     HOMI_PLAY_PERSONAL_PRODUCT_ID: "personal",

@@ -542,7 +542,8 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
                             .where((definition) =>
                                 definition.isPaid &&
                                 !(activeOwnedPlan &&
-                                    definition.plan == entitlement.plan))
+                                    definition.plan == entitlement.plan &&
+                                    definition.plan != HomiPlusPlan.household))
                             .map((definition) {
                           final householdLimit =
                               definition.plan == HomiPlusPlan.household
@@ -563,6 +564,14 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
                                 householdMemberLimit: householdLimit,
                               ),
                               householdMembers: householdLimit,
+                              currentCadence: activeOwnedPlan &&
+                                      definition.plan == entitlement.plan
+                                  ? entitlement.cadence
+                                  : null,
+                              currentHouseholdMembers: activeOwnedPlan &&
+                                      definition.plan == HomiPlusPlan.household
+                                  ? entitlement.householdMemberLimit
+                                  : null,
                               onHouseholdMembersChanged: householdLimit == null
                                   ? null
                                   : (value) => setState(() {
@@ -906,6 +915,8 @@ class _PlanCard extends StatelessWidget {
     required this.onMonthly,
     required this.onAnnual,
     this.householdMembers,
+    this.currentCadence,
+    this.currentHouseholdMembers,
     this.onHouseholdMembersChanged,
   });
 
@@ -913,6 +924,8 @@ class _PlanCard extends StatelessWidget {
   final HomiStoreOffer? monthlyOffer;
   final HomiStoreOffer? annualOffer;
   final int? householdMembers;
+  final HomiBillingCadence? currentCadence;
+  final int? currentHouseholdMembers;
   final ValueChanged<int>? onHouseholdMembersChanged;
   final bool busy;
   final VoidCallback onMonthly;
@@ -929,6 +942,14 @@ class _PlanCard extends StatelessWidget {
             memberCount != null
         ? HomiPlusPlans.householdAnnualPriceCents(memberCount)
         : definition.annualPriceCents;
+    final selectedCurrentHouseholdTier =
+        definition.plan == HomiPlusPlan.household &&
+        memberCount != null &&
+        currentHouseholdMembers == memberCount;
+    final monthlyIsCurrent = selectedCurrentHouseholdTier &&
+        currentCadence == HomiBillingCadence.monthly;
+    final annualIsCurrent = selectedCurrentHouseholdTier &&
+        currentCadence == HomiBillingCadence.annual;
 
     return Card(
       child: Padding(
@@ -1029,11 +1050,15 @@ class _PlanCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: busy || monthlyOffer == null ? null : onMonthly,
+                onPressed: busy || monthlyOffer == null || monthlyIsCurrent
+                    ? null
+                    : onMonthly,
                 child: Text(
-                  monthlyOffer == null
-                      ? '${_rands(monthlyCents)} / month'
-                      : '${monthlyOffer!.displayPrice} / month',
+                  monthlyIsCurrent
+                      ? 'Current · ${monthlyOffer?.displayPrice ?? _rands(monthlyCents)} / month'
+                      : monthlyOffer == null
+                          ? '${_rands(monthlyCents)} / month'
+                          : '${monthlyOffer!.displayPrice} / month',
                 ),
               ),
             ),
@@ -1042,11 +1067,15 @@ class _PlanCard extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: busy || annualOffer == null ? null : onAnnual,
+                  onPressed: busy || annualOffer == null || annualIsCurrent
+                      ? null
+                      : onAnnual,
                   child: Text(
-                    annualOffer == null
-                        ? '${annualCents == null ? 'Annual' : _rands(annualCents)} / year'
-                        : '${annualOffer!.displayPrice} / year',
+                    annualIsCurrent
+                        ? 'Current · ${annualOffer?.displayPrice ?? (annualCents == null ? 'Annual' : _rands(annualCents))} / year'
+                        : annualOffer == null
+                            ? '${annualCents == null ? 'Annual' : _rands(annualCents)} / year'
+                            : '${annualOffer!.displayPrice} / year',
                   ),
                 ),
               ),

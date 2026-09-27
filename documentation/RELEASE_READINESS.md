@@ -33,6 +33,7 @@ Established evidence:
 - **DONE in 0.13 source / VERIFY** Add-to-Household now ends with a compact privacy/context panel so a one-person candidate sheet does not feel visually sunken.
 - **DONE in 0.13 source / VERIFY** notification preference cards are full tap targets, local preference state updates immediately while provider sync runs in serialized background work, and the redundant enabled-success banner is gone.
 - **DONE in 0.13 source / VERIFY** sign-out uses inline button progress, bounds push/Google cleanup so it cannot stall the account session, and surfaces real failures in a branded sheet.
+- **DONE in 0.13 source** `test/settings_interaction_regression_test.dart` guards the notification tap/immediate-state and sign-out sequencing contracts.
 
 Still required:
 

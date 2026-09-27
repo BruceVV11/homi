@@ -1,8 +1,8 @@
 "use strict";
 
 // Google Play product/base-plan IDs are public durable store identifiers, not
-// secrets. Keep backend/client catalogs source-controlled and identical once
-// the permanent products have actually been created and verified in Play.
+// secrets. Backend/client catalogs are source-controlled and identical to the
+// permanent products now active in Play Console.
 const CURRENT_PLAY_CATALOG = Object.freeze({
   HOMI_PLAY_PERSONAL_PRODUCT_ID: "homi_plus_personal",
   HOMI_PLAY_PERSONAL_MONTHLY_BASE_PLAN_ID: "monthly",

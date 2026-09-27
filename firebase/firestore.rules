@@ -10,6 +10,15 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function verifiedSignedIn() {
+      return signedIn()
+        && request.auth.token.email_verified == true;
+    }
+
+    function isVerifiedSelf(uid) {
+      return verifiedSignedIn() && request.auth.uid == uid;
+    }
+
     function isDeveloperAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/developerAdmins/$(request.auth.uid))
@@ -292,7 +301,7 @@ service cloud.firestore {
     }
 
     match /locationShares/{ownerUid}/viewers/{viewerUid} {
-      allow read: if isSelf(ownerUid) || isSelf(viewerUid);
+      allow read: if isVerifiedSelf(ownerUid) || isVerifiedSelf(viewerUid);
       allow create, update, delete: if false;
     }
 
@@ -301,8 +310,8 @@ service cloud.firestore {
     // included them in viewerUids AND still actively shares live/latest location
     // with them. Clients cannot create or mutate this collection directly.
     match /sharedPlaces/{ownerUid}/places/{kind} {
-      allow get: if isSelf(ownerUid)
-        || (signedIn()
+      allow get: if isVerifiedSelf(ownerUid)
+        || (verifiedSignedIn()
           && resource.data.ownerUid == ownerUid
           && resource.data.kind == kind
           && resource.data.viewerUids is list
@@ -316,14 +325,15 @@ service cloud.firestore {
     // update interval provide a cost-abuse backstop even before service-level
     // App Check enforcement is switched on for production.
     match /locations/{ownerUid} {
-      allow create: if isSelf(ownerUid)
+      allow create: if isVerifiedSelf(ownerUid)
         && validLocationSnapshot(request.resource.data);
-      allow update: if isSelf(ownerUid)
+      allow update: if isVerifiedSelf(ownerUid)
         && validLocationSnapshot(request.resource.data)
         && request.time >= resource.data.updatedAt + duration.value(90, 's');
       allow delete: if false;
-      allow read: if isSelf(ownerUid)
-        || (signedIn() && hasActiveLocationShare(ownerUid, request.auth.uid));
+      allow read: if isVerifiedSelf(ownerUid)
+        || (verifiedSignedIn()
+          && hasActiveLocationShare(ownerUid, request.auth.uid));
     }
 
     match /{document=**} {

@@ -64,6 +64,10 @@ async function acceptedConnection(a = "alice", b = "bob") {
   });
 }
 
+function verifiedFirestore(uid) {
+  return env.authenticatedContext(uid, {email_verified: true}).firestore();
+}
+
 async function canonicalHousehold() {
   await seed("households/home1", {
     name: "Home",
@@ -102,15 +106,15 @@ function validLocation() {
 }
 
 test("owner location write is allowed but foreign write and delete are denied", async () => {
-  const alice = env.authenticatedContext("alice").firestore();
-  const bob = env.authenticatedContext("bob").firestore();
+  const alice = verifiedFirestore("alice");
+  const bob = verifiedFirestore("bob");
   await assertSucceeds(setDoc(doc(alice, "locations/alice"), validLocation()));
   await assertFails(setDoc(doc(bob, "locations/alice"), validLocation()));
   await assertFails(deleteDoc(doc(alice, "locations/alice")));
 });
 
 test("location update minimum interval enforces the 90-second cost boundary", async () => {
-  const alice = env.authenticatedContext("alice").firestore();
+  const alice = verifiedFirestore("alice");
 
   await seed("locations/alice", {
     latitude: -29.86,
@@ -146,7 +150,7 @@ test("location update minimum interval enforces the 90-second cost boundary", as
 });
 
 test("trusted location read requires accepted connection and active share", async () => {
-  const bob = env.authenticatedContext("bob").firestore();
+  const bob = verifiedFirestore("bob");
   await seed("locations/alice", {
     latitude: -29.86,
     longitude: 31.02,
@@ -165,6 +169,37 @@ test("trusted location read requires accepted connection and active share", asyn
     updatedAt: Timestamp.now(),
   });
   await assertSucceeds(getDoc(doc(bob, "locations/alice")));
+});
+
+test("unverified accounts cannot read or write location surfaces", async () => {
+  const alice = env.authenticatedContext("alice", {
+    email_verified: false,
+  }).firestore();
+  const bob = env.authenticatedContext("bob", {
+    email_verified: false,
+  }).firestore();
+
+  await seed("locations/alice", {
+    latitude: -29.86,
+    longitude: 31.02,
+    accuracyMeters: 12,
+    batteryPercent: 80,
+    isCharging: false,
+    updatedAt: Timestamp.now(),
+    source: "continuous_foreground_service",
+  });
+  await acceptedConnection();
+  await seed("locationShares/alice/viewers/bob", {
+    ownerUid: "alice",
+    viewerUid: "bob",
+    active: true,
+    updatedAt: Timestamp.now(),
+  });
+
+  await assertFails(setDoc(doc(alice, "locations/alice"), validLocation()));
+  await assertFails(getDoc(doc(alice, "locations/alice")));
+  await assertFails(getDoc(doc(bob, "locations/alice")));
+  await assertFails(getDoc(doc(alice, "locationShares/alice/viewers/bob")));
 });
 
 test("identity and Homi code mutations cannot be performed by clients", async () => {
@@ -227,7 +262,7 @@ test("preference and location-share mutations are server-only", async () => {
     active: true,
     updatedAt: Timestamp.now(),
   });
-  const alice = env.authenticatedContext("alice").firestore();
+  const alice = verifiedFirestore("alice");
   await assertSucceeds(getDoc(doc(alice, "peoplePreferences/alice/people/bob")));
   await assertSucceeds(getDoc(doc(alice, "locationShares/alice/viewers/bob")));
   await assertFails(updateDoc(doc(alice, "peoplePreferences/alice/people/bob"), {
@@ -251,9 +286,9 @@ test("shared places require selection, accepted connection and active location s
     updatedAt: Timestamp.now(),
   });
 
-  const alice = env.authenticatedContext("alice").firestore();
-  const bob = env.authenticatedContext("bob").firestore();
-  const mallory = env.authenticatedContext("mallory").firestore();
+  const alice = verifiedFirestore("alice");
+  const bob = verifiedFirestore("bob");
+  const mallory = verifiedFirestore("mallory");
 
   await assertSucceeds(getDoc(doc(alice, "sharedPlaces/alice/places/home")));
   await assertFails(getDoc(doc(bob, "sharedPlaces/alice/places/home")));

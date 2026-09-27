@@ -1,7 +1,7 @@
 name: homi
 description: Homi - happy homes, easier days.
 publish_to: "none"
-version: 0.12.0+16
+version: 0.13.0+18
 
 environment:
   sdk: ">=3.11.0 <4.0.0"
@@ -26,18 +26,29 @@ dependencies:
   battery_plus: ^7.0.0
   shared_preferences: ^2.5.3
   flutter_local_notifications: ^22.3.0
+  # 2.4.7 is the latest Homi-compatible splash package on Flutter 3.41.5:
+  # 2.4.8 requires meta ^1.18.0 while flutter_test pins meta 1.17.0.
+  # Keep 2.4.7 as a main dependency so its Android plugin class is present on
+  # the release compile classpath when Flutter generates plugin registration.
+  flutter_native_splash: 2.4.7
   flutter_timezone: ^5.1.0
   timezone: ^0.11.1
   intl: ^0.20.2
   uuid: ^4.5.1
   google_fonts: ^6.3.0
+  crypto: ^3.0.6
+  in_app_purchase: ^3.3.0
+  # 0.5.0 is the latest Android platform plugin compatible with Homi's
+  # Flutter 3.41.5 / Dart 3.11.3 toolchain while moving to Play Billing 8.
+  # 0.5.1+ raises the Dart floor to 3.12, so keep this exact until Homi's
+  # Flutter toolchain is deliberately upgraded.
+  in_app_purchase_android: 0.5.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
-  flutter_native_splash: ^2.4.6
 
 flutter:
   uses-material-design: true

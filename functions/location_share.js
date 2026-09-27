@@ -3,15 +3,13 @@ const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 
 const db = getFirestore();
 const HOUR_MS = 60 * 60 * 1000;
-const MAX_ACTIVE_LIVE_VIEWERS = 5;
+const MAX_ACTIVE_LIVE_VIEWERS = 3;
 
 function requireVerifiedCloudAccount(request) {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Sign in to continue.");
   }
-  const provider = request.auth.token && request.auth.token.firebase &&
-    request.auth.token.firebase.sign_in_provider;
-  if (provider === "password" && request.auth.token.email_verified !== true) {
+  if (!request.auth.token || request.auth.token.email_verified !== true) {
     throw new HttpsError(
         "failed-precondition",
         "Verify your email before using Homi sharing features.",
@@ -69,7 +67,7 @@ async function consumeLocationShareLimit(actorUid) {
  *
  * Deactivation is deliberately available even after a relationship is gone and
  * is not blocked by the activation rate limiter. Enabling a new viewer requires
- * an accepted connection and enforces no more than five active viewers for one
+ * an accepted connection and enforces no more than three active viewers for one
  * sender. This cap is independent from the future paid-plan entitlement check;
  * it protects the current beta backend before Play billing is activated.
  */
@@ -136,7 +134,7 @@ exports.setLocationShare = onCall(
         if (activeViewers.size >= MAX_ACTIVE_LIVE_VIEWERS) {
           throw new HttpsError(
               "failed-precondition",
-              "Live location can be shared with up to five trusted people at a time.",
+              "Live location can be shared with up to three trusted people at a time.",
           );
         }
 

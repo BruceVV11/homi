@@ -386,6 +386,7 @@ class _HomiShellState extends State<HomiShell> {
         onRemove: widget.controller.removeSupply,
       ),
       PeopleHubPage(
+        authService: widget.authService,
         locationService: _locationService,
         trustedPeopleService: _trustedPeopleService,
         checkInService: _arrivalCheckInService,

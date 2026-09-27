@@ -5,7 +5,7 @@ import 'package:homi/src/domain/homi_plus_plan.dart';
 
 void main() {
   test('continuous-location commercial cost guardrails stay aligned', () {
-    expect(homiPlusMaxTrustedLiveViewersPerSender, 5);
+    expect(homiPlusMaxTrustedLiveViewersPerSender, 3);
 
     final locationSource = File(
       'lib/src/services/location_status_service.dart',
@@ -22,10 +22,10 @@ void main() {
     );
 
     final shareFunction = File('functions/location_share.js').readAsStringSync();
-    expect(shareFunction, contains('MAX_ACTIVE_LIVE_VIEWERS = 5'));
+    expect(shareFunction, contains('MAX_ACTIVE_LIVE_VIEWERS = 3'));
     expect(
       shareFunction,
-      contains('Live location can be shared with up to five trusted people'),
+      contains('Live location can be shared with up to three trusted people'),
     );
   });
 }

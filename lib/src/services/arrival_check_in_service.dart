@@ -557,6 +557,11 @@ class ArrivalCheckInService extends ChangeNotifier {
     if (!firebaseReady) throw StateError('Sign in to use arrival check-ins.');
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw StateError('Sign in to use arrival check-ins.');
+    if (user.emailVerified != true) {
+      throw StateError(
+        'Verify your email before using Homi location and check-ins.',
+      );
+    }
     return user.uid;
   }
 

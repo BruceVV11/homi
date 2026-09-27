@@ -1,12 +1,14 @@
 # Homi Location & Safety
 
-Date: 2026-09-11
-Source candidate: `0.10.0+14`
+Date: 2026-09-27
+Current source candidate: `0.13.0+17`
 
 ## Non-negotiable privacy model
 
 **Connection, relationship/scope, current-location sharing, arrival delivery and exact saved-place visibility are separate choices.**
 
+- The People/location surface requires a signed-in Homi account with a verified email; local-only and signed-in-but-unverified states cannot view maps, trusted connections, sharing controls or Safety/check-in controls.
+- Location Firestore reads/writes and the per-viewer sharing callable enforce the same verified-account boundary; this is not only a UI overlay.
 - A Homi connection never starts location sharing automatically.
 - Household/Friend classification never starts location sharing.
 - Live location is granted per viewer by the sender.
@@ -30,13 +32,13 @@ The tracked device owns the decision to send.
 
 Android uses one visible foreground Geolocator stream at medium accuracy with roughly a 100 m movement threshold and roughly two-minute interval.
 
-0.10.0 aligns cost protection with that intended cadence:
+0.10.0 introduced the 90-second location-write cadence. The current 0.13 commercial contract keeps that cadence and tightens the candidate live-viewer boundary:
 
 - client-side cloud sync gap: 90 seconds;
 - Firestore minimum update interval: 90 seconds;
-- maximum simultaneous outbound live-location viewers per sender: 5.
+- maximum simultaneous outbound live-location viewers per covered sender: 3.
 
-The five-viewer cap does not limit normal trusted connections. A user may keep other trusted connections without actively broadcasting to all of them.
+The three-viewer cap does not limit normal trusted connections. A user may keep other trusted connections without actively broadcasting to all of them.
 
 Removing/stopping a live viewer is a privacy exit and must always remain possible even if the connection is stale, a rate limit is reached or a subscription later expires.
 
@@ -46,10 +48,10 @@ Once Google Play billing and authoritative server entitlements are active:
 
 - receiving another person's authorized live location remains free;
 - continuously sending your own location requires a Personal/Duo/Household sender seat;
-- each sender seat gets the same five-viewer cap;
+- each sender seat gets the same three-viewer cap;
 - no payment state can block stop-sharing, check-in disable, exact-place revoke, data erase or deletion.
 
-0.10.0 adds the plan contract and cost caps but intentionally does not enforce paid entitlement before secure Play verification exists.
+0.13 represents the approved plan contract and three-viewer cost boundary in source, but intentionally does not enforce paid entitlement before secure Play verification and Internal Testing lifecycle proof exist.
 
 ## Arrival check-ins
 
@@ -116,7 +118,7 @@ Before public release, verify on real devices:
 - Samsung power-saving behavior;
 - representative-day battery use;
 - real two-account Home/Work arrival transitions;
-- five-viewer cap and sixth-viewer denial;
+- three-viewer cap and fourth-viewer denial;
 - deactivation at/after cap;
 - emergency-region switching and representative dialer targets without completing test emergency calls;
 - Play background-location disclosure/review requirements.

@@ -125,7 +125,9 @@ class _HouseholdSettingsPageState extends State<HouseholdSettingsPage> {
         context,
         title: household.full ? 'Your Household is full' : 'No one else to add yet',
         message: household.full
-            ? 'All four Household seats are already occupied or reserved by pending invitations.'
+            ? household.memberLimit <= 4
+                ? 'All four included Household places are occupied or reserved. Increase your Homi+ Household member count in Plans & billing to add another person.'
+                : 'All ${household.memberLimit} places covered by the current Homi+ Household plan are occupied or reserved.'
             : hasReservedInvite
                 ? 'Everyone you can currently add is already in your Household or has a pending invitation. Connect with another person in People, then come back here to invite them.'
                 : 'Connect with another person in People first. Once that trusted connection is accepted, come back here to invite them to your Household.',
@@ -690,6 +692,35 @@ class _InviteMemberSheet extends StatelessWidget {
                     trailing: const Icon(Icons.chevron_right_rounded),
                   );
                 },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 22),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: HomiColors.sage.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: HomiColors.border),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.shield_outlined,
+                      size: 19,
+                      color: HomiColors.muted,
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        'Household membership does not turn on location sharing. Each person keeps location sharing as a separate opt-in choice.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

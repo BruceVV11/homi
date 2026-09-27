@@ -211,7 +211,8 @@ class LocationStatusService {
     final liveEnabled = await continuousSharingEnabled();
     final arrivalEnabled = await arrivalMonitoringEnabled();
     if (!liveEnabled && !arrivalEnabled) return false;
-    if (!firebaseReady || FirebaseAuth.instance.currentUser == null) {
+    final user = firebaseReady ? FirebaseAuth.instance.currentUser : null;
+    if (user == null || user.emailVerified != true) {
       return false;
     }
     if (!await Geolocator.isLocationServiceEnabled()) return false;
@@ -264,8 +265,14 @@ class LocationStatusService {
     required String signInMessage,
     required String permissionMessage,
   }) async {
-    if (!firebaseReady || FirebaseAuth.instance.currentUser == null) {
+    final user = firebaseReady ? FirebaseAuth.instance.currentUser : null;
+    if (user == null) {
       throw StateError(signInMessage);
+    }
+    if (user.emailVerified != true) {
+      throw StateError(
+        'Verify your email before using Homi location and sharing features.',
+      );
     }
     await _ensureLocationService();
     final permission = await _permission(requestIfNeeded: true);
@@ -381,7 +388,7 @@ class LocationStatusService {
   }) async {
     if (!firebaseReady || _cloudSyncInFlight) return;
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null || user.emailVerified != true) return;
 
     final ref = FirebaseFirestore.instance.collection('locations').doc(user.uid);
     _cloudSyncInFlight = true;

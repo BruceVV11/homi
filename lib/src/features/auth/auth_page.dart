@@ -27,6 +27,8 @@ class _AuthPageState extends State<AuthPage> {
   final _passwordController = TextEditingController();
   bool _create = false;
   bool _busy = false;
+  bool _authenticating = false;
+  String _authProgressLabel = 'Signing you in…';
   String? _error;
 
   @override
@@ -36,10 +38,15 @@ class _AuthPageState extends State<AuthPage> {
     super.dispose();
   }
 
-  Future<void> _run(Future<void> Function() action) async {
+  Future<void> _run(
+    Future<void> Function() action, {
+    required String progressLabel,
+  }) async {
     if (_busy) return;
     setState(() {
       _busy = true;
+      _authenticating = true;
+      _authProgressLabel = progressLabel;
       _error = null;
     });
     try {
@@ -54,7 +61,12 @@ class _AuthPageState extends State<AuthPage> {
         );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _authenticating = false;
+        });
+      }
     }
   }
 
@@ -72,19 +84,25 @@ class _AuthPageState extends State<AuthPage> {
         return;
       }
     }
-    await _run(() async {
-      if (_create) {
-        await widget.authService.createWithEmail(email, password);
-      } else {
-        await widget.authService.signInWithEmail(email, password);
-      }
-    });
+    await _run(
+      () async {
+        if (_create) {
+          await widget.authService.createWithEmail(email, password);
+        } else {
+          await widget.authService.signInWithEmail(email, password);
+        }
+      },
+      progressLabel:
+          _create ? 'Creating your Homi account…' : 'Signing you in…',
+    );
   }
 
   Future<void> _googleAction() async {
     if (_busy) return;
     setState(() {
       _busy = true;
+      _authenticating = true;
+      _authProgressLabel = 'Connecting with Google…';
       _error = null;
     });
     try {
@@ -99,7 +117,12 @@ class _AuthPageState extends State<AuthPage> {
         );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _authenticating = false;
+        });
+      }
     }
   }
 
@@ -135,9 +158,11 @@ class _AuthPageState extends State<AuthPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 480),
@@ -247,6 +272,12 @@ class _AuthPageState extends State<AuthPage> {
                     ),
                   ),
                   const Divider(height: 30),
+                  Text(
+                    'No account? Homi can still keep your personal home tools on this phone. Shared Household, trusted-person and location features need an account.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 6),
                   SizedBox(
                     width: double.infinity,
                     child: TextButton(
@@ -257,8 +288,26 @@ class _AuthPageState extends State<AuthPage> {
                 ],
               ),
             ),
+              ),
+            ),
           ),
-        ),
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: !_authenticating,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                child: _authenticating
+                    ? _AuthProgressOverlay(
+                        key: const ValueKey<String>('auth-progress'),
+                        message: _authProgressLabel,
+                      )
+                    : const SizedBox.shrink(
+                        key: ValueKey<String>('auth-idle'),
+                      ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -275,7 +324,6 @@ class _AuthPageState extends State<AuthPage> {
     }
     return null;
   }
-
   String _friendlyFirebaseError(FirebaseAuthException error) {
     switch (error.code) {
       case 'invalid-credential':
@@ -295,5 +343,72 @@ class _AuthPageState extends State<AuthPage> {
       default:
         return error.message ?? 'Something went wrong. Please try again.';
     }
+  }
+}
+
+class _AuthProgressOverlay extends StatelessWidget {
+  const _AuthProgressOverlay({
+    required this.message,
+    super.key,
+  });
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: HomiColors.cream.withValues(alpha: 0.94),
+      child: SafeArea(
+        child: Center(
+          child: Semantics(
+            liveRegion: true,
+            label: message,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 310),
+              margin: const EdgeInsets.all(28),
+              padding: const EdgeInsets.fromLTRB(26, 24, 26, 22),
+              decoration: BoxDecoration(
+                color: HomiColors.cream,
+                borderRadius: BorderRadius.circular(26),
+                boxShadow: [
+                  BoxShadow(
+                    color: HomiColors.slate.withValues(alpha: 0.10),
+                    blurRadius: 28,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const HomiMark(size: 76),
+                  const SizedBox(height: 20),
+                  const SizedBox(
+                    width: 30,
+                    height: 30,
+                    child: CircularProgressIndicator(strokeWidth: 3),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    'Setting up your secure Homi session.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

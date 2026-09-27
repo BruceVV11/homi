@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/google_provider_mark.dart';
+import 'homi_plus_page.dart';
 import 'household_settings_route.dart';
 
 class ProfileSettingsPage extends StatefulWidget {
@@ -144,6 +145,14 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     return Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => const HouseholdSettingsRoute(),
+      ),
+    );
+  }
+
+  Future<void> _openHomiPlus() {
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const HomiPlusPage(),
       ),
     );
   }
@@ -298,6 +307,30 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                 ),
               ),
             ],
+            const SizedBox(height: 22),
+            Text('Homi+', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 10),
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 7,
+                ),
+                leading: const Icon(
+                  Icons.workspace_premium_outlined,
+                  color: HomiColors.coral,
+                ),
+                title: const Text(
+                  'Plans & billing',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                subtitle: const Text(
+                  'See Homi+ plans, your subscription and covered seats.',
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _busy ? null : _openHomiPlus,
+              ),
+            ),
             const SizedBox(height: 22),
             Text('Household', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 10),

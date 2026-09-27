@@ -86,6 +86,7 @@ class HomiNotificationService extends ChangeNotifier {
   String? _pendingRoute;
   bool _initialized = false;
   bool _osPermissionGranted = false;
+  Future<void> _preferenceSyncTail = Future<void>.value();
 
   HomiNotificationPreferences get preferences => _preferences;
   bool get osPermissionGranted => _osPermissionGranted;
@@ -191,11 +192,14 @@ class HomiNotificationService extends ChangeNotifier {
             settings.authorizationStatus == AuthorizationStatus.provisional;
     if (_osPermissionGranted) {
       _preferences = _preferences.copyWith(enabled: true);
+      // Reflect the user's choice immediately. Provider/topic/device
+      // registration follows in a serialized best-effort background sync.
+      notifyListeners();
       await _savePreferences();
-      await _syncDeveloperTopics();
-      await refreshDeviceRegistration();
+      _queuePreferenceSync();
+    } else {
+      notifyListeners();
     }
-    notifyListeners();
     return _osPermissionGranted;
   }
 
@@ -205,27 +209,57 @@ class HomiNotificationService extends ChangeNotifier {
       return;
     }
     _preferences = _preferences.copyWith(enabled: value);
-    await _savePreferences();
-    await _syncDeveloperTopics();
-    if (value) {
-      await refreshDeviceRegistration();
-    } else {
-      await removeDevicePushRegistration();
-      await _cancelScheduledNotifications();
-    }
     notifyListeners();
+    await _savePreferences();
+    _queuePreferenceSync();
   }
 
   Future<void> updatePreferences(HomiNotificationPreferences value) async {
     _preferences = value;
-    await _savePreferences();
-    await _syncDeveloperTopics();
-    if (_preferences.enabled) await refreshDeviceRegistration();
     notifyListeners();
+    await _savePreferences();
+    _queuePreferenceSync();
   }
 
   Future<void> _savePreferences() async {
     await _prefs?.setString(_preferencesKey, _preferences.encode());
+  }
+
+  void _queuePreferenceSync() {
+    _preferenceSyncTail = _preferenceSyncTail.then(
+      (_) => _syncPreferenceStateBestEffort(),
+    );
+  }
+
+  Future<void> _syncPreferenceStateBestEffort() async {
+    await _syncDeveloperTopics();
+
+    if (_preferences.enabled && _osPermissionGranted) {
+      try {
+        await refreshDeviceRegistration();
+      } catch (error) {
+        if (kDebugMode) {
+          debugPrint('Homi notification registration deferred: $error');
+        }
+      }
+      return;
+    }
+
+    try {
+      await removeDevicePushRegistration();
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Homi notification removal deferred: $error');
+      }
+    }
+
+    try {
+      await _cancelScheduledNotifications();
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Homi notification cancellation deferred: $error');
+      }
+    }
   }
 
   Future<void> _syncDeveloperTopics() async {

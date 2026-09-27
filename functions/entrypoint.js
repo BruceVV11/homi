@@ -14,6 +14,12 @@ const sharedTasksCanonical = require("./shared_tasks_canonical");
 const householdDataCleanup = require("./household_data_cleanup");
 const householdTaskMembershipSync = require("./household_task_membership_sync");
 const householdSharedTaskNotifications = require("./household_shared_task_notifications");
+// Public Play product/base-plan IDs are exact release infrastructure. Load the
+// source-controlled catalog before billing.js reads its environment-shaped
+// policy input. The permanent nine-product Play catalog is active; server
+// verification remains authoritative for every entitlement grant.
+require("./billing_catalog");
+const billing = require("./billing");
 
 // A stale deployed HTTPS function already owned the historical
 // `onConnectionDeleted` name. Do not export that obsolete endpoint from the
@@ -51,4 +57,8 @@ module.exports = {
   // Root shared-task triggers are retired only after these nested replacements
   // are deployed and proven ACTIVE.
   ...householdSharedTaskNotifications,
+  // Homi+ purchase verification, lifecycle reconciliation and server-written
+  // entitlement state. Play IDs are source-controlled; Android Publisher and
+  // verified purchase state remain the authoritative runtime boundary.
+  ...billing,
 };

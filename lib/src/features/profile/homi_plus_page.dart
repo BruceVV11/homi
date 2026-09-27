@@ -104,6 +104,38 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
 
   Future<void> _showNotice(HomiBillingNotice notice) async {
     if (!mounted) return;
+
+    if (notice.type == HomiBillingNoticeType.pending) {
+      setState(() {
+        _busy = true;
+        _purchaseStage = _HomiPlusPurchaseStage.verifying;
+      });
+      return;
+    }
+
+    if (notice.type == HomiBillingNoticeType.verified) {
+      _purchaseTimeout?.cancel();
+      setState(() {
+        _busy = true;
+        _purchaseStage = _HomiPlusPurchaseStage.success;
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 1250));
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _purchaseStage = null;
+      });
+      return;
+    }
+
+    _purchaseTimeout?.cancel();
+    if (_purchaseStage != null || _busy) {
+      setState(() {
+        _busy = false;
+        _purchaseStage = null;
+      });
+    }
+
     final icon = switch (notice.type) {
       HomiBillingNoticeType.verified || HomiBillingNoticeType.restored =>
         Icons.check_circle_outline_rounded,
@@ -159,13 +191,23 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
           '${offer.displayPrice} per $cadenceLabel through Google Play. Google Play shows the final billing terms before you confirm.',
       confirmLabel: 'Continue to Google Play',
       cancelLabel: 'Not now',
-      icon: Icons.workspace_premium_outlined,
+      icon: _planIcon(definition.plan),
     );
     if (!confirmed || !mounted) return;
-    setState(() => _busy = true);
+
+    setState(() {
+      _busy = true;
+      _purchaseStage = _HomiPlusPurchaseStage.openingPlay;
+    });
+
     try {
       final launched = await _billingService.purchase(offer);
-      if (!launched && mounted) {
+      if (!mounted) return;
+      if (!launched) {
+        setState(() {
+          _busy = false;
+          _purchaseStage = null;
+        });
         await showHomiInfoSheet(
           context,
           title: 'Google Play did not open',
@@ -173,19 +215,44 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
           actionLabel: 'Okay',
           icon: Icons.error_outline_rounded,
         );
+        return;
       }
-    } catch (error) {
-      if (mounted) {
-        await showHomiInfoSheet(
-          context,
-          title: 'Could not start purchase',
-          message: _friendly(error),
-          actionLabel: 'Okay',
-          icon: Icons.error_outline_rounded,
+
+      if (_purchaseStage != _HomiPlusPurchaseStage.success) {
+        setState(() => _purchaseStage = _HomiPlusPurchaseStage.verifying);
+      }
+      _purchaseTimeout?.cancel();
+      _purchaseTimeout = Timer(const Duration(minutes: 2), () {
+        if (!mounted || _purchaseStage == null) return;
+        setState(() {
+          _busy = false;
+          _purchaseStage = null;
+        });
+        unawaited(
+          showHomiInfoSheet(
+            context,
+            title: 'Still waiting for Google Play',
+            message:
+                'The purchase has not returned a final result yet. Homi has not guessed your subscription state; you can reopen Plans & billing or restore purchases once Google Play finishes.',
+            actionLabel: 'Okay',
+            icon: Icons.hourglass_top_rounded,
+          ),
         );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      _purchaseTimeout?.cancel();
+      setState(() {
+        _busy = false;
+        _purchaseStage = null;
+      });
+      await showHomiInfoSheet(
+        context,
+        title: 'Could not start purchase',
+        message: _friendly(error),
+        actionLabel: 'Okay',
+        icon: Icons.error_outline_rounded,
+      );
     }
   }
 

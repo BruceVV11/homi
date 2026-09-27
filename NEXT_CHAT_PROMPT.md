@@ -263,7 +263,7 @@ Backend-only:
 - `billingAccountLinks/*`
 - `billingCoverage/*`
 
-0.13 Firestore expected count: **25/25** = existing 23 + 2 billing boundary tests.
+0.13 Firestore expected count: **25/25** = existing 23 + 2 billing boundary tests + 1 verified-location boundary tests + 1 verified-location boundary test.
 
 Pure Functions policy expected count: **17/17** = 5 shared-task + 12 billing tests.
 
@@ -318,7 +318,7 @@ Then activate final server-authoritative capability enforcement in the launch ca
 
 1. Re-fetch the branch head; current source/document preflight has been narrowed to real-toolchain/provider validation rather than another speculative source pass.
 2. On Bruce's real Flutter 3.41.5 toolchain, resolve/update the tracked `pubspec.lock`, then run exact-head analyzer/full Flutter tests. Treat `pubspec.lock` as an expected change but stop if unrelated tracked files become dirty.
-3. Run exact-head 0.13 governed Node 22 dependency lint/policy **17/17**, exact **43** exports and Firestore **25/25**, then S25 Ultra regression covering Household Cancel no-refresh, balanced Add-to-Household sheet, tap-responsive notification preferences with immediate visual state, no duplicate enabled banner, responsive inline sign-out, Homi+ page safety, and preservation of existing People/Home/Tasks/Supplies data.
+3. Run exact-head 0.13 governed Node 22 dependency lint/policy **17/17**, exact **43** exports and Firestore **26/26**, then S25 Ultra regression covering Household Cancel no-refresh, balanced Add-to-Household sheet, tap-responsive notification preferences with immediate visual state, no duplicate enabled banner, responsive inline sign-out, Homi+ page safety, and preservation of existing People/Home/Tasks/Supplies data.
 4. Create the nine permanent Homi+ subscription products in Play Console — Personal, Duo, and Household 4–10 — with monthly and annual base plans, and record the exact IDs.
 5. Populate both client/backend governed catalogs with those IDs.
 6. Configure Android Publisher API, Play Console API access and RTDN Pub/Sub.

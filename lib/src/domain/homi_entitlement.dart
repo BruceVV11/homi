@@ -1,3 +1,4 @@
+import 'homi_billing_catalog.dart';
 import 'homi_plus_plan.dart';
 
 enum HomiBillingState {
@@ -45,7 +46,10 @@ class HomiEntitlement {
     this.householdId,
     this.seatRole,
     this.duoSeatAssigneeUid,
+    this.cadence,
+    this.startedAt,
     this.validUntil,
+    this.autoRenewEnabled,
   });
 
   final HomiPlusPlan plan;
@@ -60,7 +64,10 @@ class HomiEntitlement {
   final String? householdId;
   final String? seatRole;
   final String? duoSeatAssigneeUid;
+  final HomiBillingCadence? cadence;
+  final DateTime? startedAt;
   final DateTime? validUntil;
+  final bool? autoRenewEnabled;
 
   bool get isPaid => plan != HomiPlusPlan.free && state.grantsPaidAccess;
   bool get canSendContinuousLocation => isPaid && continuousLocationSender;
@@ -108,7 +115,12 @@ class HomiEntitlement {
         householdId: _cleanString(data['householdId']),
         seatRole: _cleanString(data['seatRole']),
         duoSeatAssigneeUid: _cleanString(data['duoSeatAssigneeUid']),
+        cadence: _cadenceFrom(data['cadence']),
+        startedAt: _dateFrom(data['startedAt']),
         validUntil: validUntil,
+        autoRenewEnabled: data['autoRenewEnabled'] is bool
+            ? data['autoRenewEnabled'] as bool
+            : null,
       );
     }
 
@@ -127,7 +139,12 @@ class HomiEntitlement {
       householdId: _cleanString(data['householdId']),
       seatRole: _cleanString(data['seatRole']),
       duoSeatAssigneeUid: _cleanString(data['duoSeatAssigneeUid']),
+      cadence: _cadenceFrom(data['cadence']),
+      startedAt: _dateFrom(data['startedAt']),
       validUntil: validUntil,
+      autoRenewEnabled: data['autoRenewEnabled'] is bool
+          ? data['autoRenewEnabled'] as bool
+          : null,
     );
   }
 
@@ -135,6 +152,12 @@ class HomiEntitlement {
     final result = value?.toString().trim();
     return result == null || result.isEmpty ? null : result;
   }
+
+  static HomiBillingCadence? _cadenceFrom(Object? value) => switch (value?.toString()) {
+        'monthly' => HomiBillingCadence.monthly,
+        'annual' => HomiBillingCadence.annual,
+        _ => null,
+      };
 
   static DateTime? _dateFrom(Object? value) {
     if (value is DateTime) return value;

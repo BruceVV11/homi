@@ -37,18 +37,21 @@ Established evidence:
 - **DONE in 0.13 source / VERIFY** signed-out Account/Household sign-in actions now reveal the auth page immediately rather than leaving the pushed Account route above it.
 - **DONE in 0.13 source / VERIFY** email/password and Google sign-in use a branded blocking progress state while authentication is in flight.
 - **DONE in 0.13 source** `test/auth_navigation_regression_test.dart` guards the signed-out auth-route and progress-overlay contracts.
+- **DONE in 0.13 source / VERIFY** People/location is fully gated behind signed-in + verified-email state, with branded sign-in/verification actions and no underlying map/sharing controls constructed while locked.
+- **DONE in 0.13 source** runtime/check-in, `setLocationShare` and Firestore sensitive location surfaces carry the same verified-account boundary.
+- **DONE in 0.13 source** `test/people_verified_access_regression_test.dart` guards that cross-layer contract.
 
 Still required:
 
 - **VERIFY** exact final 0.13 Windows `flutter pub get`, analyzer and full Flutter tests after Play Billing dependencies are locked.
-- **VERIFY** S25 Ultra 0.13 regression: invitation cancel has no page refresh/loading flash, short Add-to-Household sheet is balanced, notification categories toggle on a tap with immediate visual response and no redundant success banner, sign-out completes with inline progress, signed-out **Tap to sign in** opens Auth immediately, sign-in shows branded progress, Homi+ page opens safely, and existing People/Home/Tasks/Supplies data remains intact.
+- **VERIFY** exact current S25 Ultra 0.13 regression: signed-out People shows only the account gate, unverified email shows only the verification gate, verified account restores People/location; invitation cancel has no page refresh/loading flash; notification categories toggle immediately; sign-out/auth progress remains correct; Homi+ opens safely; existing Home/Tasks/Supplies data remains intact.
 - **OPEN** fresh-install/returning-user/background/reboot/Samsung power-management pass before production.
 
 ## Gate 2 — People, location and safety
 
 Implemented and preserved:
 
-- **DONE** map-first People, opt-in per-person location sharing and latest-state location model;
+- **DONE** map-first People, opt-in per-person location sharing and latest-state location model for signed-in verified accounts;
 - **DONE** accepted connections load independently of GPS startup;
 - **DONE** reusable **My code** is available on demand without a permanent code card;
 - **DONE** Household/Friend scope is canonical/read-only rather than a user-created authorization toggle;
@@ -185,6 +188,8 @@ Source-level evidence already obtained in this development pass:
 - **VERIFY exact current head** pure Functions policy suite **17/17**. The suite passed 17/17 on predecessor head `4349791983bd8ed1f15a71cf79a1a285edecd54b`, but the candidate moved afterward;
 - **VERIFY** exact **43** Function exports by loading `functions/entrypoint.js` after dependencies are installed; do not use a regex that only counts `exports.foo =` because the entrypoint composes module spreads;
 - **VERIFY** Firestore emulator **26/26**: existing 23 + 2 billing boundary tests + 1 verified-location boundary tests + 1 verified-location boundary test;
+- **DONE in source / PROVIDER ACTION REQUIRED** exact nine-product/18-base-plan contract is frozen in `scripts/google-play-subscription-catalog.json` and checked by `scripts/check-google-play-subscription-contract.js`;
+- **DONE in source / PROVIDER ACTION REQUIRED** `scripts/bootstrap-google-play-provider.sh` safely enables Android Publisher + creates/verifies `homi-google-play-rtdn` and its Google Play publisher binding;
 - **BLOCKER** source-controlled Play catalog IDs are currently blank;
 - **BLOCKER** Android Publisher API must be enabled on `homi-ee80a`;
 - **BLOCKER** Pub/Sub topic `homi-google-play-rtdn` plus Google Play notification publisher IAM;

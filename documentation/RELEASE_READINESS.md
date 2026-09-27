@@ -1,7 +1,7 @@
 # Homi — Release readiness
 
 Date: 2026-09-27
-Current development candidate: **0.13.0+17**
+Current development candidate: **0.13.0+18**
 Development branch: `homi-0.13-billing-entitlements`
 Stacked base: accepted 0.12 merge `6a97eb23956da97cfe8266008c0827a303eec72c`
 Current production/backend baseline: **0.12 released from `6a97eb23956da97cfe8266008c0827a303eec72c`**
@@ -135,7 +135,7 @@ Approved contract:
 
 - official Flutter `in_app_purchase` purchase stream/query/restore integration;
 - Android billing plugin pinned to the current Homi Dart-compatible Billing Library 8 line;
-- one source-controlled Play catalog boundary, deliberately unconfigured until real Play IDs exist;
+- one source-controlled Play catalog boundary populated with the permanent nine-product Google Play catalog;
 - opaque SHA-256-derived Homi account association instead of raw UID as Play obfuscated account ID;
 - dedicated **Homi+ → Plans & billing** surface in Profile Settings;
 - Play-localized price display once products exist;
@@ -154,7 +154,7 @@ The permanent Play catalog to create/verify is:
 
 Personal/Duo cadence changes stay within one subscription product. Household capacity is an entitlement change, so each capacity uses its own product and cross-product changes use Play subscription replacement rather than a concurrent purchase.
 
-**BLOCKER before 0.13 billing can be exercised:** create/verify these permanent store IDs in Play Console and then populate the source-controlled Flutter + Functions catalogs with the exact same identifiers.
+**DONE:** all nine permanent products and both monthly/annual base plans are active in Play Console, and the Flutter + Functions catalogs now use those exact identifiers.
 
 ## Gate 6 — 0.13 billing backend/security
 
@@ -190,7 +190,7 @@ Source-level evidence already obtained in this development pass:
 - **VERIFY** Firestore emulator **26/26**: existing 23 + 2 billing boundary tests + 1 verified-location boundary tests + 1 verified-location boundary test;
 - **DONE in source / PROVIDER ACTION REQUIRED** exact nine-product/18-base-plan contract is frozen in `scripts/google-play-subscription-catalog.json` and checked by `scripts/check-google-play-subscription-contract.js`;
 - **DONE in source / PROVIDER ACTION REQUIRED** `scripts/bootstrap-google-play-provider.sh` safely enables Android Publisher + creates/verifies `homi-google-play-rtdn` and its Google Play publisher binding;
-- **BLOCKER** source-controlled Play catalog IDs are currently blank;
+- **DONE in source/provider** source-controlled Play catalog IDs are populated with the exact nine permanent Play products and `monthly` / `annual` base plans;
 - **BLOCKER** Android Publisher API must be enabled on `homi-ee80a`;
 - **BLOCKER** Pub/Sub topic `homi-google-play-rtdn` plus Google Play notification publisher IAM;
 - **BLOCKER** canonical runtime identity must have the minimum Play Console API access needed to verify/acknowledge purchases;
@@ -272,8 +272,8 @@ Permanent package: `za.co.theconceptlab.homi`.
 
 1. Resolve/update the tracked `pubspec.lock` from Bruce's real Flutter 3.41.5 toolchain because the Play Billing dependencies are new; this is the next unresolved source-validation dependency, not a diagnostic rerun.
 2. Run exact-head 0.13 Windows/Node/security gates, including **17/17** Functions policy tests, **43** exports and Firestore **26/26**, then perform the S25 Ultra UX regression including notification/sign-out fixes.
-3. Create the nine real Homi+ subscription products in Play Console — Personal, Duo, and Household 4–10 — with monthly and annual base plans, then record the exact permanent IDs.
-4. Populate the governed client/server catalogs with those IDs; configure Android Publisher API access and RTDN Pub/Sub.
+3. **DONE** create the nine real Homi+ subscription products in Play Console with monthly and annual base plans.
+4. **DONE in source** populate the governed client/server catalogs with those exact IDs; finish RTDN/provider verification.
 5. Merge/deploy 0.13 billing backend only after provider prerequisites are present.
 6. Upload/store-install the Internal Testing AAB and prove purchase, cross-tier replacement and the complete billing lifecycle.
 7. Activate paid enforcement only after that proof.

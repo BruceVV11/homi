@@ -21,6 +21,12 @@ void main() {
       isNot(contains("'Notifications are on for this device.'")),
       reason: 'Do not reintroduce the redundant enabled-success banner.',
     );
+    expect(
+      RegExp(r'enabled: active,').allMatches(page).length,
+      5,
+      reason:
+          'Every notification category must stay disabled until both the Homi master setting and Android permission are active.',
+    );
 
     final setEnabledStart = service.indexOf(
       'Future<void> setEnabled(bool value) async {',

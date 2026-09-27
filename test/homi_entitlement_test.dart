@@ -86,10 +86,22 @@ void main() {
     expect(homiPlusMaxTrustedLiveViewersPerSender, 3);
   });
 
-  test('Play catalog is intentionally disabled until durable IDs are verified', () {
-    expect(HomiPlayBillingCatalog.unconfigured.configured, isFalse);
-    expect(HomiPlayBillingCatalog.unconfigured.productIds, isEmpty);
-    expect(HomiPlayBillingCatalog.unconfigured.products.length, 9);
+  test('Play catalog is active while malformed catalog data still fails closed', () {
+    expect(HomiPlayBillingCatalog.current.configured, isTrue);
+    expect(HomiPlayBillingCatalog.current.products, hasLength(9));
+
+    const malformed = HomiPlayBillingCatalog(
+      products: <HomiPlayProductRef>[
+        HomiPlayProductRef(
+          plan: HomiPlusPlan.personal,
+          productId: 'homi_plus_personal',
+          monthlyBasePlanId: '',
+          annualBasePlanId: 'annual',
+        ),
+      ],
+    );
+
+    expect(malformed.configured, isFalse);
   });
 
   test('obfuscated billing account id is stable and does not expose the uid', () {

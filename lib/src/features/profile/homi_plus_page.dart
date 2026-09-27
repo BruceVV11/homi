@@ -1092,12 +1092,18 @@ class _HomiPlusPurchaseOverlayState extends State<_HomiPlusPurchaseOverlay>
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat();
-    _pulse = Tween<double>(begin: 0.92, end: 1.06).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeInOutCubic,
+    _pulse = TweenSequence<double>(<TweenSequenceItem<double>>[
+      TweenSequenceItem<double>(
+        tween: Tween<double>(begin: 0.92, end: 1.06)
+            .chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 50,
       ),
-    );
+      TweenSequenceItem<double>(
+        tween: Tween<double>(begin: 1.06, end: 0.92)
+            .chain(CurveTween(curve: Curves.easeInCubic)),
+        weight: 50,
+      ),
+    ]).animate(_controller);
   }
 
   @override

@@ -16,7 +16,8 @@ const householdTaskMembershipSync = require("./household_task_membership_sync");
 const householdSharedTaskNotifications = require("./household_shared_task_notifications");
 // Public Play product/base-plan IDs are exact release infrastructure. Load the
 // source-controlled catalog before billing.js reads its environment-shaped
-// policy input. Blank IDs keep billing fail-closed until Play Console setup.
+// policy input. The permanent nine-product Play catalog is active; server
+// verification remains authoritative for every entitlement grant.
 require("./billing_catalog");
 const billing = require("./billing");
 
@@ -57,7 +58,7 @@ module.exports = {
   // are deployed and proven ACTIVE.
   ...householdSharedTaskNotifications,
   // Homi+ purchase verification, lifecycle reconciliation and server-written
-  // entitlement state. These exports fail closed until the durable Play
-  // product/base-plan IDs and Android Publisher access are configured.
+  // entitlement state. Play IDs are source-controlled; Android Publisher and
+  // verified purchase state remain the authoritative runtime boundary.
   ...billing,
 };

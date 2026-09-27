@@ -416,6 +416,42 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
     }
   }
 
+  bool _isCoveredByAnother(HomiEntitlement entitlement) =>
+      entitlement.isPaid &&
+      entitlement.purchaserUid != null &&
+      entitlement.purchaserUid != _user?.uid;
+
+  HomiStoreOffer? _alternateCadenceOffer(HomiEntitlement entitlement) {
+    if (!entitlement.isPaid ||
+        entitlement.purchaserUid != _user?.uid ||
+        entitlement.cadence == null) {
+      return null;
+    }
+    final targetCadence = entitlement.cadence == HomiBillingCadence.monthly
+        ? HomiBillingCadence.annual
+        : HomiBillingCadence.monthly;
+    return _catalog?.offerFor(
+      entitlement.plan,
+      targetCadence,
+      householdMemberLimit: entitlement.plan == HomiPlusPlan.household
+          ? entitlement.householdMemberLimit
+          : null,
+    );
+  }
+
+  Future<void> _switchCadence(
+    HomiEntitlement entitlement,
+    HomiStoreOffer offer,
+  ) async {
+    await _purchase(
+      HomiPlusPlans.forPlan(entitlement.plan),
+      offer.cadence,
+      householdMemberLimit: entitlement.plan == HomiPlusPlan.household
+          ? entitlement.householdMemberLimit
+          : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -432,6 +468,12 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
           initialData: HomiEntitlement.free,
           builder: (context, snapshot) {
             final entitlement = snapshot.data ?? HomiEntitlement.free;
+            final isCoveredByAnother = _isCoveredByAnother(entitlement);
+            final ownsSubscription =
+                entitlement.plan != HomiPlusPlan.free &&
+                entitlement.purchaserUid == _user?.uid;
+            final activeOwnedPlan = entitlement.isPaid && ownsSubscription;
+            final alternateOffer = _alternateCadenceOffer(entitlement);
             final effectiveHouseholdMembers =
                 !_householdMemberSelectionTouched &&
                         entitlement.plan == HomiPlusPlan.household &&
@@ -441,102 +483,133 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
                         entitlement.householdMemberLimit,
                       )
                     : _householdMembers;
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
+
+            return Stack(
               children: [
-                _CurrentPlanCard(
-                  entitlement: entitlement,
-                  onManage: entitlement.plan == HomiPlusPlan.free
-                      ? null
-                      : () => _manageInPlay(entitlement),
-                  onManageDuo: entitlement.plan == HomiPlusPlan.duo &&
-                          entitlement.purchaserUid == _user?.uid
-                      ? () => _manageDuoSeat(entitlement)
-                      : null,
-                ),
-                const SizedBox(height: 20),
-                Text('Choose Homi+', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                if (_loadingCatalog)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(18),
-                      child: Center(child: CircularProgressIndicator()),
+                ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
+                  children: [
+                    _CurrentPlanCard(
+                      entitlement: entitlement,
+                      currentUid: _user?.uid,
+                      onManage: ownsSubscription
+                          ? () => _manageInPlay(entitlement)
+                          : null,
+                      onManageDuo: entitlement.plan == HomiPlusPlan.duo &&
+                              ownsSubscription &&
+                              entitlement.isPaid
+                          ? () => _manageDuoSeat(entitlement)
+                          : null,
+                      onSwitchCadence: alternateOffer == null
+                          ? null
+                          : () => _switchCadence(entitlement, alternateOffer),
+                      switchCadenceLabel: alternateOffer == null
+                          ? null
+                          : entitlement.cadence == HomiBillingCadence.monthly
+                              ? 'Switch to annual'
+                              : 'Switch to monthly',
+                      switchCadencePrice: alternateOffer?.displayPrice,
                     ),
-                  )
-                else ...[
-                  if (_catalog?.catalogConfigured != true)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 10),
-                      child: _BillingSetupCard(),
-                    ),
-                  if (_catalog?.message != null &&
-                      _catalog?.catalogConfigured == true)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _SmallNotice(text: _catalog!.message!),
-                    ),
-                  ...HomiPlusPlans.all
-                      .where((definition) => definition.isPaid)
-                      .map((definition) {
-                    final householdLimit =
-                        definition.plan == HomiPlusPlan.household
-                            ? effectiveHouseholdMembers
-                            : null;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _PlanCard(
-                        definition: definition,
-                        monthlyOffer: _catalog?.offerFor(
-                          definition.plan,
-                          HomiBillingCadence.monthly,
-                          householdMemberLimit: householdLimit,
-                        ),
-                        annualOffer: _catalog?.offerFor(
-                          definition.plan,
-                          HomiBillingCadence.annual,
-                          householdMemberLimit: householdLimit,
-                        ),
-                        householdMembers: householdLimit,
-                        onHouseholdMembersChanged: householdLimit == null
-                            ? null
-                            : (value) => setState(() {
-                                  _householdMemberSelectionTouched = true;
-                                  _householdMembers =
-                                      HomiPlusPlans.normalizeHouseholdMemberCount(
-                                    value,
-                                  );
-                                }),
-                        busy: _busy,
-                        onMonthly: () => _purchase(
-                          definition,
-                          HomiBillingCadence.monthly,
-                          householdMemberLimit: householdLimit,
-                        ),
-                        onAnnual: definition.annualPriceCents == null
-                            ? null
-                            : () => _purchase(
-                                  definition,
-                                  HomiBillingCadence.annual,
-                                  householdMemberLimit: householdLimit,
-                                ),
+                    const SizedBox(height: 20),
+                    if (isCoveredByAnother)
+                      _CoveredSeatCard(entitlement: entitlement)
+                    else ...[
+                      Text(
+                        activeOwnedPlan ? 'Change Homi+' : 'Choose Homi+',
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
-                    );
-                  }),
-                ],
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _busy || _catalog?.catalogConfigured != true
-                        ? null
-                        : _restore,
-                    icon: const Icon(Icons.restore_rounded),
-                    label: const Text('Restore Google Play purchases'),
-                  ),
+                      const SizedBox(height: 8),
+                      if (_loadingCatalog)
+                        const Card(
+                          child: Padding(
+                            padding: EdgeInsets.all(18),
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
+                        )
+                      else ...[
+                        if (_catalog?.catalogConfigured != true)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 10),
+                            child: _BillingSetupCard(),
+                          ),
+                        if (_catalog?.message != null &&
+                            _catalog?.catalogConfigured == true)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _SmallNotice(text: _catalog!.message!),
+                          ),
+                        ...HomiPlusPlans.all
+                            .where((definition) =>
+                                definition.isPaid &&
+                                !(activeOwnedPlan &&
+                                    definition.plan == entitlement.plan))
+                            .map((definition) {
+                          final householdLimit =
+                              definition.plan == HomiPlusPlan.household
+                                  ? effectiveHouseholdMembers
+                                  : null;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _PlanCard(
+                              definition: definition,
+                              monthlyOffer: _catalog?.offerFor(
+                                definition.plan,
+                                HomiBillingCadence.monthly,
+                                householdMemberLimit: householdLimit,
+                              ),
+                              annualOffer: _catalog?.offerFor(
+                                definition.plan,
+                                HomiBillingCadence.annual,
+                                householdMemberLimit: householdLimit,
+                              ),
+                              householdMembers: householdLimit,
+                              onHouseholdMembersChanged: householdLimit == null
+                                  ? null
+                                  : (value) => setState(() {
+                                        _householdMemberSelectionTouched = true;
+                                        _householdMembers = HomiPlusPlans
+                                            .normalizeHouseholdMemberCount(
+                                          value,
+                                        );
+                                      }),
+                              busy: _busy,
+                              onMonthly: () => _purchase(
+                                definition,
+                                HomiBillingCadence.monthly,
+                                householdMemberLimit: householdLimit,
+                              ),
+                              onAnnual: definition.annualPriceCents == null
+                                  ? null
+                                  : () => _purchase(
+                                        definition,
+                                        HomiBillingCadence.annual,
+                                        householdMemberLimit: householdLimit,
+                                      ),
+                            ),
+                          );
+                        }),
+                      ],
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              _busy || _catalog?.catalogConfigured != true
+                                  ? null
+                                  : _restore,
+                          icon: const Icon(Icons.restore_rounded),
+                          label: const Text('Restore Google Play purchases'),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+                    const _PrivacyBillingCard(),
+                  ],
                 ),
-                const SizedBox(height: 18),
-                const _PrivacyBillingCard(),
+                if (_purchaseStage != null)
+                  Positioned.fill(
+                    child: _HomiPlusPurchaseOverlay(stage: _purchaseStage!),
+                  ),
               ],
             );
           },

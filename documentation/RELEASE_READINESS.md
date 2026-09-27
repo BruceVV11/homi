@@ -34,11 +34,14 @@ Established evidence:
 - **DONE in 0.13 source / VERIFY** notification preference cards are full tap targets, local preference state updates immediately while provider sync runs in serialized background work, and the redundant enabled-success banner is gone.
 - **DONE in 0.13 source / VERIFY** sign-out uses inline button progress, bounds push/Google cleanup so it cannot stall the account session, and surfaces real failures in a branded sheet.
 - **DONE in 0.13 source** `test/settings_interaction_regression_test.dart` guards the notification tap/immediate-state and sign-out sequencing contracts.
+- **DONE in 0.13 source / VERIFY** signed-out Account/Household sign-in actions now reveal the auth page immediately rather than leaving the pushed Account route above it.
+- **DONE in 0.13 source / VERIFY** email/password and Google sign-in use a branded blocking progress state while authentication is in flight.
+- **DONE in 0.13 source** `test/auth_navigation_regression_test.dart` guards the signed-out auth-route and progress-overlay contracts.
 
 Still required:
 
 - **VERIFY** exact final 0.13 Windows `flutter pub get`, analyzer and full Flutter tests after Play Billing dependencies are locked.
-- **VERIFY** S25 Ultra 0.13 regression: invitation cancel has no page refresh/loading flash, short Add-to-Household sheet is balanced, notification categories toggle on a tap with immediate visual response and no redundant success banner, sign-out completes with inline progress, Homi+ page opens safely, and existing People/Home/Tasks/Supplies data remains intact.
+- **VERIFY** S25 Ultra 0.13 regression: invitation cancel has no page refresh/loading flash, short Add-to-Household sheet is balanced, notification categories toggle on a tap with immediate visual response and no redundant success banner, sign-out completes with inline progress, signed-out **Tap to sign in** opens Auth immediately, sign-in shows branded progress, Homi+ page opens safely, and existing People/Home/Tasks/Supplies data remains intact.
 - **OPEN** fresh-install/returning-user/background/reboot/Samsung power-management pass before production.
 
 ## Gate 2 — People, location and safety

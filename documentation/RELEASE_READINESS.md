@@ -1,26 +1,25 @@
 # Homi — Release readiness
 
-Date: 2026-09-12
+Date: 2026-09-27
 Current development candidate: **0.13.0+17**
 Development branch: `homi-0.13-billing-entitlements`
-Stacked base: exact 0.12 candidate `233c6ab16caa3a9c5951251d7805f57a68ca440c`
-Current production/backend baseline: 0.11 on `3b26f3120864146f4ad3d2949e5a1a1416694b5c`
+Stacked base: accepted 0.12 merge `6a97eb23956da97cfe8266008c0827a303eec72c`
+Current production/backend baseline: **0.12 released from `6a97eb23956da97cfe8266008c0827a303eec72c`**
 
 Status markers: **DONE**, **VERIFY**, **OPEN**, **BLOCKER**.
 
 ## Release order
 
-0.13 is intentionally stacked on the final 0.12 source so billing work can continue without creating a cosmetic micro-release. That does **not** make the 0.12 Firebase backend deployed.
+0.13 is intentionally stacked on the accepted 0.12 source so billing work and the final live-device polish can continue without creating another cosmetic micro-release. The governed 0.12 backend is now deployed and its requested S25 Ultra live Household/data-plane checks were reported working as intended; true two-physical-device propagation remains unproven.
 
-The governed order remains:
+The governed order is now:
 
-1. validate/merge/deploy the final 0.12 shared-Household data plane;
-2. accept the affected 0.12 runtime behavior;
-3. finish 0.13 Google Play provider setup and exact-head validation;
-4. deploy/validate the 0.13 billing backend;
-5. prove the complete billing lifecycle from a Play Internal Testing install;
-6. activate paid enforcement only in a final accepted launch candidate;
-7. close store/signing/legal/background-location/App Check gates before production.
+1. exact-head validate the reconciled 0.13 client/backend source and S25 Ultra UX;
+2. finish 0.13 Google Play provider setup;
+3. deploy/validate the 0.13 billing backend only after provider prerequisites are present;
+4. prove the complete billing lifecycle from a Play Internal Testing install;
+5. activate paid enforcement only in a final accepted launch candidate;
+6. close store/signing/legal/background-location/App Check gates before production.
 
 ## Gate 1 — Source and device stability
 
@@ -32,12 +31,13 @@ Established evidence:
 - **DONE on S25 Ultra for the latest reviewed 0.12 UX before 0.13 stacking** reusable **My code** loads, the persistent orange code card was removed by request, and the Household candidate picker was reviewed.
 - **DONE in 0.13 source / VERIFY** the Household Firestore streams are now stable across `_busy` rebuilds so cancel/rename/invite/remove/transfer/delete do not recreate the stream and flash back to loading.
 - **DONE in 0.13 source / VERIFY** Add-to-Household now ends with a compact privacy/context panel so a one-person candidate sheet does not feel visually sunken.
+- **DONE in 0.13 source / VERIFY** notification preference cards are full tap targets, local preference state updates immediately while provider sync runs in serialized background work, and the redundant enabled-success banner is gone.
+- **DONE in 0.13 source / VERIFY** sign-out uses inline button progress, bounds push/Google cleanup so it cannot stall the account session, and surfaces real failures in a branded sheet.
 
 Still required:
 
-- **VERIFY** exact final 0.12 Windows gate before merging/deploying 0.12 if that pass has not already been captured against its final exact head.
 - **VERIFY** exact final 0.13 Windows `flutter pub get`, analyzer and full Flutter tests after Play Billing dependencies are locked.
-- **VERIFY** S25 Ultra 0.13 regression: invitation cancel has no page refresh/loading flash, short Add-to-Household sheet is balanced, Homi+ page opens safely, existing People/Home/Tasks/Supplies data remains intact.
+- **VERIFY** S25 Ultra 0.13 regression: invitation cancel has no page refresh/loading flash, short Add-to-Household sheet is balanced, notification categories toggle on a tap with immediate visual response and no redundant success banner, sign-out completes with inline progress, Homi+ page opens safely, and existing People/Home/Tasks/Supplies data remains intact.
 - **OPEN** fresh-install/returning-user/background/reboot/Samsung power-management pass before production.
 
 ## Gate 2 — People, location and safety
@@ -262,11 +262,10 @@ Permanent package: `za.co.theconceptlab.homi`.
 ## Immediate sequence
 
 1. Resolve/update the tracked `pubspec.lock` from Bruce's real Flutter 3.41.5 toolchain because the Play Billing dependencies are new; this is the next unresolved source-validation dependency, not a diagnostic rerun.
-2. Close the final exact 0.12 validation/merge/governed Firebase deployment before any billing deployment mutates production.
+2. Run exact-head 0.13 Windows/Node/security gates, including **17/17** Functions policy tests, **43** exports and Firestore **25/25**, then perform the S25 Ultra UX regression including notification/sign-out fixes.
 3. Create the nine real Homi+ subscription products in Play Console — Personal, Duo, and Household 4–10 — with monthly and annual base plans, then record the exact permanent IDs.
 4. Populate the governed client/server catalogs with those IDs; configure Android Publisher API access and RTDN Pub/Sub.
-5. Run exact-head 0.13 Windows/Node/security gates, including **17/17** Functions policy tests, then S25 Ultra regression.
-6. Merge/deploy 0.13 billing backend only after provider prerequisites are present.
-7. Upload/store-install the Internal Testing AAB and prove purchase, cross-tier replacement and the complete billing lifecycle.
-8. Activate paid enforcement only after that proof.
-9. Close the remaining signing/App Check/legal/background-location/Data Safety/store-listing gates, then move to production rollout.
+5. Merge/deploy 0.13 billing backend only after provider prerequisites are present.
+6. Upload/store-install the Internal Testing AAB and prove purchase, cross-tier replacement and the complete billing lifecycle.
+7. Activate paid enforcement only after that proof.
+8. Close the remaining signing/App Check/legal/background-location/Data Safety/store-listing gates, then move to production rollout.

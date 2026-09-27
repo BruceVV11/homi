@@ -95,6 +95,14 @@ Do not confuse **local-only** with **Free**. Local-only is a no-account/device-o
 
 These fixes are source-only until the next exact-head Windows/S25 validation.
 
+## 2026-09-27 build-18 Android release dependency correction
+
+The exact Windows candidate passed catalog/analyzer/tests and then failed only at Android `bundleRelease`: the generated plugin registrant referenced `net.jonhanson.flutter_native_splash.FlutterNativeSplashPlugin`, but the locked `flutter_native_splash 2.4.7` package has no matching class in the release compile path. Root cause was release-tooling/plugin metadata rather than Homi app logic or billing code.
+
+Source fix: pin + lock `flutter_native_splash 2.4.8`, whose Android metadata removes the obsolete native registration path. The next Windows gate must delete the local generated `android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java` before `flutter pub get` so it cannot preserve the stale 2.4.7 registration.
+
+No Cloud Shell/provider deployment has been attempted for this corrected head.
+
 ## 2026-09-27 verified People/location gate + Google Play provider pass
 
 Bruce accepted the preceding 0.13 device behavior and requested that **no People/location-sharing feature be usable unless the user is signed in with a verified email**.

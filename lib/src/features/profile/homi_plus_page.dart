@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/homi_billing_catalog.dart';
@@ -14,6 +15,8 @@ import '../../services/homi_plus_management_service.dart';
 import '../../services/trusted_people_service.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/homi_controls.dart';
+
+enum _HomiPlusPurchaseStage { openingPlay, verifying, success }
 
 class HomiPlusPage extends StatefulWidget {
   const HomiPlusPage({super.key});
@@ -29,11 +32,13 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
   late final HomiPlusManagementService _managementService;
   late final TrustedPeopleService _trustedPeopleService;
   StreamSubscription<HomiBillingNotice>? _billingNoticeSubscription;
+  Timer? _purchaseTimeout;
 
   HomiBillingCatalogSnapshot? _catalog;
   List<TrustedConnection> _connections = const <TrustedConnection>[];
   bool _loadingCatalog = true;
   bool _busy = false;
+  _HomiPlusPurchaseStage? _purchaseStage;
   bool _householdMemberSelectionTouched = false;
   int _householdMembers = homiPlusHouseholdIncludedMemberLimit;
 
@@ -63,6 +68,7 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
 
   @override
   void dispose() {
+    _purchaseTimeout?.cancel();
     _billingNoticeSubscription?.cancel();
     unawaited(_billingService.dispose());
     super.dispose();

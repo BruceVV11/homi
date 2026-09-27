@@ -26,6 +26,11 @@ dependencies:
   battery_plus: ^7.0.0
   shared_preferences: ^2.5.3
   flutter_local_notifications: ^22.3.0
+  # 2.4.7 is the latest Homi-compatible splash package on Flutter 3.41.5:
+  # 2.4.8 requires meta ^1.18.0 while flutter_test pins meta 1.17.0.
+  # Keep 2.4.7 as a main dependency so its Android plugin class is present on
+  # the release compile classpath when Flutter generates plugin registration.
+  flutter_native_splash: 2.4.7
   flutter_timezone: ^5.1.0
   timezone: ^0.11.1
   intl: ^0.20.2
@@ -44,11 +49,6 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
-  # 2.4.8 removes the obsolete Android native plugin registration that can
-  # leave GeneratedPluginRegistrant referencing FlutterNativeSplashPlugin.
-  # Homi only uses the package as a build-time splash generator, so keep it
-  # pinned here for deterministic release builds.
-  flutter_native_splash: 2.4.8
 
 flutter:
   uses-material-design: true

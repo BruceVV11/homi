@@ -184,7 +184,7 @@ Source-level evidence already obtained in this development pass:
 - **VERIFY exact current head** Node 22 dependency install/lint, including the exact current `billing.js` and three-viewer `location_share.js` source. A predecessor-head source-level lint completed on 2026-09-26, but the dependency-install step in the pasted PowerShell validator did not complete;
 - **VERIFY exact current head** pure Functions policy suite **17/17**. The suite passed 17/17 on predecessor head `4349791983bd8ed1f15a71cf79a1a285edecd54b`, but the candidate moved afterward;
 - **VERIFY** exact **43** Function exports by loading `functions/entrypoint.js` after dependencies are installed; do not use a regex that only counts `exports.foo =` because the entrypoint composes module spreads;
-- **VERIFY** Firestore emulator **25/25**: existing 23 + 2 billing boundary tests;
+- **VERIFY** Firestore emulator **26/26**: existing 23 + 2 billing boundary tests + 1 verified-location boundary tests + 1 verified-location boundary test;
 - **BLOCKER** source-controlled Play catalog IDs are currently blank;
 - **BLOCKER** Android Publisher API must be enabled on `homi-ee80a`;
 - **BLOCKER** Pub/Sub topic `homi-google-play-rtdn` plus Google Play notification publisher IAM;
@@ -266,7 +266,7 @@ Permanent package: `za.co.theconceptlab.homi`.
 ## Immediate sequence
 
 1. Resolve/update the tracked `pubspec.lock` from Bruce's real Flutter 3.41.5 toolchain because the Play Billing dependencies are new; this is the next unresolved source-validation dependency, not a diagnostic rerun.
-2. Run exact-head 0.13 Windows/Node/security gates, including **17/17** Functions policy tests, **43** exports and Firestore **25/25**, then perform the S25 Ultra UX regression including notification/sign-out fixes.
+2. Run exact-head 0.13 Windows/Node/security gates, including **17/17** Functions policy tests, **43** exports and Firestore **26/26**, then perform the S25 Ultra UX regression including notification/sign-out fixes.
 3. Create the nine real Homi+ subscription products in Play Console — Personal, Duo, and Household 4–10 — with monthly and annual base plans, then record the exact permanent IDs.
 4. Populate the governed client/server catalogs with those IDs; configure Android Publisher API access and RTDN Pub/Sub.
 5. Merge/deploy 0.13 billing backend only after provider prerequisites are present.

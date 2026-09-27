@@ -100,7 +100,10 @@ test("multiple subscription sources combine without one purchase deleting anothe
     {
       plan: "personal",
       state: "active",
+      cadence: "monthly",
+      startedAt: "2098-12-01T00:00:00Z",
       validUntil: "2099-01-01T00:00:00Z",
+      autoRenewEnabled: true,
       purchaserUid: "alice",
       sourcePurchaseTokenHash: "personal-token",
       seatRole: "purchaser",
@@ -126,6 +129,9 @@ test("multiple subscription sources combine without one purchase deleting anothe
   assert.equal(projected.maxTrustedLiveViewers, 3);
   assert.equal(projected.householdMemberLimit, 6);
   assert.equal(projected.sourceCount, 2);
+  assert.equal(projected.cadence, null);
+  assert.equal(projected.startedAt, null);
+  assert.equal(projected.autoRenewEnabled, null);
 });
 
 test("inactive coverage cannot override a separate active subscription", () => {

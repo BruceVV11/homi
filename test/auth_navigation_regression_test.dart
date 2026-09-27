@@ -25,7 +25,7 @@ void main() {
     ).readAsStringSync();
 
     expect(auth, contains('bool _authenticating = false;'));
-    expect(auth, contains("progressLabel:"));
+    expect(auth, contains('progressLabel:'));
     expect(auth, contains("'Signing you in…'"));
     expect(auth, contains("'Connecting with Google…'"));
     expect(auth, contains('class _AuthProgressOverlay'));

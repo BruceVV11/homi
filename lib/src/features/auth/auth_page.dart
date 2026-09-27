@@ -272,6 +272,12 @@ class _AuthPageState extends State<AuthPage> {
                     ),
                   ),
                   const Divider(height: 30),
+                  Text(
+                    'No account? Homi can still keep your personal home tools on this phone. Shared Household, trusted-person and location features need an account.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 6),
                   SizedBox(
                     width: double.infinity,
                     child: TextButton(
@@ -393,7 +399,7 @@ class _AuthProgressOverlay extends StatelessWidget {
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    'Bringing your Homi back to this phone.',
+                    'Setting up your secure Homi session.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),

@@ -66,9 +66,20 @@ class _AccountHubPageState extends State<AccountHubPage> {
     return 'Your Homi';
   }
 
+  void _beginSignIn() {
+    if (_busy || _user != null) return;
+
+    // The Account hub is a pushed route above HomiShell. Switch the app root
+    // into auth mode and close this route in the same interaction so the user
+    // sees AuthPage immediately instead of only after pressing Back.
+    final openAuth = widget.onSignIn;
+    openAuth();
+    Navigator.of(context).pop();
+  }
+
   Future<void> _openProfile() async {
     if (_user == null) {
-      widget.onSignIn();
+      _beginSignIn();
       return;
     }
     await Navigator.of(context).push(
@@ -83,7 +94,7 @@ class _AccountHubPageState extends State<AccountHubPage> {
 
   Future<void> _openHousehold() async {
     if (_user == null) {
-      widget.onSignIn();
+      _beginSignIn();
       return;
     }
     await Navigator.of(context).push<void>(
@@ -427,7 +438,7 @@ class _AccountHubPageState extends State<AccountHubPage> {
             const SizedBox(height: 14),
             if (user == null)
               FilledButton.icon(
-                onPressed: _busy ? null : widget.onSignIn,
+                onPressed: _busy ? null : _beginSignIn,
                 icon: const Icon(Icons.cloud_outlined),
                 label: const Text('Sign in for cloud features'),
               )

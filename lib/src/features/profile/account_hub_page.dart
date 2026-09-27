@@ -42,6 +42,7 @@ class AccountHubPage extends StatefulWidget {
 
 class _AccountHubPageState extends State<AccountHubPage> {
   bool _busy = false;
+  bool _signingOut = false;
   bool _developerAccess = false;
 
   User? get _user => widget.authService.currentUser;
@@ -114,16 +115,44 @@ class _AccountHubPageState extends State<AccountHubPage> {
 
   Future<void> _signOut() async {
     if (_busy) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _signingOut = true;
+    });
+
     try {
-      await widget.notificationService.removeDevicePushRegistration();
+      // Stop local background sharing immediately. Push-device cleanup is
+      // useful but must not trap the user on this screen if the network or App
+      // Check is slow, so give it a short authenticated best-effort window.
       await widget.locationService.stopContinuousSharing();
-      await widget.authService.signOut();
-      if (mounted) {
-        setState(() => _developerAccess = false);
+      try {
+        await widget.notificationService
+            .removeDevicePushRegistration()
+            .timeout(const Duration(seconds: 1));
+      } catch (_) {
+        // Signing out is the user's primary action. A stale push registration
+        // must not block the local account session from closing.
       }
+
+      await widget.authService.signOut();
+
+      if (!mounted) return;
+      setState(() => _developerAccess = false);
+    } catch (error) {
+      if (!mounted) return;
+      await _showMessage(
+        title: 'Sign out did not finish',
+        message:
+            '${_friendly(error)} Your Homi data on this phone has not been erased.',
+        icon: Icons.error_outline_rounded,
+      );
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _signingOut = false;
+        });
+      }
     }
   }
 
@@ -405,10 +434,16 @@ class _AccountHubPageState extends State<AccountHubPage> {
             else
               OutlinedButton.icon(
                 onPressed: _busy ? null : _signOut,
-                icon: const Icon(Icons.logout_rounded),
-                label: const Text('Sign out'),
+                icon: _signingOut
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.logout_rounded),
+                label: Text(_signingOut ? 'Signing out…' : 'Sign out'),
               ),
-            if (_busy) ...[
+            if (_busy && !_signingOut) ...[
               const SizedBox(height: 12),
               const Center(child: CircularProgressIndicator()),
             ],

@@ -50,7 +50,7 @@ Bruce then reported the requested S25 Ultra live Household/data-plane checks oth
 
 0.12 version remains `0.12.0+16`. Do not repeat the 0.12 deployment gate unless new live evidence requires reconciliation.
 
-0.13 version: `0.13.0+17`.
+0.13 version: `0.13.0+18`.
 Branch: `homi-0.13-billing-entitlements`.
 Always re-fetch the live branch head; do not trust a SHA copied into this handoff because this file's own commit advances the branch.
 
@@ -121,7 +121,7 @@ Google Play provider preparation is also now source-controlled:
 - `scripts/bootstrap-google-play-provider.sh`: exact-project Android Publisher + RTDN GCP bootstrap;
 - `documentation/releases/0.13.0-google-play.md`: provider/store setup contract.
 
-The client/backend billing catalogs must stay blank until the exact products actually exist in Play Console. After that provider proof, populate both catalogs, revalidate the new exact head, deploy the billing backend and prove purchases from a Play Internal Testing build. Paid enforcement stays OFF until full lifecycle proof.
+The exact products now exist and both client/backend catalogs are populated. Revalidate the new exact head, finish RTDN/provider proof, deploy the billing backend, then prove purchases from a Play Internal Testing build. Paid enforcement stays OFF until full lifecycle proof.
 
 
 ## 0.12 shared Household data plane to preserve
@@ -176,7 +176,7 @@ Added:
 - Profile Settings → **Homi+ → Plans & billing**
 - `test/homi_entitlement_test.dart`
 
-`pubspec.yaml` is `0.13.0+17` and adds:
+`pubspec.yaml` is `0.13.0+18` and adds:
 
 - `crypto: ^3.0.6`
 - `in_app_purchase: ^3.3.0`
@@ -236,7 +236,7 @@ Permanent Play catalog direction:
 
 Household capacity variants are separate products because capacity changes the entitlement.
 
-Do not populate source catalogs until these exact IDs exist in Play Console. Do not create temporary duplicate products.
+These exact IDs now exist in Play Console and are populated in both source catalogs. Do not create temporary duplicate products.
 
 ## 0.13 billing backend source
 
@@ -348,9 +348,9 @@ Then activate final server-authoritative capability enforcement in the launch ca
 1. Re-fetch the branch head; current source/document preflight has been narrowed to real-toolchain/provider validation rather than another speculative source pass.
 2. On Bruce's real Flutter 3.41.5 toolchain, resolve/update the tracked `pubspec.lock`, then run exact-head analyzer/full Flutter tests. Treat `pubspec.lock` as an expected change but stop if unrelated tracked files become dirty.
 3. Run exact-head 0.13 governed Node 22 dependency lint/policy **17/17**, exact **43** exports and Firestore **26/26**, then S25 Ultra regression covering Household Cancel no-refresh, balanced Add-to-Household sheet, tap-responsive notification preferences with immediate visual state, no duplicate enabled banner, responsive inline sign-out, Homi+ page safety, and preservation of existing People/Home/Tasks/Supplies data.
-4. Create the nine permanent Homi+ subscription products in Play Console — Personal, Duo, and Household 4–10 — with monthly and annual base plans, and record the exact IDs.
-5. Populate both client/backend governed catalogs with those IDs.
-6. Configure Android Publisher API, Play Console API access and RTDN Pub/Sub.
+4. **DONE** nine permanent Homi+ subscription products exist in Play Console — Personal, Duo, and Household 4–10 — with active monthly and annual base plans.
+5. **DONE in source** both client/backend governed catalogs are populated with those exact IDs.
+6. Configure/verify RTDN Pub/Sub and re-run exact provider preflight.
 7. Merge/deploy the exact accepted 0.13 billing source only after provider prerequisites are present.
 8. Upload/store-install an Internal Testing AAB and prove the complete billing lifecycle, including client/server acknowledgement behavior, replacement modes, out-of-app resubscribe and token-lineage behavior.
 9. Activate paid enforcement only after lifecycle proof.
@@ -361,6 +361,6 @@ Then activate final server-authoritative capability enforcement in the launch ca
 - 0.12 backend is production-released and Bruce reported the requested one-device live Household/data-plane acceptance otherwise working as intended; true two-device propagation remains unproven.
 - 0.13 has not yet been compiled/analyzed/tested on Bruce's final exact branch head after the notification/sign-out fixes and 0.12 reconciliation.
 - 0.13 current exact `billing.js` still requires the governed dependency-loaded Functions lint before any deploy claim.
-- Homi+ cannot be purchased until real Play IDs/provider setup exist.
+- Homi+ source now has the real Play IDs; purchase remains blocked until the billing backend/RTDN/provider path is deployed and accepted.
 - No billing lifecycle has been proven from a Play-installed build yet.
 - A second physical device is still unavailable; do not claim two-device Shared Household acceptance.

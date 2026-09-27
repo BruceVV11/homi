@@ -25,5 +25,24 @@ void main() {
       contains('authService: widget.authService'),
       reason: 'People access must use the shared authenticated account state.',
     );
+
+    final location = File(
+      'lib/src/services/location_status_service.dart',
+    ).readAsStringSync();
+    final checkIn = File(
+      'lib/src/services/arrival_check_in_service.dart',
+    ).readAsStringSync();
+    final callable = File(
+      'functions/location_share.js',
+    ).readAsStringSync();
+    final rules = File(
+      'firebase/firestore.rules',
+    ).readAsStringSync();
+
+    expect(location, contains('user.emailVerified != true'));
+    expect(checkIn, contains('user.emailVerified != true'));
+    expect(callable, contains('request.auth.token.email_verified !== true'));
+    expect(rules, contains('function verifiedSignedIn()'));
+    expect(rules, contains('function isVerifiedSelf(uid)'));
   });
 }

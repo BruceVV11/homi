@@ -51,7 +51,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
       if (!mounted) return;
       setState(() {
         _message = granted
-            ? 'Notifications are on for this device.'
+            ? null
             : 'Android did not grant notification permission. You can enable Homi notifications later from Android settings.';
       });
     } finally {
@@ -275,39 +275,48 @@ class _PreferenceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canToggle = enabled && onChanged != null;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 9),
       child: Card(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: HomiColors.peach.withValues(alpha: 0.17),
-                  borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: canToggle ? () => onChanged!(!value) : null,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: HomiColors.peach.withValues(alpha: 0.17),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: HomiColors.coral, size: 21),
                 ),
-                child: Icon(icon, color: HomiColors.coral, size: 21),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: const TextStyle(fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 3),
-                    Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
-                  ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Switch(
-                value: value,
-                onChanged: enabled ? onChanged : null,
-              ),
-            ],
+                Switch(
+                  value: value,
+                  onChanged: canToggle ? onChanged : null,
+                ),
+              ],
+            ),
           ),
         ),
       ),

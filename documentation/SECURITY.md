@@ -1,9 +1,9 @@
 # Homi security architecture
 
-Date: 2026-09-12
+Date: 2026-09-27
 Current development candidate: `0.13.0+17`
 Branch: `homi-0.13-billing-entitlements`
-Stacked base: exact 0.12 candidate `233c6ab16caa3a9c5951251d7805f57a68ca440c`
+Stacked base: accepted 0.12 merge `6a97eb23956da97cfe8266008c0827a303eec72c`
 
 Homi handles trusted relationships, precise location, Shared Household records and Google Play subscription state. A modified client is treated as hostile. UI visibility and local purchase callbacks are convenience state only; authorization belongs in Firebase Authentication, App Check, Cloud Functions, Firestore rules, Google Play verification and least-privilege IAM.
 
@@ -91,7 +91,11 @@ Firestore list authorization makes the canonical Household part of the document 
 
 Safely mappable pre-0.12 root Tasks move from `sharedTasks/{taskId}` into `households/{householdId}/sharedTasks/{taskId}` with the safe historical/current-member intersection. Unmappable root Tasks remain stored but client access fails closed.
 
-## Continuous-location abuse/cost controls
+## Continuous-location identity and abuse/cost controls
+
+People/location is deliberately unavailable until the Firebase account has a verified email. The app gate prevents unverified users from constructing the map/connection/location page. Runtime location resume/check-in operations also require a verified current user. Firestore uses `verifiedSignedIn()` / `isVerifiedSelf()` for `locations`, `locationShares` and exact shared-place reads, while the `setLocationShare` callable rejects any token whose `email_verified` claim is not true.
+
+This verified-account requirement is independent from Homi+ payment. A verified Free recipient may still receive location where the commercial contract allows it; paid sender enforcement remains a later server-authoritative gate.
 
 Existing controls remain:
 

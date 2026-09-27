@@ -176,13 +176,21 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
             Text('What can notify me?',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
+            if (!active)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 9),
+                child: Text(
+                  'Turn notifications on before choosing which categories may notify you.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
             _PreferenceCard(
               icon: Icons.home_outlined,
               title: 'Household attention',
               subtitle:
                   'Out-of-stock supplies, expiry warnings and saved maintenance dates.',
               value: preferences.householdAttention,
-              enabled: preferences.enabled,
+              enabled: active,
               onChanged: (value) =>
                   _save(_preferences.copyWith(householdAttention: value)),
             ),
@@ -192,7 +200,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               subtitle:
                   'Due one-off tasks and recurring responsibilities that have a due time.',
               value: preferences.tasksAndRoutines,
-              enabled: preferences.enabled,
+              enabled: active,
               onChanged: (value) =>
                   _save(_preferences.copyWith(tasksAndRoutines: value)),
             ),
@@ -202,7 +210,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               subtitle:
                   'Connection activity and small check-ins such as “thinking about you”.',
               value: preferences.people,
-              enabled: preferences.enabled,
+              enabled: active,
               onChanged: (value) =>
                   _save(_preferences.copyWith(people: value)),
             ),
@@ -212,7 +220,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               subtitle:
                   'Useful product announcements. Homi does not use this category for routine household reminders.',
               value: preferences.homiUpdates,
-              enabled: preferences.enabled,
+              enabled: active,
               onChanged: (value) =>
                   _save(_preferences.copyWith(homiUpdates: value)),
             ),
@@ -222,7 +230,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               subtitle:
                   'Important Homi maintenance, availability and account/security notices.',
               value: preferences.serviceNotices,
-              enabled: preferences.enabled,
+              enabled: active,
               onChanged: (value) =>
                   _save(_preferences.copyWith(serviceNotices: value)),
             ),

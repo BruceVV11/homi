@@ -1070,6 +1070,201 @@ String _rands(int cents) {
   return 'R${value.toStringAsFixed(2)}';
 }
 
+class _HomiPlusPurchaseOverlay extends StatefulWidget {
+  const _HomiPlusPurchaseOverlay({required this.stage});
+
+  final _HomiPlusPurchaseStage stage;
+
+  @override
+  State<_HomiPlusPurchaseOverlay> createState() =>
+      _HomiPlusPurchaseOverlayState();
+}
+
+class _HomiPlusPurchaseOverlayState extends State<_HomiPlusPurchaseOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+    _pulse = Tween<double>(begin: 0.92, end: 1.06).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeInOutCubic,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final success = widget.stage == _HomiPlusPurchaseStage.success;
+    final title = switch (widget.stage) {
+      _HomiPlusPurchaseStage.openingPlay => 'Opening Google Play',
+      _HomiPlusPurchaseStage.verifying => 'Securing your Homi+',
+      _HomiPlusPurchaseStage.success => 'Homi+ is ready',
+    };
+    final message = switch (widget.stage) {
+      _HomiPlusPurchaseStage.openingPlay =>
+        'Connecting your plan to Google Play…',
+      _HomiPlusPurchaseStage.verifying =>
+        'Homi is verifying the purchase and syncing your access securely.',
+      _HomiPlusPurchaseStage.success =>
+        'Your verified Homi+ access is now active.',
+    };
+
+    return Material(
+      color: HomiColors.slate.withValues(alpha: 0.42),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(maxWidth: 360),
+            padding: const EdgeInsets.fromLTRB(24, 26, 24, 22),
+            decoration: BoxDecoration(
+              color: HomiColors.cream,
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: const [
+                BoxShadow(
+                  blurRadius: 30,
+                  offset: Offset(0, 14),
+                  color: Color(0x26000000),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 420),
+                  switchInCurve: Curves.easeOutBack,
+                  switchOutCurve: Curves.easeIn,
+                  child: success
+                      ? Container(
+                          key: const ValueKey<String>('success'),
+                          width: 92,
+                          height: 92,
+                          decoration: BoxDecoration(
+                            color: HomiColors.sage.withValues(alpha: 0.24),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check_rounded,
+                            size: 48,
+                            color: Color(0xFF6F8B65),
+                          ),
+                        )
+                      : SizedBox(
+                          key: const ValueKey<String>('working'),
+                          width: 104,
+                          height: 104,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              RotationTransition(
+                                turns: _controller,
+                                child: const SizedBox(
+                                  width: 92,
+                                  height: 92,
+                                  child: Stack(
+                                    children: [
+                                      Align(
+                                        alignment: Alignment.topCenter,
+                                        child: _HomiOrbitDot(
+                                          size: 14,
+                                          color: HomiColors.coral,
+                                        ),
+                                      ),
+                                      Align(
+                                        alignment: Alignment.bottomLeft,
+                                        child: _HomiOrbitDot(
+                                          size: 11,
+                                          color: Color(0xFF6F8B65),
+                                        ),
+                                      ),
+                                      Align(
+                                        alignment: Alignment.bottomRight,
+                                        child: _HomiOrbitDot(
+                                          size: 9,
+                                          color: HomiColors.slate,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              ScaleTransition(
+                                scale: _pulse,
+                                child: Container(
+                                  width: 58,
+                                  height: 58,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        HomiColors.peach.withValues(alpha: 0.32),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Icon(
+                                    Icons.home_rounded,
+                                    color: HomiColors.coral,
+                                    size: 30,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomiOrbitDot extends StatelessWidget {
+  const _HomiOrbitDot({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
 class _BillingSetupCard extends StatelessWidget {
   const _BillingSetupCard();
 

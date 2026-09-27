@@ -95,6 +95,35 @@ Do not confuse **local-only** with **Free**. Local-only is a no-account/device-o
 
 These fixes are source-only until the next exact-head Windows/S25 validation.
 
+## 2026-09-27 verified People/location gate + Google Play provider pass
+
+Bruce accepted the preceding 0.13 device behavior and requested that **no People/location-sharing feature be usable unless the user is signed in with a verified email**.
+
+Implemented across layers:
+
+- `PeopleHubPage` does not construct `PeoplePage` when signed out or unverified;
+- signed-out state shows **Sign in to use People & location**;
+- unverified state shows **Verify your email to use People & location**, **Send verification email**, and **I’ve verified — refresh**;
+- map, Homi codes/connections, location details/sharing and Safety/check-in controls stay behind that gate;
+- `LocationStatusService` will not resume/sync background location for an unverified account and its background feature guard rejects unverified accounts;
+- `ArrivalCheckInService` requires a verified current user for check-in operations;
+- `functions/location_share.js` requires `email_verified === true` for the location-share callable for every supported provider;
+- Firestore `locationShares`, `locations` and exact shared-place location access use verified auth;
+- Firestore security expected count is now **26/26**, with an explicit unverified-location denial test;
+- `test/people_verified_access_regression_test.dart` guards the client/runtime/callable/rules contract.
+
+This is an identity/privacy gate, not a paid-plan gate. Local-only Home/Tasks/Routines/Supplies remain usable without an account; a verified Free account remains distinct from Homi+.
+
+Google Play provider preparation is also now source-controlled:
+
+- `scripts/google-play-subscription-catalog.json`: exact nine permanent products, monthly/annual base plans and ZA/ZAR launch prices;
+- `scripts/check-google-play-subscription-contract.js`: validates the permanent catalog and eventual source activation;
+- `scripts/bootstrap-google-play-provider.sh`: exact-project Android Publisher + RTDN GCP bootstrap;
+- `documentation/releases/0.13.0-google-play.md`: provider/store setup contract.
+
+The client/backend billing catalogs must stay blank until the exact products actually exist in Play Console. After that provider proof, populate both catalogs, revalidate the new exact head, deploy the billing backend and prove purchases from a Play Internal Testing build. Paid enforcement stays OFF until full lifecycle proof.
+
+
 ## 0.12 shared Household data plane to preserve
 
 Canonical path:

@@ -84,6 +84,7 @@ During the post-0.12 live S25 Ultra pass Bruce reported the Household/data-plane
 - successful notification enabling no longer creates the duplicate orange status box; a genuine Android permission denial still shows an explanation;
 - sign-out stops local continuous sharing first, gives push deregistration only a short authenticated best-effort window, closes Firebase Auth as the actual Homi session boundary, and bounds Google provider cleanup so provider/network latency cannot trap the user;
 - sign-out progress is rendered inline in the button as **Signing out…** rather than as a separate spinner below it;
+- `test/settings_interaction_regression_test.dart` guards the notification tap/immediate-state contract, duplicate-banner removal, inline sign-out progress, bounded cleanup, and Firebase-before-Google sign-out ordering.
 - a genuine sign-out failure uses Homi's branded information sheet and explicitly confirms local Homi data was not erased.
 
 These fixes are source-only until the next exact-head Windows/S25 validation.

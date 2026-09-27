@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "packageName": "za.co.theconceptlab.homi",
+  "currency": "ZAR",
+  "launchRegion": "ZA",
+  "rtdnTopic": "homi-google-play-rtdn",
+  "products": [
+    {
+      "productId": "homi_plus_personal",
+      "title": "Homi+ Personal",
+      "plan": "personal",
+      "householdMemberLimit": 0,
+      "benefits": [
+        "Share live location with 3 viewers",
+        "Create shared Tasks and Routines"
+      ],
+      "monthly": {
+        "basePlanId": "monthly",
+        "priceCents": 7999,
+        "billingPeriod": "P1M"
+      },
+      "annual": {
+        "basePlanId": "annual",
+        "priceCents": 79999,
+        "billingPeriod": "P1Y"
+      }
+    },
+    {
+      "productId": "homi_plus_duo",
+      "title": "Homi+ Duo",
+      "plan": "duo",
+      "householdMemberLimit": 0,
+      "benefits": [
+        "Two Homi+ sender seats",
+        "3 live viewers per sender",
+        "Create shared Tasks and Routines"
+      ],
+      "monthly": {
+        "basePlanId": "monthly",
+        "priceCents": 12999,
+        "billingPeriod": "P1M"
+      },
+      "annual": {
+        "basePlanId": "annual",
+        "priceCents": 129999,
+        "billingPeriod": "P1Y"
+      }
+    },
+    {
+      "productId": "homi_plus_household_4",
+      "title": "Homi+ Household 4",
+      "plan": "household",
+      "householdMemberLimit": 4,
+      "benefits": [
+        "Covers 4 Household members",
+        "3 live viewers per covered member",
+        "Full shared Household features",
+        "Shared Tasks and Routines"
+      ],
+      "monthly": {
+        "basePlanId": "monthly",
+        "priceCents": 19999,
+        "billingPeriod": "P1M"
+      },
+      "annual": {
+        "basePlanId": "annual",
+        "priceCents": 199999,
+        "billingPeriod": "P1Y"
+      }
+    },
+    {
+      "productId": "homi_plus_household_5",
+      "title": "Homi+ Household 5",
+      "plan": "household",
+      "householdMemberLimit": 5,
+      "benefits": [
+        "Covers 5 Household members",
+        "3 live viewers per covered member",
+        "Full shared Household features",
+        "Shared Tasks and Routines"
+      ],
+      "monthly": {
+        "basePlanId": "monthly",
+        "priceCents": 24999,
+        "billingPeriod": "P1M"
+      },
+      "annual": {
+        "basePlanId": "annual",
+        "priceCents": 249999,
+        "billingPeriod": "P1Y"
+      }
+    },
+    {
+      "productId": "homi_plus_household_6",
+      "title": "Homi+ Household 6",
+      "plan": "household",
+      "householdMemberLimit": 6,
+      "benefits": [
+        "Covers 6 Household members",
+        "3 live viewers per covered member",
+        "Full shared Household features",
+        "Shared Tasks and Routines"
+      ],
+      "monthly": {
+        "basePlanId": "monthly",
+        "priceCents": 29999,
+        "billingPeriod": "P1M"
+      },
+      "annual": {
+        "basePlanId": "annual",
+        "priceCents": 299999,
+        "billingPeriod": "P1Y"
+      }
+    },
+    {
+      "productId": "homi_plus_household_7",
+      "title": "Homi+ Household 7",
+      "plan": "household",
+      "householdMemberLimit": 7,
+      "benefits": [
+        "Covers 7 Household members",
+        "3 live viewers per covered member",
+        "Full shared Household features",
+        "Shared Tasks and Routines"
+      ],
+      "monthly": {
+        "basePlanId": "monthly",
+        "priceCents": 34999,
+        "billingPeriod": "P1M"
+      },
+      "annual": {
+        "basePlanId": "annual",
+        "priceCents": 349999,
+        "billingPeriod": "P1Y"
+      }
+    },
+    {
+      "productId": "homi_plus_household_8",
+      "title": "Homi+ Household 8",
+      "plan": "household",
+      "householdMemberLimit": 8,
+      "benefits": [
+        "Covers 8 Household members",
+        "3 live viewers per covered member",
+        "Full shared Household features",
+        "Shared Tasks and Routines"
+      ],
+      "monthly": {
+        "basePlanId": "monthly",
+        "priceCents": 39999,
+        "billingPeriod": "P1M"
+      },
+      "annual": {
+        "basePlanId": "annual",
+        "priceCents": 399999,
+        "billingPeriod": "P1Y"
+      }
+    },
+    {
+      "productId": "homi_plus_household_9",
+      "title": "Homi+ Household 9",
+      "plan": "household",
+      "householdMemberLimit": 9,
+      "benefits": [
+        "Covers 9 Household members",
+        "3 live viewers per covered member",
+        "Full shared Household features",
+        "Shared Tasks and Routines"
+      ],
+      "monthly": {
+        "basePlanId": "monthly",
+        "priceCents": 44999,
+        "billingPeriod": "P1M"
+      },
+      "annual": {
+        "basePlanId": "annual",
+        "priceCents": 449999,
+        "billingPeriod": "P1Y"
+      }
+    },
+    {
+      "productId": "homi_plus_household_10",
+      "title": "Homi+ Household 10",
+      "plan": "household",
+      "householdMemberLimit": 10,
+      "benefits": [
+        "Covers 10 Household members",
+        "3 live viewers per covered member",
+        "Full shared Household features",
+        "Shared Tasks and Routines"
+      ],
+      "monthly": {
+        "basePlanId": "monthly",
+        "priceCents": 49999,
+        "billingPeriod": "P1M"
+      },
+      "annual": {
+        "basePlanId": "annual",
+        "priceCents": 499999,
+        "billingPeriod": "P1Y"
+      }
+    }
+  ]
+}

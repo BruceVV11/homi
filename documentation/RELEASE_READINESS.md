@@ -192,8 +192,8 @@ Source-level evidence already obtained in this development pass:
 - **DONE in source / PROVIDER ACTION REQUIRED** `scripts/bootstrap-google-play-provider.sh` safely enables Android Publisher + creates/verifies `homi-google-play-rtdn` and its Google Play publisher binding;
 - **DONE in source/provider** source-controlled Play catalog IDs are populated with the exact nine permanent Play products and `monthly` / `annual` base plans;
 - **BLOCKER** Android Publisher API must be enabled on `homi-ee80a`;
-- **BLOCKER** Pub/Sub topic `homi-google-play-rtdn` plus Google Play notification publisher IAM;
-- **BLOCKER** canonical runtime identity must have the minimum Play Console API access needed to verify/acknowledge purchases;
+- **DONE / PROVIDER VERIFIED** Pub/Sub topic `homi-google-play-rtdn` exists, Google Play can publish to it, and Play Console RTDN test notification succeeded;
+- **DONE in Play Console / VERIFY API CALL** canonical runtime identity is active with Homi-scoped billing permissions; exact Android Publisher read access still needs the governed provider preflight call before deployment;
 - **VERIFY** purchase verification from a real Play Internal Testing install proves Play Console API access rather than assuming GCP IAM is enough.
 
 ## Gate 7 — Subscription lifecycle proof

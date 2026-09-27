@@ -1,12 +1,24 @@
 # Homi — Release readiness
 
 Date: 2026-09-27
-Current development candidate: **0.13.0+18**
-Development branch: `homi-0.13-billing-entitlements`
+Current development candidate: **0.13.1+19**
+Development branch: `homi-0.13.1-subscription-ux`
 Stacked base: accepted 0.12 merge `6a97eb23956da97cfe8266008c0827a303eec72c`
 Current production/backend baseline: **0.12 released from `6a97eb23956da97cfe8266008c0827a303eec72c`**
 
 Status markers: **DONE**, **VERIFY**, **OPEN**, **BLOCKER**.
+
+## Build 18 Internal Testing evidence
+
+- **DONE** 0.13.0+18 installed from Google Play Internal Testing.
+- **DONE** licence-tester Personal Monthly purchase completed without a real charge.
+- **DONE** production `verifyGooglePlaySubscription` verified the purchase and Homi displayed active Personal entitlement.
+- **DONE** Google Play test renewals reached Homi/RTDN; repeated receipt emails are the expected accelerated licence-tester renewal schedule, not duplicate Homi purchases.
+- **FOUND / FIX IN 0.13.1** purchase verification had no visible blocking progress while the Play/backend round trip completed.
+- **FOUND / FIX IN 0.13.1** active plan was repeated as a normal purchase option and subscription lifecycle dates were not projected into the client.
+- **FOUND / FIX IN 0.13.1** covered Duo/Household recipients need a non-purchasing covered-seat state.
+- **FOUND / FIX IN 0.13.1** notification categories must remain disabled unless both Homi notifications and Android notification permission are active.
+- **BLOCKER / CONFIGURATION** Play-installed map tiles are blank and App-Check-protected People callables return an unauthenticated session error. Both are consistent with the Play App Signing certificate not yet being registered across the restricted Maps key / Firebase Play Integrity boundary. Repair and retest Build 18 before Build 19 acceptance.
 
 ## Release order
 

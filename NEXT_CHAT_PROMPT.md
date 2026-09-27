@@ -121,7 +121,7 @@ Google Play provider preparation is also now source-controlled:
 - `scripts/bootstrap-google-play-provider.sh`: exact-project Android Publisher + RTDN GCP bootstrap;
 - `documentation/releases/0.13.0-google-play.md`: provider/store setup contract.
 
-The exact products now exist and both client/backend catalogs are populated. Revalidate the new exact head, finish RTDN/provider proof, deploy the billing backend, then prove purchases from a Play Internal Testing build. Paid enforcement stays OFF until full lifecycle proof.
+The exact products now exist and both client/backend catalogs are populated. RTDN is configured to `projects/homi-ee80a/topics/homi-google-play-rtdn` for subscriptions + voided purchases, and the Play Console test notification succeeded. The canonical runtime service account is active in Play Console with Homi-scoped billing permissions. Next: validate the exact current head, run a read-only Android Publisher provider preflight using the runtime identity where possible, deploy the billing backend only after that passes, then prove purchases from a Play Internal Testing build. Paid enforcement stays OFF until full lifecycle proof.
 
 
 ## 0.12 shared Household data plane to preserve

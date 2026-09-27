@@ -158,8 +158,20 @@ class AuthService {
 
   Future<void> signOut() async {
     if (!firebaseReady) return;
+
+    // Firebase Auth is the actual Homi session boundary, so complete it first.
+    // Google provider cleanup is best-effort and must never leave the user
+    // apparently signed in because a provider call is slow or unavailable.
     await _auth.signOut();
-    await _googleSignIn.signOut();
+
+    try {
+      await _googleSignIn
+          .signOut()
+          .timeout(const Duration(seconds: 1));
+    } catch (_) {
+      // The Firebase session is already closed. A slow provider cleanup can be
+      // retried by the Google SDK on the next provider interaction.
+    }
   }
 
   Future<void> _syncIdentityBestEffort() async {

@@ -28,7 +28,7 @@ void main() {
     final updateStart = service.indexOf(
       'Future<void> updatePreferences(HomiNotificationPreferences value) async {',
     );
-    expect(setEnabledStart, isNonNegative);
+    expect(setEnabledStart, greaterThanOrEqualTo(0));
     expect(updateStart, greaterThan(setEnabledStart));
 
     final setEnabledBody = service.substring(setEnabledStart, updateStart);
@@ -88,7 +88,7 @@ void main() {
       authSignOut,
     );
 
-    expect(authSignOut, isNonNegative);
+    expect(authSignOut, greaterThanOrEqualTo(0));
     expect(googleCleanup, greaterThan(authSignOut));
     expect(
       auth.substring(authSignOut, googleCleanup),

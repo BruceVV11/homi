@@ -39,81 +39,79 @@ class HomiPlayProductRef {
   }
 }
 
-/// Public Google Play identifiers are durable release infrastructure. The
-/// catalog deliberately stays blank until each permanent subscription product
-/// and base plan has been created and verified in Play Console.
+/// Public Google Play identifiers are durable release infrastructure. These
+/// permanent IDs were created and activated in Google Play Console for Homi's
+/// South African 0.13 launch catalog on 2026-09-27.
 class HomiPlayBillingCatalog {
   const HomiPlayBillingCatalog({required this.products});
 
   final List<HomiPlayProductRef> products;
 
-  static const unconfigured = HomiPlayBillingCatalog(
+  static const current = HomiPlayBillingCatalog(
     products: <HomiPlayProductRef>[
       HomiPlayProductRef(
         plan: HomiPlusPlan.personal,
-        productId: '',
-        monthlyBasePlanId: '',
-        annualBasePlanId: '',
+        productId: 'homi_plus_personal',
+        monthlyBasePlanId: 'monthly',
+        annualBasePlanId: 'annual',
       ),
       HomiPlayProductRef(
         plan: HomiPlusPlan.duo,
-        productId: '',
-        monthlyBasePlanId: '',
-        annualBasePlanId: '',
+        productId: 'homi_plus_duo',
+        monthlyBasePlanId: 'monthly',
+        annualBasePlanId: 'annual',
       ),
       HomiPlayProductRef(
         plan: HomiPlusPlan.household,
-        productId: '',
-        monthlyBasePlanId: '',
-        annualBasePlanId: '',
+        productId: 'homi_plus_household_4',
+        monthlyBasePlanId: 'monthly',
+        annualBasePlanId: 'annual',
         householdMemberLimit: 4,
       ),
       HomiPlayProductRef(
         plan: HomiPlusPlan.household,
-        productId: '',
-        monthlyBasePlanId: '',
-        annualBasePlanId: '',
+        productId: 'homi_plus_household_5',
+        monthlyBasePlanId: 'monthly',
+        annualBasePlanId: 'annual',
         householdMemberLimit: 5,
       ),
       HomiPlayProductRef(
         plan: HomiPlusPlan.household,
-        productId: '',
-        monthlyBasePlanId: '',
-        annualBasePlanId: '',
+        productId: 'homi_plus_household_6',
+        monthlyBasePlanId: 'monthly',
+        annualBasePlanId: 'annual',
         householdMemberLimit: 6,
       ),
       HomiPlayProductRef(
         plan: HomiPlusPlan.household,
-        productId: '',
-        monthlyBasePlanId: '',
-        annualBasePlanId: '',
+        productId: 'homi_plus_household_7',
+        monthlyBasePlanId: 'monthly',
+        annualBasePlanId: 'annual',
         householdMemberLimit: 7,
       ),
       HomiPlayProductRef(
         plan: HomiPlusPlan.household,
-        productId: '',
-        monthlyBasePlanId: '',
-        annualBasePlanId: '',
+        productId: 'homi_plus_household_8',
+        monthlyBasePlanId: 'monthly',
+        annualBasePlanId: 'annual',
         householdMemberLimit: 8,
       ),
       HomiPlayProductRef(
         plan: HomiPlusPlan.household,
-        productId: '',
-        monthlyBasePlanId: '',
-        annualBasePlanId: '',
+        productId: 'homi_plus_household_9',
+        monthlyBasePlanId: 'monthly',
+        annualBasePlanId: 'annual',
         householdMemberLimit: 9,
       ),
       HomiPlayProductRef(
         plan: HomiPlusPlan.household,
-        productId: '',
-        monthlyBasePlanId: '',
-        annualBasePlanId: '',
+        productId: 'homi_plus_household_10',
+        monthlyBasePlanId: 'monthly',
+        annualBasePlanId: 'annual',
         householdMemberLimit: 10,
       ),
     ],
   );
-
-  static const current = unconfigured;
 
   bool get configured => products.isNotEmpty && products.every((item) => item.configured);
 

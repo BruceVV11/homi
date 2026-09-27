@@ -318,6 +318,28 @@ class _AuthPageState extends State<AuthPage> {
     }
     return null;
   }
+  String _friendlyFirebaseError(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'invalid-credential':
+      case 'wrong-password':
+      case 'user-not-found':
+        return 'That email or password is not correct.';
+      case 'email-already-in-use':
+        return 'Homi could not create an account with those details. Try signing in or resetting the password instead.';
+      case 'weak-password':
+        return 'Use at least 10 characters with an uppercase letter, lowercase letter and number.';
+      case 'invalid-email':
+        return 'Enter a valid email address.';
+      case 'network-request-failed':
+        return 'Homi could not reach the internet. Try again when you are connected.';
+      case 'too-many-requests':
+        return 'Too many attempts. Wait a moment, then try again.';
+      default:
+        return error.message ?? 'Something went wrong. Please try again.';
+    }
+  }
+}
+
 class _AuthProgressOverlay extends StatelessWidget {
   const _AuthProgressOverlay({
     required this.message,
@@ -382,28 +404,5 @@ class _AuthProgressOverlay extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-
-  String _friendlyFirebaseError(FirebaseAuthException error) {
-    switch (error.code) {
-      case 'invalid-credential':
-      case 'wrong-password':
-      case 'user-not-found':
-        return 'That email or password is not correct.';
-      case 'email-already-in-use':
-        return 'Homi could not create an account with those details. Try signing in or resetting the password instead.';
-      case 'weak-password':
-        return 'Use at least 10 characters with an uppercase letter, lowercase letter and number.';
-      case 'invalid-email':
-        return 'Enter a valid email address.';
-      case 'network-request-failed':
-        return 'Homi could not reach the internet. Try again when you are connected.';
-      case 'too-many-requests':
-        return 'Too many attempts. Wait a moment, then try again.';
-      default:
-        return error.message ?? 'Something went wrong. Please try again.';
-    }
   }
 }

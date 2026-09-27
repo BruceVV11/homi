@@ -631,17 +631,38 @@ class _HomiPlusPageState extends State<HomiPlusPage> {
 class _CurrentPlanCard extends StatelessWidget {
   const _CurrentPlanCard({
     required this.entitlement,
+    required this.currentUid,
     required this.onManage,
     required this.onManageDuo,
+    required this.onSwitchCadence,
+    required this.switchCadenceLabel,
+    required this.switchCadencePrice,
   });
 
   final HomiEntitlement entitlement;
+  final String? currentUid;
   final VoidCallback? onManage;
   final VoidCallback? onManageDuo;
+  final VoidCallback? onSwitchCadence;
+  final String? switchCadenceLabel;
+  final String? switchCadencePrice;
 
   @override
   Widget build(BuildContext context) {
     final definition = HomiPlusPlans.forPlan(entitlement.plan);
+    final coveredByAnother = entitlement.isPaid &&
+        entitlement.purchaserUid != null &&
+        entitlement.purchaserUid != currentUid;
+    final status = coveredByAnother
+        ? entitlement.seatRole == 'duo_secondary'
+            ? 'Included as the second Duo member'
+            : 'Included through another Homi+ subscription'
+        : _stateLabel(entitlement.state);
+    final renewalLabel = entitlement.state == HomiBillingState.canceled ||
+            entitlement.autoRenewEnabled == false
+        ? 'Access until'
+        : 'Renews';
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -657,19 +678,23 @@ class _CurrentPlanCard extends StatelessWidget {
                     color: HomiColors.peach.withValues(alpha: 0.24),
                     borderRadius: BorderRadius.circular(15),
                   ),
-                  child: const Icon(Icons.workspace_premium_outlined,
-                      color: HomiColors.coral),
+                  child: Icon(
+                    _planIcon(entitlement.plan),
+                    color: HomiColors.coral,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(definition.name,
-                          style: Theme.of(context).textTheme.titleLarge),
+                      Text(
+                        definition.name,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
                       const SizedBox(height: 2),
                       Text(
-                        _stateLabel(entitlement.state),
+                        status,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
@@ -678,8 +703,53 @@ class _CurrentPlanCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Text(definition.summary,
-                style: Theme.of(context).textTheme.bodyMedium),
+            Text(
+              coveredByAnother
+                  ? 'Your Homi+ access is being provided by the subscription holder. You do not need a separate subscription while this seat remains active.'
+                  : definition.summary,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if (entitlement.plan != HomiPlusPlan.free) ...[
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: HomiColors.sage.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(17),
+                  border: Border.all(color: HomiColors.border),
+                ),
+                child: Column(
+                  children: [
+                    if (entitlement.cadence != null)
+                      _PlanFact(
+                        label: 'Billing',
+                        value: entitlement.cadence == HomiBillingCadence.annual
+                            ? 'Annual'
+                            : 'Monthly',
+                      ),
+                    if (entitlement.startedAt != null)
+                      _PlanFact(
+                        label: coveredByAnother ? 'Covered since' : 'Started',
+                        value: _subscriptionDate(entitlement.startedAt!),
+                      ),
+                    if (entitlement.validUntil != null)
+                      _PlanFact(
+                        label: renewalLabel,
+                        value: _subscriptionDate(entitlement.validUntil!),
+                      ),
+                    if (!coveredByAnother &&
+                        entitlement.autoRenewEnabled != null)
+                      _PlanFact(
+                        label: 'Auto-renew',
+                        value: entitlement.autoRenewEnabled!
+                            ? 'On'
+                            : 'Off',
+                      ),
+                  ],
+                ),
+              ),
+            ],
             if (onManageDuo != null) ...[
               const SizedBox(height: 14),
               SizedBox(
@@ -691,15 +761,35 @@ class _CurrentPlanCard extends StatelessWidget {
                 ),
               ),
             ],
+            if (onSwitchCadence != null &&
+                switchCadenceLabel != null &&
+                switchCadencePrice != null) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  onPressed: onSwitchCadence,
+                  icon: const Icon(Icons.sync_alt_rounded),
+                  label: Text(
+                    '$switchCadenceLabel · $switchCadencePrice',
+                  ),
+                ),
+              ),
+            ],
             if (onManage != null) ...[
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: onManage,
-                  icon: const Icon(Icons.open_in_new_rounded),
-                  label: const Text('Manage subscription in Google Play'),
+                  icon: const Icon(Icons.subscriptions_outlined),
+                  label: const Text('Manage or cancel in Google Play'),
                 ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                'Google Play controls payment and cancellation. If you cancel, Homi+ remains available until the paid-through date above.',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ],
@@ -713,13 +803,99 @@ class _CurrentPlanCard extends StatelessWidget {
         HomiBillingState.gracePeriod => 'Payment issue · grace period',
         HomiBillingState.onHold => 'Subscription on hold',
         HomiBillingState.paused => 'Subscription paused',
-        HomiBillingState.canceled => 'Canceled · access follows Google Play term',
+        HomiBillingState.canceled => 'Canceled · access continues to term end',
         HomiBillingState.expired => 'Subscription expired',
         HomiBillingState.pending => 'Purchase pending',
         HomiBillingState.free => 'Free plan',
         HomiBillingState.unknown => 'Free plan',
       };
 }
+
+class _PlanFact extends StatelessWidget {
+  const _PlanFact({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CoveredSeatCard extends StatelessWidget {
+  const _CoveredSeatCard({required this.entitlement});
+
+  final HomiEntitlement entitlement;
+
+  @override
+  Widget build(BuildContext context) {
+    final duo = entitlement.seatRole == 'duo_secondary';
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: HomiColors.sage.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: HomiColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            duo ? Icons.people_alt_outlined : Icons.home_work_outlined,
+            color: HomiColors.coral,
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  duo ? 'Your Duo seat is covered' : 'Your Household seat is covered',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  duo
+                      ? 'The person paying for Homi+ Duo manages the subscription and your second seat. Homi hides separate purchase options while your seat is active.'
+                      : 'The Household subscription holder manages billing for this coverage. Homi hides separate purchase options while your Household seat is active.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+IconData _planIcon(HomiPlusPlan plan) => switch (plan) {
+      HomiPlusPlan.free => Icons.home_outlined,
+      HomiPlusPlan.personal => Icons.person_outline_rounded,
+      HomiPlusPlan.duo => Icons.people_alt_outlined,
+      HomiPlusPlan.household => Icons.home_work_outlined,
+    };
+
+String _subscriptionDate(DateTime value) =>
+    DateFormat('d MMM yyyy').format(value.toLocal());
 
 class _PlanCard extends StatelessWidget {
   const _PlanCard({

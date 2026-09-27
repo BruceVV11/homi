@@ -97,9 +97,11 @@ These fixes are source-only until the next exact-head Windows/S25 validation.
 
 ## 2026-09-27 build-18 Android release dependency correction
 
-The exact Windows candidate passed catalog/analyzer/tests and then failed only at Android `bundleRelease`: the generated plugin registrant referenced `net.jonhanson.flutter_native_splash.FlutterNativeSplashPlugin`, but the locked `flutter_native_splash 2.4.7` package has no matching class in the release compile path. Root cause was release-tooling/plugin metadata rather than Homi app logic or billing code.
+The exact Windows candidate passed the Play catalog/analyzer/tests and then failed only at Android `bundleRelease`: `GeneratedPluginRegistrant.java` referenced `net.jonhanson.flutter_native_splash.FlutterNativeSplashPlugin` while splash 2.4.7 was only a dev dependency, leaving the native class off the release compile classpath.
 
-Source fix: pin + lock `flutter_native_splash 2.4.8`, whose Android metadata removes the obsolete native registration path. The next Windows gate must delete the local generated `android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java` before `flutter pub get` so it cannot preserve the stale 2.4.7 registration.
+The first attempted fix to 2.4.8 did not reach build: Flutter 3.41.5's `flutter_test` pins `meta 1.17.0`, while splash 2.4.8 requires `meta ^1.18.0`, so `flutter pub get` correctly failed.
+
+Final source fix: keep compatible `flutter_native_splash 2.4.7`, but move it to normal `dependencies`. Upstream 2.4.7 declares the Android plugin and includes `FlutterNativeSplashPlugin.java`, so the generated registrant and Android release compile classpath now describe the same plugin surface. The next Windows gate removes stale generated plugin metadata before `flutter pub get` and must prove `bundleRelease`.
 
 No Cloud Shell/provider deployment has been attempted for this corrected head.
 

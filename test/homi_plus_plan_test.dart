@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:homi/src/domain/homi_billing_catalog.dart';
 import 'package:homi/src/domain/homi_plus_plan.dart';
 
 void main() {
@@ -39,5 +40,28 @@ void main() {
       expect(HomiPlusPlans.fromSlug(definition.slug), same(definition));
     }
     expect(HomiPlusPlans.fromSlug('unknown'), isNull);
+  });
+
+  test('permanent Google Play subscription catalog is fully configured', () {
+    final catalog = HomiPlayBillingCatalog.current;
+
+    expect(catalog.configured, isTrue);
+    expect(catalog.products, hasLength(9));
+    expect(catalog.productIds, {
+      'homi_plus_personal',
+      'homi_plus_duo',
+      'homi_plus_household_4',
+      'homi_plus_household_5',
+      'homi_plus_household_6',
+      'homi_plus_household_7',
+      'homi_plus_household_8',
+      'homi_plus_household_9',
+      'homi_plus_household_10',
+    });
+
+    for (final product in catalog.products) {
+      expect(product.monthlyBasePlanId, 'monthly');
+      expect(product.annualBasePlanId, 'annual');
+    }
   });
 }

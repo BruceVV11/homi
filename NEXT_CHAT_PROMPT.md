@@ -87,6 +87,12 @@ During the post-0.12 live S25 Ultra pass Bruce reported the Household/data-plane
 - `test/settings_interaction_regression_test.dart` guards the notification tap/immediate-state contract, duplicate-banner removal, inline sign-out progress, bounded cleanup, and Firebase-before-Google sign-out ordering.
 - a genuine sign-out failure uses Homi's branded information sheet and explicitly confirms local Homi data was not erased.
 
+A follow-up S25 Ultra 0.13 pass then exposed one remaining signed-out navigation issue: tapping the Account hero's sign-in action set the app root to auth but left the pushed Account route above it, so Auth only became visible after Android Back. 0.13 now uses a single `_beginSignIn()` helper that switches the root into auth mode and pops the Account route in the same interaction. The same helper is used by signed-out Profile, Household and bottom sign-in entry points.
+
+Authentication itself now has an explicit blocking product state: email/password create/sign-in and Google sign-in show a branded Homi overlay with animated progress until the auth result is known. `test/auth_navigation_regression_test.dart` guards both behaviours.
+
+Do not confuse **local-only** with **Free**. Local-only is a no-account/device-only mode for personal on-device home tools. A signed-in Free user still has an account and can use account-dependent free capabilities such as trusted connections, receiving supported shared/location state, check-ins/emergency and other server-backed free features; paid sender/creator/Household capabilities remain governed separately by Homi+ entitlements.
+
 These fixes are source-only until the next exact-head Windows/S25 validation.
 
 ## 0.12 shared Household data plane to preserve

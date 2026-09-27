@@ -40,15 +40,15 @@ Use **mobile-app-development** first for app/source work, **concept-lab-delivery
 
 ## Production and stacked source state
 
-Firebase production/backend is still the previously deployed 0.11 runtime; the accepted 0.12 source has now been merged to GitHub `main` but is **not yet deployed**.
-
-Accepted 0.12 merge SHA:
+Firebase production/backend is now **0.12**, released from accepted merge:
 
 `6a97eb23956da97cfe8266008c0827a303eec72c`
 
-Its exact pre-merge PR head passed Flutter 47/47, Functions policy 5/5, exact 37 Functions and Firestore 23/23. 0.12 version remains `0.12.0+16`.
+The governed release proved exactly 37 expected Functions ACTIVE on `homi-backend-runtime@homi-ee80a.iam.gserviceaccount.com`, accepted Firestore rules/indexes deployed, the root-to-Household Shared Task migration stable with zero root records to move, and retired root Task/connection triggers absent. The exact pre-merge source had already passed Flutter 47/47, Functions policy 5/5 and Firestore 23/23.
 
-Do not let 0.13 billing deployment skip the 0.12 provider preflight, migration, production deployment and acceptance gate.
+Bruce then reported the requested S25 Ultra live Household/data-plane checks otherwise working as intended. True two-physical-device propagation is still unproven because only one real device is available.
+
+0.12 version remains `0.12.0+16`. Do not repeat the 0.12 deployment gate unless new live evidence requires reconciliation.
 
 0.13 version: `0.13.0+17`.
 Branch: `homi-0.13-billing-entitlements`.
@@ -67,6 +67,26 @@ Bruce explicitly asked not to make a cosmetic micro-release for these:
 - `_InviteMemberSheet` ends with a compact sage privacy/context panel explaining that Household membership never turns on location sharing. This adds useful visual weight instead of empty filler.
 
 Source only until Bruce's real S25 Ultra proves it.
+
+## 2026-09-27 live-device notification/sign-out feedback folded into 0.13
+
+During the post-0.12 live S25 Ultra pass Bruce reported the Household/data-plane test otherwise working correctly, but identified three general account/settings issues:
+
+1. Notification category switches felt swipe-dependent rather than tap-responsive.
+2. Each notification change took several seconds before the visual state moved, and the master-enable flow left a redundant orange **Notifications are on for this device** success box below information already shown above.
+3. **Sign out** showed an unrelated spinner below the button and then appeared to do nothing.
+
+0.13 source now addresses these as one coherent settings/auth polish pass:
+
+- each notification preference card is itself tappable and toggles the switch with one tap;
+- notification preferences update the in-memory UI state immediately, persist locally, then serialize topic/device registration as best-effort background work so remote latency no longer holds the visible switch;
+- category handlers read the latest preference state at tap time so rapid changes cannot revert a different category;
+- successful notification enabling no longer creates the duplicate orange status box; a genuine Android permission denial still shows an explanation;
+- sign-out stops local continuous sharing first, gives push deregistration only a short authenticated best-effort window, closes Firebase Auth as the actual Homi session boundary, and bounds Google provider cleanup so provider/network latency cannot trap the user;
+- sign-out progress is rendered inline in the button as **Signing out…** rather than as a separate spinner below it;
+- a genuine sign-out failure uses Homi's branded information sheet and explicitly confirms local Homi data was not erased.
+
+These fixes are source-only until the next exact-head Windows/S25 validation.
 
 ## 0.12 shared Household data plane to preserve
 
@@ -128,7 +148,7 @@ Added:
 
 The Android billing plugin is pinned to 0.5.0 because it moves Homi onto the Play Billing Library 8 integration line while remaining compatible with Dart 3.11.3. Later 0.5.x versions raise the Dart floor beyond the current Homi toolchain.
 
-**Important:** Bruce's Windows validation on 2026-09-26 regenerated `pubspec.lock` successfully with the new billing dependencies, and `pubspec.lock` was the only tracked local change. It has **not yet been committed** because the source candidate moved while validation findings were fixed.
+**Important:** Bruce's Windows validation on 2026-09-26 regenerated `pubspec.lock` successfully with the new billing dependencies, and that exact lockfile was subsequently committed/pushed on the 0.13 branch. Later source reconciliation/fixes moved the branch head, so the final exact 0.13 candidate still requires a fresh analyzer/test gate rather than reusing the older runtime claim.
 
 The client:
 
@@ -291,20 +311,19 @@ Then activate final server-authoritative capability enforcement in the launch ca
 
 1. Re-fetch the branch head; current source/document preflight has been narrowed to real-toolchain/provider validation rather than another speculative source pass.
 2. On Bruce's real Flutter 3.41.5 toolchain, resolve/update the tracked `pubspec.lock`, then run exact-head analyzer/full Flutter tests. Treat `pubspec.lock` as an expected change but stop if unrelated tracked files become dirty.
-3. Close final 0.12 exact-head validation/merge/governed Firebase deployment before any 0.13 billing deployment reaches production.
+3. Run exact-head 0.13 governed Node 22 dependency lint/policy **17/17**, exact **43** exports and Firestore **25/25**, then S25 Ultra regression covering Household Cancel no-refresh, balanced Add-to-Household sheet, tap-responsive notification preferences with immediate visual state, no duplicate enabled banner, responsive inline sign-out, Homi+ page safety, and preservation of existing People/Home/Tasks/Supplies data.
 4. Create the nine permanent Homi+ subscription products in Play Console — Personal, Duo, and Household 4–10 — with monthly and annual base plans, and record the exact IDs.
 5. Populate both client/backend governed catalogs with those IDs.
 6. Configure Android Publisher API, Play Console API access and RTDN Pub/Sub.
-7. Run exact-head 0.13 governed Node 22 dependency lint/policy **17/17**, exact **43** exports and Firestore **25/25**, then S25 Ultra regression including Household Cancel no-refresh and balanced Add-to-Household sheet.
-8. Merge/deploy the exact accepted 0.13 billing source only after provider prerequisites are present.
-9. Upload/store-install an Internal Testing AAB and prove the complete billing lifecycle, including client/server acknowledgement behavior, replacement modes, out-of-app resubscribe and token-lineage behavior.
-10. Activate paid enforcement only after lifecycle proof.
-11. Complete release signing/Play App Signing fingerprints, store-installed Google Sign-In, Play Integrity App Check, budgets, Privacy Policy, Terms, external deletion page, Data Safety, background-location approval evidence, listing/assets and any account-specific closed-testing requirement before production.
+7. Merge/deploy the exact accepted 0.13 billing source only after provider prerequisites are present.
+8. Upload/store-install an Internal Testing AAB and prove the complete billing lifecycle, including client/server acknowledgement behavior, replacement modes, out-of-app resubscribe and token-lineage behavior.
+9. Activate paid enforcement only after lifecycle proof.
+10. Complete release signing/Play App Signing fingerprints, store-installed Google Sign-In, Play Integrity App Check, budgets, Privacy Policy, Terms, external deletion page, Data Safety, background-location approval evidence, listing/assets and any account-specific closed-testing requirement before production.
 
 ## Do not overclaim
 
-- 0.12 is not production until its governed backend deployment is proven.
-- 0.13 has not yet been compiled/analyzed/tested on Bruce's final exact branch head.
+- 0.12 backend is production-released and Bruce reported the requested one-device live Household/data-plane acceptance otherwise working as intended; true two-device propagation remains unproven.
+- 0.13 has not yet been compiled/analyzed/tested on Bruce's final exact branch head after the notification/sign-out fixes and 0.12 reconciliation.
 - 0.13 current exact `billing.js` still requires the governed dependency-loaded Functions lint before any deploy claim.
 - Homi+ cannot be purchased until real Play IDs/provider setup exist.
 - No billing lifecycle has been proven from a Play-installed build yet.

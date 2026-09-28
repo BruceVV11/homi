@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../domain/notification_preferences.dart';
 import '../../services/notification_service.dart';
 import '../../theme/homi_theme.dart';
+import '../../widgets/homi_controls.dart';
 
 class NotificationSettingsPage extends StatefulWidget {
   const NotificationSettingsPage({
@@ -173,10 +174,14 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
             if (!active)
               SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
+                child: FilledButton(
                   onPressed: _busy ? null : _enable,
-                  icon: const Icon(Icons.notifications_active_outlined),
-                  label: Text(_busy ? 'Please wait…' : 'Enable notifications'),
+                  child: HomiActionLabel(
+                    busy: _busy,
+                    label: 'Enable notifications',
+                    busyLabel: 'Enabling',
+                    icon: Icons.notifications_active_outlined,
+                  ),
                 ),
               )
             else

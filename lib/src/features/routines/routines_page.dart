@@ -66,6 +66,10 @@ class _RoutinesPageState extends State<RoutinesPage>
       const <String, TrustedPersonPreference>{};
   List<HouseholdTask> _sharedTasks = const <HouseholdTask>[];
   String? _cloudMessage;
+  bool _createTaskBusy = false;
+  bool _createRoutineBusy = false;
+  final Map<String, String> _taskActionById = <String, String>{};
+  final Map<String, String> _routineActionById = <String, String>{};
 
   static const _examples = <_RoutineTemplate>[
     _RoutineTemplate(
@@ -240,6 +244,43 @@ class _RoutinesPageState extends State<RoutinesPage>
     return result;
   }
 
+  Future<void> _runTaskAction(
+    HouseholdTask task,
+    String action,
+    Future<void> Function() operation,
+  ) async {
+    if (_taskActionById.containsKey(task.id)) return;
+    setState(() {
+      _taskActionById[task.id] = action;
+      _cloudMessage = null;
+    });
+    try {
+      await operation();
+    } catch (error) {
+      if (mounted) setState(() => _cloudMessage = _taskError(error));
+    } finally {
+      if (mounted) {
+        setState(() => _taskActionById.remove(task.id));
+      }
+    }
+  }
+
+  Future<void> _runRoutineAction(
+    RoutineItem item,
+    String action,
+    Future<void> Function() operation,
+  ) async {
+    if (_routineActionById.containsKey(item.id)) return;
+    setState(() => _routineActionById[item.id] = action);
+    try {
+      await operation();
+    } finally {
+      if (mounted) {
+        setState(() => _routineActionById.remove(item.id));
+      }
+    }
+  }
+
   Future<void> _addTask() async {
     final draft = await showModalBottomSheet<HouseholdTaskInput>(
       context: context,
@@ -250,14 +291,18 @@ class _RoutinesPageState extends State<RoutinesPage>
         actorUid: widget.actorUid,
       ),
     );
-    if (draft == null) return;
+    if (draft == null || _createTaskBusy) return;
 
     final personal = widget.actorUid == null ||
         draft.assigneeUid == widget.actorUid;
     final householdUids = _householdMemberUids;
 
-    if (!personal && householdUids.isNotEmpty) {
-      try {
+    setState(() {
+      _createTaskBusy = true;
+      _cloudMessage = null;
+    });
+    try {
+      if (!personal && householdUids.isNotEmpty) {
         await widget.sharedTaskService.createHouseholdTask(
           title: draft.title,
           householdMemberUids: householdUids,
@@ -266,15 +311,14 @@ class _RoutinesPageState extends State<RoutinesPage>
           notes: draft.notes,
           dueAt: draft.dueAt,
         );
-      } catch (error) {
-        if (mounted) {
-          setState(() => _cloudMessage = _taskError(error));
-        }
+      } else {
+        await widget.onAddTask(draft);
       }
-      return;
+    } catch (error) {
+      if (mounted) setState(() => _cloudMessage = _taskError(error));
+    } finally {
+      if (mounted) setState(() => _createTaskBusy = false);
     }
-
-    await widget.onAddTask(draft);
   }
 
   String _taskError(Object error) {
@@ -297,7 +341,13 @@ class _RoutinesPageState extends State<RoutinesPage>
       showDragHandle: true,
       builder: (context) => _RoutineEditorSheet(template: template),
     );
-    if (draft != null) await widget.onAdd(draft);
+    if (draft == null || _createRoutineBusy) return;
+    setState(() => _createRoutineBusy = true);
+    try {
+      await widget.onAdd(draft);
+    } finally {
+      if (mounted) setState(() => _createRoutineBusy = false);
+    }
   }
 
   Future<void> _removeTask(HouseholdTask task) async {
@@ -311,17 +361,17 @@ class _RoutinesPageState extends State<RoutinesPage>
       destructive: true,
     );
     if (!confirmed) return;
-    if (task.shared) {
-      try {
-        await widget.sharedTaskService.removeTask(task.id);
-      } catch (_) {
-        if (mounted) {
-          setState(() => _cloudMessage = 'Homi could not remove that shared task.');
+    await _runTaskAction(
+      task,
+      'remove',
+      () async {
+        if (task.shared) {
+          await widget.sharedTaskService.removeTask(task.id);
+        } else {
+          await widget.onRemoveTask(task.id);
         }
-      }
-    } else {
-      await widget.onRemoveTask(task.id);
-    }
+      },
+    );
   }
 
   Future<void> _removeRoutine(RoutineItem item) async {
@@ -335,21 +385,27 @@ class _RoutinesPageState extends State<RoutinesPage>
       icon: Icons.delete_outline_rounded,
       destructive: true,
     );
-    if (confirmed) await widget.onRemove(item.id);
+    if (confirmed) {
+      await _runRoutineAction(
+        item,
+        'remove',
+        () => widget.onRemove(item.id),
+      );
+    }
   }
 
   Future<void> _toggleTask(HouseholdTask task) async {
-    if (task.shared) {
-      try {
-        await widget.sharedTaskService.toggleTask(task);
-      } catch (_) {
-        if (mounted) {
-          setState(() => _cloudMessage = 'Homi could not update that shared task.');
+    await _runTaskAction(
+      task,
+      'toggle',
+      () async {
+        if (task.shared) {
+          await widget.sharedTaskService.toggleTask(task);
+        } else {
+          await widget.onToggleTask(task.id);
         }
-      }
-    } else {
-      await widget.onToggleTask(task.id);
-    }
+      },
+    );
   }
 
   void _showTasksInfo() {
@@ -484,10 +540,14 @@ class _RoutinesPageState extends State<RoutinesPage>
               ),
             ),
             const SizedBox(width: 10),
-            FilledButton.icon(
-              onPressed: _addTask,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add task'),
+            FilledButton(
+              onPressed: _createTaskBusy ? null : _addTask,
+              child: HomiActionLabel(
+                busy: _createTaskBusy,
+                label: 'Add task',
+                busyLabel: 'Adding task',
+                icon: Icons.add_rounded,
+              ),
             ),
           ],
         ),
@@ -508,6 +568,7 @@ class _RoutinesPageState extends State<RoutinesPage>
               child: _TaskCard(
                 task: task,
                 currentUid: widget.actorUid,
+                action: _taskActionById[task.id],
                 onToggle: () => _toggleTask(task),
                 onRemove: () => _removeTask(task),
               ),
@@ -529,6 +590,7 @@ class _RoutinesPageState extends State<RoutinesPage>
               child: _TaskCard(
                 task: task,
                 currentUid: widget.actorUid,
+                action: _taskActionById[task.id],
                 onToggle: () => _toggleTask(task),
                 onRemove: () => _removeTask(task),
               ),
@@ -564,10 +626,14 @@ class _RoutinesPageState extends State<RoutinesPage>
               ),
             ),
             const SizedBox(width: 10),
-            FilledButton.icon(
-              onPressed: () => _addRoutine(),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add routine'),
+            FilledButton(
+              onPressed: _createRoutineBusy ? null : () => _addRoutine(),
+              child: HomiActionLabel(
+                busy: _createRoutineBusy,
+                label: 'Add routine',
+                busyLabel: 'Adding routine',
+                icon: Icons.add_rounded,
+              ),
             ),
           ],
         ),
@@ -591,7 +657,12 @@ class _RoutinesPageState extends State<RoutinesPage>
                 child: _RoutineCard(
                   item: item,
                   now: now,
-                  onToggle: () => widget.onToggle(item.id),
+                  action: _routineActionById[item.id],
+                  onToggle: () => _runRoutineAction(
+                    item,
+                    'toggle',
+                    () => widget.onToggle(item.id),
+                  ),
                   onRemove: () => _removeRoutine(item),
                 ),
               ),
@@ -612,7 +683,12 @@ class _RoutinesPageState extends State<RoutinesPage>
                 child: _RoutineCard(
                   item: item,
                   now: now,
-                  onToggle: () => widget.onToggle(item.id),
+                  action: _routineActionById[item.id],
+                  onToggle: () => _runRoutineAction(
+                    item,
+                    'toggle',
+                    () => widget.onToggle(item.id),
+                  ),
                   onRemove: () => _removeRoutine(item),
                 ),
               ),
@@ -647,12 +723,14 @@ class _TaskCard extends StatelessWidget {
     required this.currentUid,
     required this.onToggle,
     required this.onRemove,
+    required this.action,
   });
 
   final HouseholdTask task;
   final String? currentUid;
   final VoidCallback onToggle;
   final VoidCallback onRemove;
+  final String? action;
 
   @override
   Widget build(BuildContext context) {
@@ -669,10 +747,19 @@ class _TaskCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Checkbox(
-              value: task.completed,
-              activeColor: HomiColors.coral,
-              onChanged: (_) => onToggle(),
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: action == 'toggle'
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    )
+                  : Checkbox(
+                      value: task.completed,
+                      activeColor: HomiColors.coral,
+                      onChanged: action == null ? (_) => onToggle() : null,
+                    ),
             ),
             const SizedBox(width: 4),
             Expanded(
@@ -747,11 +834,20 @@ class _TaskCard extends StatelessWidget {
                 ),
               ),
             ),
-            IconButton(
-              tooltip: 'Task options',
-              onPressed: onRemove,
-              icon: const Icon(Icons.more_vert_rounded),
-            ),
+            action == 'remove'
+                ? const SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Padding(
+                      padding: EdgeInsets.all(14),
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    ),
+                  )
+                : IconButton(
+                    tooltip: 'Task options',
+                    onPressed: action == null ? onRemove : null,
+                    icon: const Icon(Icons.more_vert_rounded),
+                  ),
           ],
         ),
       ),
@@ -765,12 +861,14 @@ class _RoutineCard extends StatelessWidget {
     required this.now,
     required this.onToggle,
     required this.onRemove,
+    required this.action,
   });
 
   final RoutineItem item;
   final DateTime now;
   final VoidCallback onToggle;
   final VoidCallback onRemove;
+  final String? action;
 
   @override
   Widget build(BuildContext context) {
@@ -785,10 +883,19 @@ class _RoutineCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Checkbox(
-              value: checked,
-              activeColor: HomiColors.coral,
-              onChanged: (_) => onToggle(),
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: action == 'toggle'
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    )
+                  : Checkbox(
+                      value: checked,
+                      activeColor: HomiColors.coral,
+                      onChanged: action == null ? (_) => onToggle() : null,
+                    ),
             ),
             const SizedBox(width: 4),
             Expanded(
@@ -851,11 +958,20 @@ class _RoutineCard extends StatelessWidget {
                 ),
               ),
             ),
-            IconButton(
-              tooltip: 'Routine options',
-              onPressed: onRemove,
-              icon: const Icon(Icons.more_vert_rounded),
-            ),
+            action == 'remove'
+                ? const SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Padding(
+                      padding: EdgeInsets.all(14),
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    ),
+                  )
+                : IconButton(
+                    tooltip: 'Routine options',
+                    onPressed: action == null ? onRemove : null,
+                    icon: const Icon(Icons.more_vert_rounded),
+                  ),
           ],
         ),
       ),

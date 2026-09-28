@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/google_provider_mark.dart';
+import '../../widgets/homi_controls.dart';
 import 'homi_plus_page.dart';
 import 'household_settings_route.dart';
 
@@ -178,7 +179,9 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         backgroundColor: HomiColors.cream,
         surfaceTintColor: Colors.transparent,
       ),
-      body: SafeArea(
+      body: Stack(
+        children: [
+          SafeArea(
         top: false,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
@@ -383,6 +386,13 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
             ],
           ],
         ),
+      ),
+          if (_busy)
+            const HomiBlockingProgressOverlay(
+              label: 'Updating your account…',
+              detail: 'Homi is finishing this request.',
+            ),
+        ],
       ),
     );
   }

@@ -342,11 +342,13 @@ class _AccountHubPageState extends State<AccountHubPage> {
         backgroundColor: HomiColors.cream,
         surfaceTintColor: Colors.transparent,
       ),
-      body: SafeArea(
-        top: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 34),
-          children: [
+      body: Stack(
+        children: [
+          SafeArea(
+            top: false,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 34),
+              children: [
             _AccountHero(
               user: user,
               displayName: _displayName(user),
@@ -458,8 +460,15 @@ class _AccountHubPageState extends State<AccountHubPage> {
               const SizedBox(height: 12),
               const Center(child: CircularProgressIndicator()),
             ],
-          ],
-        ),
+              ],
+            ),
+          ),
+          if (_busy && !_signingOut)
+            const HomiBlockingProgressOverlay(
+              label: 'Finishing your account change…',
+              detail: 'Keep Homi open until this completes.',
+            ),
+        ],
       ),
     );
   }

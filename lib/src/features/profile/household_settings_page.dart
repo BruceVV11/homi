@@ -304,28 +304,37 @@ class _HouseholdSettingsPageState extends State<HouseholdSettingsPage> {
         backgroundColor: HomiColors.cream,
         surfaceTintColor: Colors.transparent,
       ),
-      body: SafeArea(
-        top: false,
-        child: user == null
-            ? _SignedOutHousehold(onSignIn: widget.onSignIn)
-            : StreamBuilder<HomiHousehold?>(
-                stream: widget.householdService.watchCurrentHousehold(),
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return const _LoadError(
-                      message:
-                          'Homi could not refresh your Household. Check your connection and try again.',
-                    );
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final household = snapshot.data;
-                  return household == null
-                      ? _buildNoHousehold(context)
-                      : _buildHousehold(context, household, user.uid);
-                },
-              ),
+      body: Stack(
+        children: [
+          SafeArea(
+            top: false,
+            child: user == null
+                ? _SignedOutHousehold(onSignIn: widget.onSignIn)
+                : StreamBuilder<HomiHousehold?>(
+                    stream: widget.householdService.watchCurrentHousehold(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return const _LoadError(
+                          message:
+                              'Homi could not refresh your Household. Check your connection and try again.',
+                        );
+                      }
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final household = snapshot.data;
+                      return household == null
+                          ? _buildNoHousehold(context)
+                          : _buildHousehold(context, household, user.uid);
+                    },
+                  ),
+          ),
+          if (_busy)
+            const HomiBlockingProgressOverlay(
+              label: 'Updating Household…',
+              detail: 'Homi is saving this change securely.',
+            ),
+        ],
       ),
     );
   }

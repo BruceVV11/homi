@@ -451,6 +451,16 @@ class _PeoplePageState extends State<PeoplePage>
     });
     try {
       await operation();
+      if (action == 'accept' && mounted) {
+        await showHomiInfoSheet(
+          context,
+          title: 'You’re connected',
+          message:
+              'You can now choose whether to share your location with ${connection.otherName(_user!.uid)} from People. Connecting never starts location sharing automatically.',
+          actionLabel: 'Got it',
+          icon: Icons.people_alt_outlined,
+        );
+      }
     } catch (error) {
       if (mounted) setState(() => _error = _friendly(error));
     } finally {
@@ -1881,8 +1891,10 @@ class _IncomingConnectionCard extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: action == null ? onDecline : null,
-                    child: Text(
-                      action == 'decline' ? 'Declining…' : 'Decline',
+                    child: HomiActionLabel(
+                      busy: action == 'decline',
+                      label: 'Decline',
+                      busyLabel: 'Declining',
                     ),
                   ),
                 ),
@@ -1890,8 +1902,10 @@ class _IncomingConnectionCard extends StatelessWidget {
                 Expanded(
                   child: FilledButton(
                     onPressed: action == null ? onAccept : null,
-                    child: Text(
-                      action == 'accept' ? 'Accepting…' : 'Accept',
+                    child: HomiActionLabel(
+                      busy: action == 'accept',
+                      label: 'Accept',
+                      busyLabel: 'Accepting',
                     ),
                   ),
                 ),
@@ -1926,7 +1940,11 @@ class _PendingConnectionCard extends StatelessWidget {
         subtitle: const Text('Connection request sent'),
         trailing: TextButton(
           onPressed: busy ? null : onCancel,
-          child: Text(busy ? 'Canceling…' : 'Cancel'),
+          child: HomiActionLabel(
+            busy: busy,
+            label: 'Cancel',
+            busyLabel: 'Canceling',
+          ),
         ),
       ),
     );

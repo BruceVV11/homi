@@ -185,6 +185,25 @@ class HomiNotificationService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> refreshPermissionState() async {
+    if (!firebaseReady) return;
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    final granted =
+        settings.authorizationStatus == AuthorizationStatus.authorized ||
+            settings.authorizationStatus == AuthorizationStatus.provisional;
+    final changed = _osPermissionGranted != granted;
+    _osPermissionGranted = granted;
+    if (!granted) {
+      _setPushRegistrationState(
+        ready: false,
+        error: 'Android notification permission is not enabled.',
+      );
+    } else if (_preferences.enabled) {
+      await refreshDeviceRegistration();
+    }
+    if (changed) notifyListeners();
+  }
+
   Future<bool> requestPermissionAndEnable() async {
     if (!firebaseReady) return false;
 

@@ -89,6 +89,16 @@ void main() {
       reason:
           'Pending deletes must clear only after the exact delete succeeds.',
     );
+
+    final controller = File(
+      'lib/src/state/homi_app_controller.dart',
+    ).readAsStringSync();
+    expect(
+      controller,
+      contains("key.startsWith('homi.householdSync.')"),
+      reason:
+          'Erase-this-phone/account deletion must also remove pending sync payloads and Household sync metadata.',
+    );
   });
 
   test('Android release preparation opts device-local Homi state out of backup', () {

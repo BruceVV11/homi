@@ -38,7 +38,7 @@ void main() {
     );
     expect(
       client,
-      contains("await _registerPushToken(deviceId, replacementToken);"),
+      contains('await _registerPushToken(deviceId, replacementToken);'),
     );
   });
 }

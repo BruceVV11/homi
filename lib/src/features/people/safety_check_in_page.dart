@@ -458,11 +458,13 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
         backgroundColor: HomiColors.cream,
         surfaceTintColor: Colors.transparent,
       ),
-      body: SafeArea(
-        top: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 34),
-          children: [
+      body: Stack(
+        children: [
+          SafeArea(
+            top: false,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 34),
+              children: [
             HomiEmergencyCallSection(
               contactBuilder: (context, contact) => _EmergencyCallCard(
                 icon: emergencyIconFor(contact.kind),
@@ -536,8 +538,15 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
               const SizedBox(height: 12),
               _InlineMessage(text: _message!),
             ],
-          ],
-        ),
+              ],
+            ),
+          ),
+          if (busy)
+            const HomiBlockingProgressOverlay(
+              label: 'Updating check-ins…',
+              detail: 'Homi is saving your location or sharing preference.',
+            ),
+        ],
       ),
     );
   }

@@ -138,6 +138,12 @@ class HomiNotificationService extends ChangeNotifier {
       // UTC remains a safe fallback and the next app launch retries the lookup.
     }
 
+    // Create Android channels before local-notification initialisation.
+    // Release resource shrinking can otherwise make an icon initialisation
+    // failure prevent every Homi channel from being registered, which causes
+    // FCM to fall back to Android's generic Miscellaneous channel.
+    await _createAndroidChannels();
+
     await _local.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('homi_notification'),
@@ -157,13 +163,9 @@ class HomiNotificationService extends ChangeNotifier {
       _pendingRoute = localPayload;
     }
 
-    final android = _local.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    await android?.createNotificationChannel(_attentionChannel);
-    await android?.createNotificationChannel(_taskChannel);
-    await android?.createNotificationChannel(_peopleChannel);
-    await android?.createNotificationChannel(_updatesChannel);
-    await android?.createNotificationChannel(_serviceChannel);
+    // Reconcile once more after plugin initialisation so channel creation is
+    // idempotent across upgrades and OEM-specific notification state changes.
+    await _createAndroidChannels();
 
     if (firebaseReady) {
       final settings =
@@ -200,6 +202,20 @@ class HomiNotificationService extends ChangeNotifier {
 
     _initialized = true;
     notifyListeners();
+  }
+
+  Future<void> _createAndroidChannels() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    final android = _local.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) {
+      throw StateError('Android local notification support is unavailable.');
+    }
+    await android.createNotificationChannel(_attentionChannel);
+    await android.createNotificationChannel(_taskChannel);
+    await android.createNotificationChannel(_peopleChannel);
+    await android.createNotificationChannel(_updatesChannel);
+    await android.createNotificationChannel(_serviceChannel);
   }
 
   Future<void> refreshPermissionState() async {

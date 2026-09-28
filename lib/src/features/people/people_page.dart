@@ -73,6 +73,7 @@ class _PeoplePageState extends State<PeoplePage>
   bool _busy = false;
   bool _syncBusy = false;
   bool _liveSharingActive = false;
+  final Map<String, String> _connectionActionById = <String, String>{};
 
   @override
   bool get wantKeepAlive => true;
@@ -435,6 +436,27 @@ class _PeoplePageState extends State<PeoplePage>
     );
     if (sent == true && mounted) {
       setState(() => _error = null);
+    }
+  }
+
+  Future<void> _runConnectionAction(
+    TrustedConnection connection,
+    String action,
+    Future<void> Function() operation,
+  ) async {
+    if (_connectionActionById.containsKey(connection.id)) return;
+    setState(() {
+      _connectionActionById[connection.id] = action;
+      _error = null;
+    });
+    try {
+      await operation();
+    } catch (error) {
+      if (mounted) setState(() => _error = _friendly(error));
+    } finally {
+      if (mounted) {
+        setState(() => _connectionActionById.remove(connection.id));
+      }
     }
   }
 
@@ -863,8 +885,12 @@ class _PeoplePageState extends State<PeoplePage>
             destructive: true,
           );
           if (confirmed) {
-            await widget.trustedPeopleService
-                .declineOrRemoveConnection(connection);
+            await _runConnectionAction(
+              connection,
+              'remove',
+              () => widget.trustedPeopleService
+                  .declineOrRemoveConnection(connection),
+            );
           }
         },
       ),
@@ -1126,10 +1152,18 @@ class _PeoplePageState extends State<PeoplePage>
                 child: _IncomingConnectionCard(
                   connection: connection,
                   currentUid: currentUid!,
-                  onAccept: () => widget.trustedPeopleService
-                      .acceptConnection(connection),
-                  onDecline: () => widget.trustedPeopleService
-                      .declineOrRemoveConnection(connection),
+                  action: _connectionActionById[connection.id],
+                  onAccept: () => _runConnectionAction(
+                    connection,
+                    'accept',
+                    () => widget.trustedPeopleService.acceptConnection(connection),
+                  ),
+                  onDecline: () => _runConnectionAction(
+                    connection,
+                    'decline',
+                    () => widget.trustedPeopleService
+                        .declineOrRemoveConnection(connection),
+                  ),
                 ),
               ),
             ),
@@ -1142,8 +1176,13 @@ class _PeoplePageState extends State<PeoplePage>
                 child: _PendingConnectionCard(
                   name: connection.otherName(currentUid!),
                   photoUrl: connection.otherPhotoUrl(currentUid),
-                  onCancel: () => widget.trustedPeopleService
-                      .declineOrRemoveConnection(connection),
+                  busy: _connectionActionById.containsKey(connection.id),
+                  onCancel: () => _runConnectionAction(
+                    connection,
+                    'cancel',
+                    () => widget.trustedPeopleService
+                        .declineOrRemoveConnection(connection),
+                  ),
                 ),
               ),
             ),
@@ -1803,12 +1842,14 @@ class _IncomingConnectionCard extends StatelessWidget {
     required this.currentUid,
     required this.onAccept,
     required this.onDecline,
+    required this.action,
   });
 
   final TrustedConnection connection;
   final String currentUid;
   final Future<void> Function() onAccept;
   final Future<void> Function() onDecline;
+  final String? action;
 
   @override
   Widget build(BuildContext context) {
@@ -1839,15 +1880,19 @@ class _IncomingConnectionCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: onDecline,
-                    child: const Text('Decline'),
+                    onPressed: action == null ? onDecline : null,
+                    child: Text(
+                      action == 'decline' ? 'Declining…' : 'Decline',
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton(
-                    onPressed: onAccept,
-                    child: const Text('Accept'),
+                    onPressed: action == null ? onAccept : null,
+                    child: Text(
+                      action == 'accept' ? 'Accepting…' : 'Accept',
+                    ),
                   ),
                 ),
               ],
@@ -1864,11 +1909,13 @@ class _PendingConnectionCard extends StatelessWidget {
     required this.name,
     required this.photoUrl,
     required this.onCancel,
+    required this.busy,
   });
 
   final String name;
   final String? photoUrl;
   final Future<void> Function() onCancel;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -1877,7 +1924,10 @@ class _PendingConnectionCard extends StatelessWidget {
         leading: _PersonAvatar(name: name, photoUrl: photoUrl, size: 42),
         title: Text(name, style: const TextStyle(fontWeight: FontWeight.w900)),
         subtitle: const Text('Connection request sent'),
-        trailing: TextButton(onPressed: onCancel, child: const Text('Cancel')),
+        trailing: TextButton(
+          onPressed: busy ? null : onCancel,
+          child: Text(busy ? 'Canceling…' : 'Cancel'),
+        ),
       ),
     );
   }

@@ -32,7 +32,7 @@ Future<bool> showHomiBackgroundLocationDisclosure(
     context,
     title: 'Location in the background',
     message:
-        'Homi collects location data to keep Live Location sharing and Home or Work arrival check-ins working even when Homi is closed or not in use. Background location is only used while you turn one of these features on. Live Location is shared only with people you choose, and arrival check-ins are sent only to recipients you choose. You can turn either feature off at any time.',
+        'Homi collects location data to keep Live Location sharing and Home or Work arrival check-ins working even when Homi is closed or not in use. Background location is only used while one of these features is turned on. Live Location is shared only with people you choose, and arrival check-ins are sent only to recipients you choose. You can turn either feature off at any time.',
     confirmLabel: 'Continue',
     cancelLabel: 'Not now',
     icon: Icons.location_on_outlined,

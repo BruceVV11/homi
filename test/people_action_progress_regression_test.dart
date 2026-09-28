@@ -13,7 +13,7 @@ void main() {
 
     expect(
       page,
-      contains("_connectionActionById[connection.id] = action"),
+      contains('_connectionActionById[connection.id] = action'),
       reason: 'Each connection needs its own in-flight action state.',
     );
     expect(

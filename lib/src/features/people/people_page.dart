@@ -73,6 +73,7 @@ class _PeoplePageState extends State<PeoplePage>
   bool _busy = false;
   bool _syncBusy = false;
   bool _liveSharingActive = false;
+  final Map<String, String> _connectionActionById = <String, String>{};
 
   @override
   bool get wantKeepAlive => true;
@@ -416,8 +417,19 @@ class _PeoplePageState extends State<PeoplePage>
   }
 
   Future<void> _turnOffLiveSharing() async {
-    await widget.locationService.stopContinuousSharing();
-    if (mounted) setState(() => _liveSharingActive = false);
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.locationService.stopContinuousSharing();
+      if (mounted) setState(() => _liveSharingActive = false);
+    } catch (error) {
+      if (mounted) setState(() => _error = _friendly(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _connectWithCode() async {
@@ -435,6 +447,37 @@ class _PeoplePageState extends State<PeoplePage>
     );
     if (sent == true && mounted) {
       setState(() => _error = null);
+    }
+  }
+
+  Future<void> _runConnectionAction(
+    TrustedConnection connection,
+    String action,
+    Future<void> Function() operation,
+  ) async {
+    if (_connectionActionById.containsKey(connection.id)) return;
+    setState(() {
+      _connectionActionById[connection.id] = action;
+      _error = null;
+    });
+    try {
+      await operation();
+      if (action == 'accept' && mounted) {
+        await showHomiInfoSheet(
+          context,
+          title: 'You’re connected',
+          message:
+              'You can now choose whether to share your location with ${connection.otherName(_user!.uid)} from People. Connecting never starts location sharing automatically.',
+          actionLabel: 'Got it',
+          icon: Icons.people_alt_outlined,
+        );
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = _friendly(error));
+    } finally {
+      if (mounted) {
+        setState(() => _connectionActionById.remove(connection.id));
+      }
     }
   }
 
@@ -462,15 +505,15 @@ class _PeoplePageState extends State<PeoplePage>
       ),
     );
     if (result == null) return;
-    try {
-      await widget.trustedPeopleService.setPreference(
+    await _runConnectionAction(
+      connection,
+      'relationship',
+      () => widget.trustedPeopleService.setPreference(
         otherUid: otherUid,
         relationship: result.relationship,
         scope: result.scope,
-      );
-    } catch (error) {
-      if (mounted) setState(() => _error = _friendly(error));
-    }
+      ),
+    );
   }
 
   Future<void> _openSafety() async {
@@ -825,8 +868,12 @@ class _PeoplePageState extends State<PeoplePage>
         location: _locations[otherUid],
         theyShareToMe: _theyShareToMe[otherUid] == true,
         shareStream: widget.trustedPeopleService.watchMyShareTo(otherUid),
-        onSetMyShare: (active) =>
-            widget.trustedPeopleService.setMyLocationShare(otherUid, active),
+        action: _connectionActionById[connection.id],
+        onSetMyShare: (active) => _runConnectionAction(
+          connection,
+          active ? 'share' : 'stop_share',
+          () => widget.trustedPeopleService.setMyLocationShare(otherUid, active),
+        ),
         onEditRelationship: () => _editPreference(connection),
         onShowLocation: _locations[otherUid] == null
             ? null
@@ -863,8 +910,12 @@ class _PeoplePageState extends State<PeoplePage>
             destructive: true,
           );
           if (confirmed) {
-            await widget.trustedPeopleService
-                .declineOrRemoveConnection(connection);
+            await _runConnectionAction(
+              connection,
+              'remove',
+              () => widget.trustedPeopleService
+                  .declineOrRemoveConnection(connection),
+            );
           }
         },
       ),
@@ -1090,10 +1141,14 @@ class _PeoplePageState extends State<PeoplePage>
               ),
             ),
             if (user != null)
-              TextButton.icon(
+              TextButton(
                 onPressed: _identityBusy ? null : _showMyCode,
-                icon: const Icon(Icons.key_rounded, size: 18),
-                label: const Text('My code'),
+                child: HomiActionLabel(
+                  busy: _identityBusy,
+                  label: 'My code',
+                  busyLabel: 'Loading',
+                  icon: Icons.key_rounded,
+                ),
               ),
             TextButton.icon(
               onPressed: _connectWithCode,
@@ -1126,10 +1181,18 @@ class _PeoplePageState extends State<PeoplePage>
                 child: _IncomingConnectionCard(
                   connection: connection,
                   currentUid: currentUid!,
-                  onAccept: () => widget.trustedPeopleService
-                      .acceptConnection(connection),
-                  onDecline: () => widget.trustedPeopleService
-                      .declineOrRemoveConnection(connection),
+                  action: _connectionActionById[connection.id],
+                  onAccept: () => _runConnectionAction(
+                    connection,
+                    'accept',
+                    () => widget.trustedPeopleService.acceptConnection(connection),
+                  ),
+                  onDecline: () => _runConnectionAction(
+                    connection,
+                    'decline',
+                    () => widget.trustedPeopleService
+                        .declineOrRemoveConnection(connection),
+                  ),
                 ),
               ),
             ),
@@ -1142,8 +1205,13 @@ class _PeoplePageState extends State<PeoplePage>
                 child: _PendingConnectionCard(
                   name: connection.otherName(currentUid!),
                   photoUrl: connection.otherPhotoUrl(currentUid),
-                  onCancel: () => widget.trustedPeopleService
-                      .declineOrRemoveConnection(connection),
+                  busy: _connectionActionById.containsKey(connection.id),
+                  onCancel: () => _runConnectionAction(
+                    connection,
+                    'cancel',
+                    () => widget.trustedPeopleService
+                        .declineOrRemoveConnection(connection),
+                  ),
                 ),
               ),
             ),
@@ -1320,7 +1388,12 @@ class _ConnectPersonSheetState extends State<_ConnectPersonSheet> {
               width: double.infinity,
               child: FilledButton(
                 onPressed: _busy ? null : _submit,
-                child: Text(_busy ? 'Sending…' : 'Send connection request'),
+                child: HomiActionLabel(
+                  busy: _busy,
+                  label: 'Send connection request',
+                  busyLabel: 'Sending request',
+                  icon: Icons.person_add_alt_1_rounded,
+                ),
               ),
             ),
           ],
@@ -1702,10 +1775,14 @@ class _LocationStatusCard extends StatelessWidget {
             if (snapshot == null)
               SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
+                child: FilledButton(
                   onPressed: busy ? null : onEnableLocation,
-                  icon: const Icon(Icons.location_on_outlined),
-                  label: Text(busy ? 'Checking…' : 'Enable my location'),
+                  child: HomiActionLabel(
+                    busy: busy,
+                    label: 'Enable my location',
+                    busyLabel: 'Checking location',
+                    icon: Icons.location_on_outlined,
+                  ),
                 ),
               )
             else
@@ -1721,13 +1798,21 @@ class _LocationStatusCard extends StatelessWidget {
                   Expanded(
                     child: liveSharing
                         ? FilledButton(
-                            onPressed: onTurnOffLive,
-                            child: const Text('Stop live updates'),
+                            onPressed: busy ? null : onTurnOffLive,
+                            child: HomiActionLabel(
+                              busy: busy,
+                              label: 'Stop live updates',
+                              busyLabel: 'Stopping',
+                            ),
                           )
                         : FilledButton(
                             onPressed: busy ? null : onTurnOnLive,
-                            child: Text(
-                              signedIn ? 'Live updates' : 'Sign in for live',
+                            child: HomiActionLabel(
+                              busy: busy,
+                              label:
+                                  signedIn ? 'Live updates' : 'Sign in for live',
+                              busyLabel: 'Starting',
+                              icon: Icons.location_searching_rounded,
                             ),
                           ),
                   ),
@@ -1803,12 +1888,14 @@ class _IncomingConnectionCard extends StatelessWidget {
     required this.currentUid,
     required this.onAccept,
     required this.onDecline,
+    required this.action,
   });
 
   final TrustedConnection connection;
   final String currentUid;
   final Future<void> Function() onAccept;
   final Future<void> Function() onDecline;
+  final String? action;
 
   @override
   Widget build(BuildContext context) {
@@ -1839,15 +1926,23 @@ class _IncomingConnectionCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: onDecline,
-                    child: const Text('Decline'),
+                    onPressed: action == null ? onDecline : null,
+                    child: HomiActionLabel(
+                      busy: action == 'decline',
+                      label: 'Decline',
+                      busyLabel: 'Declining',
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton(
-                    onPressed: onAccept,
-                    child: const Text('Accept'),
+                    onPressed: action == null ? onAccept : null,
+                    child: HomiActionLabel(
+                      busy: action == 'accept',
+                      label: 'Accept',
+                      busyLabel: 'Accepting',
+                    ),
                   ),
                 ),
               ],
@@ -1864,11 +1959,13 @@ class _PendingConnectionCard extends StatelessWidget {
     required this.name,
     required this.photoUrl,
     required this.onCancel,
+    required this.busy,
   });
 
   final String name;
   final String? photoUrl;
   final Future<void> Function() onCancel;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -1877,7 +1974,14 @@ class _PendingConnectionCard extends StatelessWidget {
         leading: _PersonAvatar(name: name, photoUrl: photoUrl, size: 42),
         title: Text(name, style: const TextStyle(fontWeight: FontWeight.w900)),
         subtitle: const Text('Connection request sent'),
-        trailing: TextButton(onPressed: onCancel, child: const Text('Cancel')),
+        trailing: TextButton(
+          onPressed: busy ? null : onCancel,
+          child: HomiActionLabel(
+            busy: busy,
+            label: 'Cancel',
+            busyLabel: 'Canceling',
+          ),
+        ),
       ),
     );
   }
@@ -1896,6 +2000,7 @@ class _TrustedPersonCard extends StatelessWidget {
     required this.onShowLocation,
     required this.onFocusLocation,
     required this.onRemove,
+    required this.action,
   });
 
   final TrustedConnection connection;
@@ -1909,6 +2014,7 @@ class _TrustedPersonCard extends StatelessWidget {
   final Future<void> Function()? onShowLocation;
   final VoidCallback? onFocusLocation;
   final Future<void> Function() onRemove;
+  final String? action;
 
   @override
   Widget build(BuildContext context) {
@@ -1964,16 +2070,30 @@ class _TrustedPersonCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: onEditRelationship,
-                  icon: const Icon(Icons.tune_rounded, size: 17),
-                  label: const Text('Edit'),
+                TextButton(
+                  onPressed: action == null ? onEditRelationship : null,
+                  child: HomiActionLabel(
+                    busy: action == 'relationship',
+                    label: 'Edit',
+                    busyLabel: 'Saving',
+                    icon: Icons.tune_rounded,
+                  ),
                 ),
-                IconButton(
-                  tooltip: 'Remove connection',
-                  onPressed: onRemove,
-                  icon: const Icon(Icons.more_vert_rounded),
-                ),
+                if (action == 'remove')
+                  const SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Padding(
+                      padding: EdgeInsets.all(10),
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    ),
+                  )
+                else
+                  IconButton(
+                    tooltip: 'Remove connection',
+                    onPressed: action == null ? onRemove : null,
+                    icon: const Icon(Icons.more_vert_rounded),
+                  ),
               ],
             ),
             const SizedBox(height: 12),
@@ -1995,10 +2115,16 @@ class _TrustedPersonCard extends StatelessWidget {
                     initialData: false,
                     builder: (context, snapshot) {
                       final sharing = snapshot.data == true;
+                      final changingShare =
+                          action == 'share' || action == 'stop_share';
                       return FilledButton(
-                        onPressed: () => onSetMyShare(!sharing),
-                        child: Text(
-                          sharing ? 'Stop my share' : 'Share mine',
+                        onPressed:
+                            action == null ? () => onSetMyShare(!sharing) : null,
+                        child: HomiActionLabel(
+                          busy: changingShare,
+                          label: sharing ? 'Stop my share' : 'Share mine',
+                          busyLabel:
+                              action == 'stop_share' ? 'Stopping' : 'Sharing',
                         ),
                       );
                     },

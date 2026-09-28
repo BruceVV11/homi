@@ -20,7 +20,10 @@ void main() {
     final personal = HomiEntitlement.fromMap(<String, dynamic>{
       'plan': 'personal',
       'state': 'active',
+      'cadence': 'monthly',
+      'startedAt': '2098-12-01T00:00:00Z',
       'validUntil': '2099-01-01T00:00:00Z',
+      'autoRenewEnabled': true,
       'continuousLocationSender': true,
       'sharedTasks': true,
       'sharedRoutines': true,
@@ -44,6 +47,10 @@ void main() {
     expect(personal.canCreateSharedRoutines, isTrue);
     expect(personal.canUseSharedHousehold, isFalse);
     expect(personal.maxTrustedLiveViewers, 3);
+    expect(personal.cadence, HomiBillingCadence.monthly);
+    expect(personal.startedAt, DateTime.parse('2098-12-01T00:00:00Z'));
+    expect(personal.validUntil, DateTime.parse('2099-01-01T00:00:00Z'));
+    expect(personal.autoRenewEnabled, isTrue);
 
     expect(household.canUseSharedHousehold, isTrue);
     expect(household.householdMemberLimit, 6);

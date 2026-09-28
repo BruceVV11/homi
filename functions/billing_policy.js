@@ -200,7 +200,11 @@ function projectEntitlementSources(rawSources, nowMs = Date.now()) {
     seatRole: strongest.seatRole || null,
     householdId: strongest.householdId || null,
     duoSeatAssigneeUid: strongest.duoSeatAssigneeUid || null,
+    cadence: strongest.cadence || null,
+    startedAt: strongest.startedAt || null,
     validUntil: strongest.validUntil || null,
+    autoRenewEnabled: typeof strongest.autoRenewEnabled === "boolean" ?
+      strongest.autoRenewEnabled : null,
     sourceCount: sources.length,
     ...capabilities,
   };

@@ -203,8 +203,13 @@ class LocationStatusService {
       permissionMessage:
           'For background check-ins, set Homi location access to “Allow all the time” in Android Settings.',
     );
-    await _startPositionStream();
     await syncArrivalMonitoringPreference(true);
+    try {
+      await _startPositionStream();
+    } catch (_) {
+      await syncArrivalMonitoringPreference(false);
+      rethrow;
+    }
   }
 
   Future<bool> resumeContinuousSharingIfEnabled() async {
@@ -284,6 +289,19 @@ class LocationStatusService {
     }
   }
 
+  String _foregroundLocationText() {
+    if (_liveSharingRequested && _arrivalMonitoringRequested) {
+      return 'Sharing your live location and watching for Home or Work arrivals.';
+    }
+    if (_liveSharingRequested) {
+      return 'Sharing your live location with the people you chose.';
+    }
+    if (_arrivalMonitoringRequested) {
+      return 'Watching for your enabled Home or Work arrival check-ins.';
+    }
+    return 'Homi location services are active.';
+  }
+
   Future<void> _startPositionStream() async {
     if (_positionSubscription != null) return;
 
@@ -294,8 +312,8 @@ class LocationStatusService {
         distanceFilter: 100,
         intervalDuration: const Duration(minutes: 2),
         foregroundNotificationConfig: ForegroundNotificationConfig(
-          notificationTitle: 'Homi location',
-          notificationText: 'Live location or arrival check-ins are active.',
+          notificationTitle: 'Homi location is active',
+          notificationText: _foregroundLocationText(),
           notificationChannelName: 'Live location',
           notificationIcon: const AndroidResource(
             name: 'homi_notification',

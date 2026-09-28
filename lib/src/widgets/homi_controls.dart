@@ -134,6 +134,55 @@ Future<bool> showHomiConfirmSheet(
   return result == true;
 }
 
+class HomiActionLabel extends StatelessWidget {
+  const HomiActionLabel({
+    required this.busy,
+    required this.label,
+    required this.busyLabel,
+    this.icon,
+    super.key,
+  });
+
+  final bool busy;
+  final String label;
+  final String busyLabel;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 180),
+      child: busy
+          ? Row(
+              key: const ValueKey<String>('busy'),
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2.2),
+                ),
+                const SizedBox(width: 8),
+                Text(busyLabel),
+              ],
+            )
+          : Row(
+              key: const ValueKey<String>('idle'),
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 18),
+                  const SizedBox(width: 7),
+                ],
+                Text(label),
+              ],
+            ),
+    );
+  }
+}
+
 class HomiChoiceGroup<T> extends StatelessWidget {
   const HomiChoiceGroup({
     required this.values,

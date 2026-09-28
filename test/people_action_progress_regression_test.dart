@@ -28,6 +28,18 @@ void main() {
     );
     expect(
       page,
+      contains("action == 'share' || action == 'stop_share'"),
+      reason:
+          'Location-share mutations must show progress rather than silently wait.',
+    );
+    expect(
+      page,
+      contains("busy: action == 'relationship'"),
+      reason:
+          'Relationship saves must show progress rather than silently wait.',
+    );
+    expect(
+      page,
       contains("title: 'You’re connected'"),
       reason: 'Successful acceptance needs explicit completion feedback.',
     );

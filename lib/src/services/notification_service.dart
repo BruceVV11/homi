@@ -30,6 +30,8 @@ class HomiNotificationService extends ChangeNotifier {
 
   static const _preferencesKey = 'homi.notifications.preferences';
   static const _deviceIdKey = 'homi.notifications.deviceId';
+  static const _osPermissionCacheKey =
+      'homi.notifications.osPermissionGranted';
   static const _scheduledIdsKey = 'homi.notifications.scheduledIds';
   static const _alertedKeysKey = 'homi.notifications.alertedKeys';
   static const _updatesTopic = 'homi_updates';
@@ -85,6 +87,7 @@ class HomiNotificationService extends ChangeNotifier {
   String? _deviceId;
   String? _pendingRoute;
   bool _initialized = false;
+  bool _localStateReady = false;
   bool _osPermissionGranted = false;
   bool _pushRegistrationReady = false;
   bool _pushRegistrationInFlight = false;
@@ -92,6 +95,7 @@ class HomiNotificationService extends ChangeNotifier {
   Future<void> _preferenceSyncTail = Future<void>.value();
 
   HomiNotificationPreferences get preferences => _preferences;
+  bool get localStateReady => _localStateReady;
   bool get osPermissionGranted => _osPermissionGranted;
   bool get pushRegistrationReady => _pushRegistrationReady;
   bool get pushRegistrationInFlight => _pushRegistrationInFlight;
@@ -116,6 +120,15 @@ class HomiNotificationService extends ChangeNotifier {
         _preferences = const HomiNotificationPreferences();
       }
     }
+
+    // Hydrate the last-known Android permission alongside the user's local
+    // Homi preferences before any slower plugin/FCM setup. The live Android
+    // value is reconciled below, but the UI must never flash a false "off"
+    // state while startup work is still running.
+    _osPermissionGranted =
+        _prefs?.getBool(_osPermissionCacheKey) ?? false;
+    _localStateReady = true;
+    notifyListeners();
 
     tz_data.initializeTimeZones();
     try {
@@ -158,6 +171,10 @@ class HomiNotificationService extends ChangeNotifier {
       _osPermissionGranted =
           settings.authorizationStatus == AuthorizationStatus.authorized ||
               settings.authorizationStatus == AuthorizationStatus.provisional;
+      await _prefs?.setBool(
+        _osPermissionCacheKey,
+        _osPermissionGranted,
+      );
 
       _foregroundSubscription = FirebaseMessaging.onMessage.listen(
         _handleForegroundMessage,
@@ -193,6 +210,7 @@ class HomiNotificationService extends ChangeNotifier {
             settings.authorizationStatus == AuthorizationStatus.provisional;
     final changed = _osPermissionGranted != granted;
     _osPermissionGranted = granted;
+    await _prefs?.setBool(_osPermissionCacheKey, granted);
     if (!granted) {
       _setPushRegistrationState(
         ready: false,
@@ -215,6 +233,10 @@ class HomiNotificationService extends ChangeNotifier {
     _osPermissionGranted =
         settings.authorizationStatus == AuthorizationStatus.authorized ||
             settings.authorizationStatus == AuthorizationStatus.provisional;
+    await _prefs?.setBool(
+      _osPermissionCacheKey,
+      _osPermissionGranted,
+    );
     if (_osPermissionGranted) {
       _preferences = _preferences.copyWith(enabled: true);
       notifyListeners();

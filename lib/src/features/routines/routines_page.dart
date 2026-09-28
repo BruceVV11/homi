@@ -540,10 +540,14 @@ class _RoutinesPageState extends State<RoutinesPage>
               ),
             ),
             const SizedBox(width: 10),
-            FilledButton.icon(
-              onPressed: _addTask,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add task'),
+            FilledButton(
+              onPressed: _createTaskBusy ? null : _addTask,
+              child: HomiActionLabel(
+                busy: _createTaskBusy,
+                label: 'Add task',
+                busyLabel: 'Adding task',
+                icon: Icons.add_rounded,
+              ),
             ),
           ],
         ),
@@ -564,6 +568,7 @@ class _RoutinesPageState extends State<RoutinesPage>
               child: _TaskCard(
                 task: task,
                 currentUid: widget.actorUid,
+                action: _taskActionById[task.id],
                 onToggle: () => _toggleTask(task),
                 onRemove: () => _removeTask(task),
               ),
@@ -585,6 +590,7 @@ class _RoutinesPageState extends State<RoutinesPage>
               child: _TaskCard(
                 task: task,
                 currentUid: widget.actorUid,
+                action: _taskActionById[task.id],
                 onToggle: () => _toggleTask(task),
                 onRemove: () => _removeTask(task),
               ),
@@ -620,10 +626,14 @@ class _RoutinesPageState extends State<RoutinesPage>
               ),
             ),
             const SizedBox(width: 10),
-            FilledButton.icon(
-              onPressed: () => _addRoutine(),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add routine'),
+            FilledButton(
+              onPressed: _createRoutineBusy ? null : () => _addRoutine(),
+              child: HomiActionLabel(
+                busy: _createRoutineBusy,
+                label: 'Add routine',
+                busyLabel: 'Adding routine',
+                icon: Icons.add_rounded,
+              ),
             ),
           ],
         ),
@@ -647,7 +657,12 @@ class _RoutinesPageState extends State<RoutinesPage>
                 child: _RoutineCard(
                   item: item,
                   now: now,
-                  onToggle: () => widget.onToggle(item.id),
+                  action: _routineActionById[item.id],
+                  onToggle: () => _runRoutineAction(
+                    item,
+                    'toggle',
+                    () => widget.onToggle(item.id),
+                  ),
                   onRemove: () => _removeRoutine(item),
                 ),
               ),
@@ -668,7 +683,12 @@ class _RoutinesPageState extends State<RoutinesPage>
                 child: _RoutineCard(
                   item: item,
                   now: now,
-                  onToggle: () => widget.onToggle(item.id),
+                  action: _routineActionById[item.id],
+                  onToggle: () => _runRoutineAction(
+                    item,
+                    'toggle',
+                    () => widget.onToggle(item.id),
+                  ),
                   onRemove: () => _removeRoutine(item),
                 ),
               ),
@@ -703,12 +723,14 @@ class _TaskCard extends StatelessWidget {
     required this.currentUid,
     required this.onToggle,
     required this.onRemove,
+    required this.action,
   });
 
   final HouseholdTask task;
   final String? currentUid;
   final VoidCallback onToggle;
   final VoidCallback onRemove;
+  final String? action;
 
   @override
   Widget build(BuildContext context) {
@@ -725,10 +747,19 @@ class _TaskCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Checkbox(
-              value: task.completed,
-              activeColor: HomiColors.coral,
-              onChanged: (_) => onToggle(),
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: action == 'toggle'
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    )
+                  : Checkbox(
+                      value: task.completed,
+                      activeColor: HomiColors.coral,
+                      onChanged: action == null ? (_) => onToggle() : null,
+                    ),
             ),
             const SizedBox(width: 4),
             Expanded(
@@ -803,11 +834,20 @@ class _TaskCard extends StatelessWidget {
                 ),
               ),
             ),
-            IconButton(
-              tooltip: 'Task options',
-              onPressed: onRemove,
-              icon: const Icon(Icons.more_vert_rounded),
-            ),
+            action == 'remove'
+                ? const SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Padding(
+                      padding: EdgeInsets.all(14),
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    ),
+                  )
+                : IconButton(
+                    tooltip: 'Task options',
+                    onPressed: action == null ? onRemove : null,
+                    icon: const Icon(Icons.more_vert_rounded),
+                  ),
           ],
         ),
       ),
@@ -821,12 +861,14 @@ class _RoutineCard extends StatelessWidget {
     required this.now,
     required this.onToggle,
     required this.onRemove,
+    required this.action,
   });
 
   final RoutineItem item;
   final DateTime now;
   final VoidCallback onToggle;
   final VoidCallback onRemove;
+  final String? action;
 
   @override
   Widget build(BuildContext context) {
@@ -841,10 +883,19 @@ class _RoutineCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Checkbox(
-              value: checked,
-              activeColor: HomiColors.coral,
-              onChanged: (_) => onToggle(),
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: action == 'toggle'
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    )
+                  : Checkbox(
+                      value: checked,
+                      activeColor: HomiColors.coral,
+                      onChanged: action == null ? (_) => onToggle() : null,
+                    ),
             ),
             const SizedBox(width: 4),
             Expanded(
@@ -907,11 +958,20 @@ class _RoutineCard extends StatelessWidget {
                 ),
               ),
             ),
-            IconButton(
-              tooltip: 'Routine options',
-              onPressed: onRemove,
-              icon: const Icon(Icons.more_vert_rounded),
-            ),
+            action == 'remove'
+                ? const SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Padding(
+                      padding: EdgeInsets.all(14),
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    ),
+                  )
+                : IconButton(
+                    tooltip: 'Routine options',
+                    onPressed: action == null ? onRemove : null,
+                    icon: const Icon(Icons.more_vert_rounded),
+                  ),
           ],
         ),
       ),

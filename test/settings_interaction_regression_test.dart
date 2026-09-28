@@ -27,6 +27,18 @@ void main() {
       reason:
           'Every notification category must stay disabled until both the Homi master setting and Android permission are active.',
     );
+    expect(
+      page,
+      contains('opacity: canToggle ? 1 : 0.42'),
+      reason:
+          'Disabled notification categories must look visibly disabled, not only reject taps.',
+    );
+    expect(
+      page,
+      contains('_PushDeliveryStatusCard'),
+      reason:
+          'Notification settings must expose whether remote push registration is actually ready.',
+    );
 
     final setEnabledStart = service.indexOf(
       'Future<void> setEnabled(bool value) async {',

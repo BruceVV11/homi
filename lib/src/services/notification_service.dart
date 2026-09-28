@@ -316,8 +316,8 @@ class HomiNotificationService extends ChangeNotifier {
   Future<void> _registerPushToken(
     String deviceId,
     String pushToken,
-  ) {
-    return _cloudActions.call('registerNotificationDevice', <String, dynamic>{
+  ) async {
+    await _cloudActions.call('registerNotificationDevice', <String, dynamic>{
       'deviceId': deviceId,
       'pushToken': pushToken,
       'platform': defaultTargetPlatform.name,

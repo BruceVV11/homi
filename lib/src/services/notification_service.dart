@@ -86,10 +86,16 @@ class HomiNotificationService extends ChangeNotifier {
   String? _pendingRoute;
   bool _initialized = false;
   bool _osPermissionGranted = false;
+  bool _pushRegistrationReady = false;
+  bool _pushRegistrationInFlight = false;
+  String? _pushRegistrationError;
   Future<void> _preferenceSyncTail = Future<void>.value();
 
   HomiNotificationPreferences get preferences => _preferences;
   bool get osPermissionGranted => _osPermissionGranted;
+  bool get pushRegistrationReady => _pushRegistrationReady;
+  bool get pushRegistrationInFlight => _pushRegistrationInFlight;
+  String? get pushRegistrationError => _pushRegistrationError;
   bool get initialized => _initialized;
   Stream<String> get routes => _routeController.stream;
 
@@ -192,12 +198,15 @@ class HomiNotificationService extends ChangeNotifier {
             settings.authorizationStatus == AuthorizationStatus.provisional;
     if (_osPermissionGranted) {
       _preferences = _preferences.copyWith(enabled: true);
-      // Reflect the user's choice immediately. Provider/topic/device
-      // registration follows in a serialized best-effort background sync.
       notifyListeners();
       await _savePreferences();
-      _queuePreferenceSync();
+      await _syncDeveloperTopics();
+      await refreshDeviceRegistration();
     } else {
+      _setPushRegistrationState(
+        ready: false,
+        error: 'Android notification permission is not enabled.',
+      );
       notifyListeners();
     }
     return _osPermissionGranted;
@@ -285,15 +294,32 @@ class HomiNotificationService extends ChangeNotifier {
     }
   }
 
-  Future<void> refreshDeviceRegistration() async {
-    if (!firebaseReady || !_preferences.enabled || !_osPermissionGranted) return;
+  Future<bool> refreshDeviceRegistration() async {
+    if (!firebaseReady || !_preferences.enabled || !_osPermissionGranted) {
+      _setPushRegistrationState(ready: false);
+      return false;
+    }
     final user = FirebaseAuth.instance.currentUser;
     final deviceId = _deviceId;
-    if (user == null || deviceId == null) return;
-    final token = await FirebaseMessaging.instance.getToken();
-    if (token == null || token.isEmpty) return;
+    if (user == null || deviceId == null) {
+      _setPushRegistrationState(ready: false);
+      return false;
+    }
+
+    _pushRegistrationInFlight = true;
+    _pushRegistrationError = null;
+    notifyListeners();
 
     try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null || token.isEmpty) {
+        _setPushRegistrationState(
+          ready: false,
+          error: 'Google notification delivery is not ready on this device yet.',
+        );
+        return false;
+      }
+
       await _cloudActions.call('registerNotificationDevice', <String, dynamic>{
         'deviceId': deviceId,
         'pushToken': token,
@@ -304,16 +330,47 @@ class HomiNotificationService extends ChangeNotifier {
         'homiUpdates': _preferences.homiUpdates,
         'serviceNotices': _preferences.serviceNotices,
       });
+      _setPushRegistrationState(ready: true);
+      return true;
     } on HomiCloudActionException catch (error) {
-      // Local reminders remain useful even when a temporary cloud/App Check
-      // problem prevents direct push registration. Do not log the FCM token.
+      _setPushRegistrationState(
+        ready: false,
+        error: error.message,
+      );
       if (kDebugMode) {
         debugPrint('Homi push registration deferred: ${error.code}');
+      }
+      return false;
+    } catch (error) {
+      _setPushRegistrationState(
+        ready: false,
+        error: 'Homi could not register this device for push notifications.',
+      );
+      if (kDebugMode) {
+        debugPrint('Homi push registration deferred: $error');
+      }
+      return false;
+    } finally {
+      if (_pushRegistrationInFlight) {
+        _pushRegistrationInFlight = false;
+        notifyListeners();
       }
     }
   }
 
+  void _setPushRegistrationState({
+    required bool ready,
+    String? error,
+  }) {
+    final changed = _pushRegistrationReady != ready ||
+        _pushRegistrationError != error;
+    _pushRegistrationReady = ready;
+    _pushRegistrationError = error;
+    if (changed) notifyListeners();
+  }
+
   Future<void> removeDevicePushRegistration() async {
+    _setPushRegistrationState(ready: false);
     if (!firebaseReady) return;
     final user = FirebaseAuth.instance.currentUser;
     final deviceId = _deviceId;

@@ -1130,10 +1130,14 @@ class _PeoplePageState extends State<PeoplePage>
               ),
             ),
             if (user != null)
-              TextButton.icon(
+              TextButton(
                 onPressed: _identityBusy ? null : _showMyCode,
-                icon: const Icon(Icons.key_rounded, size: 18),
-                label: const Text('My code'),
+                child: HomiActionLabel(
+                  busy: _identityBusy,
+                  label: 'My code',
+                  busyLabel: 'Loading',
+                  icon: Icons.key_rounded,
+                ),
               ),
             TextButton.icon(
               onPressed: _connectWithCode,
@@ -1373,7 +1377,12 @@ class _ConnectPersonSheetState extends State<_ConnectPersonSheet> {
               width: double.infinity,
               child: FilledButton(
                 onPressed: _busy ? null : _submit,
-                child: Text(_busy ? 'Sending…' : 'Send connection request'),
+                child: HomiActionLabel(
+                  busy: _busy,
+                  label: 'Send connection request',
+                  busyLabel: 'Sending request',
+                  icon: Icons.person_add_alt_1_rounded,
+                ),
               ),
             ),
           ],

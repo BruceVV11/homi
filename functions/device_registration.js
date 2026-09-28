@@ -1,7 +1,9 @@
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
+const {getMessaging} = require("firebase-admin/messaging");
 
 const db = getFirestore();
+const messaging = getMessaging();
 const HOUR_MS = 60 * 60 * 1000;
 const MAX_DEVICE_RECORDS_PER_USER = 12;
 
@@ -75,6 +77,34 @@ exports.registerNotificationDevice = onCall(
       const platform = requiredString(data.platform, 32, "The device platform is invalid.");
       if (platform !== "android") {
         throw new HttpsError("failed-precondition", "This Homi build supports Android registration.");
+      }
+
+      try {
+        // Validate only: FCM checks the registration token but does not deliver
+        // a visible notification. This prevents Homi from storing a token that
+        // FCM already considers invalid or unregistered.
+        await messaging.send(
+            {
+              token: pushToken,
+              data: {kind: "homi-device-registration-check"},
+            },
+            true,
+        );
+      } catch (error) {
+        const code = error && error.code;
+        if (
+          code === "messaging/registration-token-not-registered" ||
+          code === "messaging/invalid-registration-token"
+        ) {
+          throw new HttpsError(
+              "failed-precondition",
+              "Homi needs to refresh this phone's notification identity.",
+          );
+        }
+        throw new HttpsError(
+            "unavailable",
+            "Homi could not verify notification delivery for this phone right now.",
+        );
       }
 
       const ref = db.collection("users").doc(auth.uid)

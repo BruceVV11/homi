@@ -398,6 +398,7 @@ async function sendToDeviceDocs({
 
   let successCount = 0;
   let failureCount = 0;
+  const errorCodes = new Set();
 
   for (let start = 0; start < eligible.length; start += 500) {
     const group = eligible.slice(start, start + 500);
@@ -430,6 +431,13 @@ async function sendToDeviceDocs({
     response.responses.forEach((result, index) => {
       if (result.success) return;
       const code = result.error && result.error.code;
+      if (code) {
+        errorCodes.add(code);
+        logger.warn("Homi push delivery failed", {
+          category,
+          code,
+        });
+      }
       if (
         code === "messaging/registration-token-not-registered" ||
         code === "messaging/invalid-registration-token"
@@ -449,7 +457,12 @@ async function sendToDeviceDocs({
     await Promise.all(cleanup);
   }
 
-  return {successCount, failureCount, eligibleCount: eligible.length};
+  return {
+    successCount,
+    failureCount,
+    eligibleCount: eligible.length,
+    errorCodes: [...errorCodes],
+  };
 }
 
 async function sendToUser(uid, payload) {
@@ -1410,14 +1423,19 @@ exports.onNotificationCampaignCreated = onDocumentCreated(
             priority,
             extraData: {campaignId: event.params.campaignId},
           });
+          const delivered = result.successCount > 0;
           await campaignRef.set(
               {
-                status: "sent",
+                status: delivered ? "sent" : "failed",
                 deliveryMode: "direct",
-                sentAt: FieldValue.serverTimestamp(),
+                sentAt: delivered ? FieldValue.serverTimestamp() : FieldValue.delete(),
+                failedAt: delivered ? FieldValue.delete() : FieldValue.serverTimestamp(),
                 eligibleCount: result.eligibleCount,
                 sentCount: result.successCount,
                 failureCount: result.failureCount,
+                errorCode: delivered ? FieldValue.delete() :
+                  result.eligibleCount === 0 ? "no-eligible-device" :
+                    result.errorCodes[0] || "delivery-failed",
               },
               {merge: true},
           );

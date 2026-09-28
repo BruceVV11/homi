@@ -1,7 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../domain/homi_entitlement.dart';
+import '../../domain/homi_plus_plan.dart';
 import '../../services/auth_service.dart';
+import '../../services/homi_entitlement_service.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/google_provider_mark.dart';
 import '../../widgets/homi_controls.dart';
@@ -22,6 +25,7 @@ class ProfileSettingsPage extends StatefulWidget {
 
 class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   late final TextEditingController _nameController;
+  late final HomiEntitlementService _entitlementService;
   User? _user;
   bool _busy = false;
 
@@ -29,6 +33,9 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   void initState() {
     super.initState();
     _user = widget.authService.currentUser;
+    _entitlementService = HomiEntitlementService(
+      firebaseReady: widget.authService.firebaseReady,
+    );
     _nameController = TextEditingController(text: _displayName(_user));
   }
 
@@ -223,6 +230,20 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                           ),
                           const SizedBox(height: 5),
                           _VerificationStatus(verified: user.emailVerified),
+                          const SizedBox(height: 8),
+                          StreamBuilder<HomiEntitlement>(
+                            stream: _entitlementService.watchCurrent(),
+                            builder: (context, snapshot) {
+                              final entitlement = snapshot.data;
+                              if (entitlement == null) {
+                                return const SizedBox.shrink();
+                              }
+                              final activePlan = entitlement.isPaid
+                                  ? HomiPlusPlans.forPlan(entitlement.plan).name
+                                  : HomiPlusPlans.free.name;
+                              return _ActivePlanPill(label: activePlan);
+                            },
+                          ),
                         ],
                       ),
                     ),
@@ -393,6 +414,34 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
               detail: 'Homi is finishing this request.',
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _ActivePlanPill extends StatelessWidget {
+  const _ActivePlanPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: HomiColors.peach.withValues(alpha: 0.22),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: HomiColors.coral,
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
       ),
     );
   }

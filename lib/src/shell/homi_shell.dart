@@ -128,9 +128,18 @@ class _HomiShellState extends State<HomiShell> {
           if (mounted) _handleNotificationRoute(pending);
         });
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
       // Notification setup is additive. A notification problem must not stop
-      // the household app from opening.
+      // the household app from opening, but it must remain observable in
+      // release diagnostics instead of being silently discarded.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'Homi notifications',
+          context: ErrorDescription('while initialising notifications'),
+        ),
+      );
     }
   }
 

@@ -13,7 +13,7 @@ void main() {
 
     expect(
       service,
-      contains("_osPermissionCacheKey"),
+      contains('_osPermissionCacheKey'),
       reason:
           'The last-known Android notification permission must be cached locally with Homi notification preferences.',
     );

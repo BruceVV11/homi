@@ -97,9 +97,29 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
         body: const SafeArea(
           top: false,
           child: Center(
-            child: HomiBlockingProgressOverlay(
-              label: 'Loading notification preferences…',
-              detail: 'Homi is restoring this phone’s saved settings.',
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 2.8),
+                  ),
+                  SizedBox(height: 14),
+                  Text(
+                    'Loading notification preferences…',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  SizedBox(height: 5),
+                  Text(
+                    'Homi is restoring this phone’s saved settings.',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -30,6 +30,8 @@ class HomiNotificationService extends ChangeNotifier {
 
   static const _preferencesKey = 'homi.notifications.preferences';
   static const _deviceIdKey = 'homi.notifications.deviceId';
+  static const _osPermissionCacheKey =
+      'homi.notifications.osPermissionGranted';
   static const _scheduledIdsKey = 'homi.notifications.scheduledIds';
   static const _alertedKeysKey = 'homi.notifications.alertedKeys';
   static const _updatesTopic = 'homi_updates';
@@ -85,6 +87,7 @@ class HomiNotificationService extends ChangeNotifier {
   String? _deviceId;
   String? _pendingRoute;
   bool _initialized = false;
+  bool _localStateReady = false;
   bool _osPermissionGranted = false;
   bool _pushRegistrationReady = false;
   bool _pushRegistrationInFlight = false;
@@ -92,6 +95,7 @@ class HomiNotificationService extends ChangeNotifier {
   Future<void> _preferenceSyncTail = Future<void>.value();
 
   HomiNotificationPreferences get preferences => _preferences;
+  bool get localStateReady => _localStateReady;
   bool get osPermissionGranted => _osPermissionGranted;
   bool get pushRegistrationReady => _pushRegistrationReady;
   bool get pushRegistrationInFlight => _pushRegistrationInFlight;
@@ -117,6 +121,15 @@ class HomiNotificationService extends ChangeNotifier {
       }
     }
 
+    // Hydrate the last-known Android permission alongside the user's local
+    // Homi preferences before any slower plugin/FCM setup. The live Android
+    // value is reconciled below, but the UI must never flash a false "off"
+    // state while startup work is still running.
+    _osPermissionGranted =
+        _prefs?.getBool(_osPermissionCacheKey) ?? false;
+    _localStateReady = true;
+    notifyListeners();
+
     tz_data.initializeTimeZones();
     try {
       final timezone = await FlutterTimezone.getLocalTimezone();
@@ -124,6 +137,12 @@ class HomiNotificationService extends ChangeNotifier {
     } catch (_) {
       // UTC remains a safe fallback and the next app launch retries the lookup.
     }
+
+    // Create Android channels before local-notification initialisation.
+    // Release resource shrinking can otherwise make an icon initialisation
+    // failure prevent every Homi channel from being registered, which causes
+    // FCM to fall back to Android's generic Miscellaneous channel.
+    await _createAndroidChannels();
 
     await _local.initialize(
       settings: const InitializationSettings(
@@ -144,13 +163,9 @@ class HomiNotificationService extends ChangeNotifier {
       _pendingRoute = localPayload;
     }
 
-    final android = _local.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    await android?.createNotificationChannel(_attentionChannel);
-    await android?.createNotificationChannel(_taskChannel);
-    await android?.createNotificationChannel(_peopleChannel);
-    await android?.createNotificationChannel(_updatesChannel);
-    await android?.createNotificationChannel(_serviceChannel);
+    // Reconcile once more after plugin initialisation so channel creation is
+    // idempotent across upgrades and OEM-specific notification state changes.
+    await _createAndroidChannels();
 
     if (firebaseReady) {
       final settings =
@@ -158,6 +173,10 @@ class HomiNotificationService extends ChangeNotifier {
       _osPermissionGranted =
           settings.authorizationStatus == AuthorizationStatus.authorized ||
               settings.authorizationStatus == AuthorizationStatus.provisional;
+      await _prefs?.setBool(
+        _osPermissionCacheKey,
+        _osPermissionGranted,
+      );
 
       _foregroundSubscription = FirebaseMessaging.onMessage.listen(
         _handleForegroundMessage,
@@ -185,6 +204,20 @@ class HomiNotificationService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _createAndroidChannels() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    final android = _local.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) {
+      throw StateError('Android local notification support is unavailable.');
+    }
+    await android.createNotificationChannel(_attentionChannel);
+    await android.createNotificationChannel(_taskChannel);
+    await android.createNotificationChannel(_peopleChannel);
+    await android.createNotificationChannel(_updatesChannel);
+    await android.createNotificationChannel(_serviceChannel);
+  }
+
   Future<void> refreshPermissionState() async {
     if (!firebaseReady) return;
     final settings = await FirebaseMessaging.instance.getNotificationSettings();
@@ -193,6 +226,7 @@ class HomiNotificationService extends ChangeNotifier {
             settings.authorizationStatus == AuthorizationStatus.provisional;
     final changed = _osPermissionGranted != granted;
     _osPermissionGranted = granted;
+    await _prefs?.setBool(_osPermissionCacheKey, granted);
     if (!granted) {
       _setPushRegistrationState(
         ready: false,
@@ -215,6 +249,10 @@ class HomiNotificationService extends ChangeNotifier {
     _osPermissionGranted =
         settings.authorizationStatus == AuthorizationStatus.authorized ||
             settings.authorizationStatus == AuthorizationStatus.provisional;
+    await _prefs?.setBool(
+      _osPermissionCacheKey,
+      _osPermissionGranted,
+    );
     if (_osPermissionGranted) {
       _preferences = _preferences.copyWith(enabled: true);
       notifyListeners();

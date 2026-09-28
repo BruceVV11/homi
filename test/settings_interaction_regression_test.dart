@@ -35,9 +35,9 @@ void main() {
     );
     expect(
       page,
-      contains('_PushDeliveryStatusCard'),
+      isNot(contains('_PushDeliveryStatusCard')),
       reason:
-          'Notification settings must expose whether remote push registration is actually ready.',
+          'Notification transport diagnostics must stay internal and must not add an unrequested status card to user settings.',
     );
 
     final setEnabledStart = service.indexOf(

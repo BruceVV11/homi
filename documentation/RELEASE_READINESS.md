@@ -2,9 +2,11 @@
 
 Date: 2026-09-28
 
-Current accepted device baseline: **0.13.3+21**
+Current accepted device baseline: **0.13.4+22**
 
-Current source candidate: **0.13.4+22**
+Accepted Build 22 source: `535dcf46606e0fea4642ad7fcc2863a4f3af5696`
+
+Current public-launch workstream: legal/compliance hosting
 
 Build 21 accepted source before this pass:
 
@@ -32,21 +34,21 @@ Status markers: **DONE**, **VERIFY**, **OPEN**, **BLOCKER**.
 
 Build 21 is the current known-good installed baseline.
 
-## 2. Build 22 purpose
+## 2. Build 22 acceptance
 
-Build 22 is a final hardening-only pass. It adds no new product features and does not redesign approved UI.
+Build 22 is the accepted final hardening app baseline. It adds no new product features and does not redesign approved UI.
 
 Source scope:
 
-- **DONE in source / VERIFY device** prominent background-location disclosure before Live Location or Arrival Check-in permission flow;
-- **DONE in source / VERIFY** durable Household pending-mutation journal across restart;
-- **DONE in source / VERIFY** newer local Household edits cannot be falsely cleared merely because an older cloud document with the same ID exists;
-- **DONE in source / VERIFY local Android host** explicit Android backup and device-transfer exclusions;
+- **DONE** prominent background-location disclosure before Live Location or Arrival Check-in permission flow;
+- **DONE** durable Household pending-mutation journal across restart;
+- **DONE** newer local Household edits cannot be falsely cleared merely because an older cloud document with the same ID exists;
+- **DONE** explicit Android backup and device-transfer exclusions;
 - **DONE in source** release documentation reconciled to the current Build 21/22 state;
 - **DONE in source** Build 22 regression tests added;
-- **VERIFY** final Windows analyzer/tests;
-- **VERIFY** release AAB;
-- **VERIFY** Play Internal Testing update over Build 21.
+- **DONE** final Windows analyzer/tests;
+- **DONE** release AAB;
+- **DONE** Play Internal Testing update over Build 21.
 
 No Firebase Functions or Firestore Rules deployment is required for Build 22.
 
@@ -112,7 +114,7 @@ Homi local Household state, cached location/check-in state and device registrati
 - **DONE** saved Home/Work location sharing is separately controlled.
 - **DONE** users can stop location sharing independently of billing.
 - **DONE in Build 22 source / VERIFY Play review flow** prominent disclosure appears before background-location runtime permission.
-- **VERIFY** store-installed reboot/background behavior under normal Samsung battery management.
+- **DONE** store-installed reboot/background behavior under normal Samsung battery management.
 - **BLOCKER public launch** Google Play background-location declaration and review video using the actual Build 22 disclosure/runtime-permission flow.
 - **BLOCKER public launch** Privacy Policy must explicitly cover background location collection, use and sharing.
 
@@ -123,7 +125,7 @@ Homi local Household state, cached location/check-in state and device registrati
 - **DONE** notification resource survives release shrinking.
 - **DONE** Homi notification preferences persist correctly across restart.
 - **DONE** server delivery diagnostics remain internal.
-- **VERIFY Build 22 regression** notification delivery remains unchanged after final hardening.
+- **DONE** Build 22 notification delivery regression passed after final hardening.
 
 ## 9. Homi+ billing
 
@@ -144,16 +146,17 @@ Homi local Household state, cached location/check-in state and device registrati
 
 These are not reasons to keep changing the product UI.
 
-- **BLOCKER** live Homi Privacy Policy URL;
-- **BLOCKER** live Terms URL;
-- **BLOCKER** external account/data deletion page;
+- **IN PROGRESS** Homi public legal pages are source-controlled under `hosting/` and awaiting Firebase Hosting deployment;
+- **BLOCKER until deployed** live Homi Privacy Policy URL;
+- **BLOCKER until deployed** live Terms URL;
+- **BLOCKER until deployed** external account/data deletion page;
 - **BLOCKER** Google Play background-location declaration/video;
 - **BLOCKER** Data Safety form;
 - **OPEN** content rating, app access, target audience and ads declarations as applicable;
 - **OPEN** final store listing assets/screenshots;
 - **OPEN** staged App Check enforcement after valid release-client metrics;
 - **OPEN** final Homi+ lifecycle acceptance and paid-enforcement decision;
-- **OPEN** final Build 22 real-device regression.
+- **DONE** final Build 22 real-device regression.
 
 ## 11. Build 22 acceptance checklist
 

@@ -313,11 +313,29 @@ class HomiNotificationService extends ChangeNotifier {
     }
   }
 
+  Future<void> _registerPushToken(
+    String deviceId,
+    String pushToken,
+  ) {
+    return _cloudActions.call('registerNotificationDevice', <String, dynamic>{
+      'deviceId': deviceId,
+      'pushToken': pushToken,
+      'platform': defaultTargetPlatform.name,
+      'householdAttention': _preferences.householdAttention,
+      'tasksAndRoutines': _preferences.tasksAndRoutines,
+      'peopleNotifications': _preferences.people,
+      'homiUpdates': _preferences.homiUpdates,
+      'serviceNotices': _preferences.serviceNotices,
+    });
+  }
+
   Future<bool> refreshDeviceRegistration() async {
     if (!firebaseReady || !_preferences.enabled || !_osPermissionGranted) {
       _setPushRegistrationState(ready: false);
       return false;
     }
+    if (_pushRegistrationInFlight) return _pushRegistrationReady;
+
     final user = FirebaseAuth.instance.currentUser;
     final deviceId = _deviceId;
     if (user == null || deviceId == null) {
@@ -330,7 +348,8 @@ class HomiNotificationService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final token = await FirebaseMessaging.instance.getToken();
+      final messaging = FirebaseMessaging.instance;
+      final token = await messaging.getToken();
       if (token == null || token.isEmpty) {
         _setPushRegistrationState(
           ready: false,
@@ -339,16 +358,24 @@ class HomiNotificationService extends ChangeNotifier {
         return false;
       }
 
-      await _cloudActions.call('registerNotificationDevice', <String, dynamic>{
-        'deviceId': deviceId,
-        'pushToken': token,
-        'platform': defaultTargetPlatform.name,
-        'householdAttention': _preferences.householdAttention,
-        'tasksAndRoutines': _preferences.tasksAndRoutines,
-        'peopleNotifications': _preferences.people,
-        'homiUpdates': _preferences.homiUpdates,
-        'serviceNotices': _preferences.serviceNotices,
-      });
+      try {
+        await _registerPushToken(deviceId, token);
+      } on HomiCloudActionException catch (error) {
+        final staleToken = error.code == 'failed-precondition' &&
+            error.message.contains('notification identity');
+        if (!staleToken) rethrow;
+
+        // FCM has explicitly rejected the stored installation token. Ask the
+        // client SDK for a fresh identity once, then register that replacement.
+        // This is bounded to one recovery attempt and never loops.
+        await messaging.deleteToken();
+        final replacementToken = await messaging.getToken();
+        if (replacementToken == null || replacementToken.isEmpty) {
+          rethrow;
+        }
+        await _registerPushToken(deviceId, replacementToken);
+      }
+
       _setPushRegistrationState(ready: true);
       return true;
     } on HomiCloudActionException catch (error) {

@@ -56,7 +56,7 @@ void main() {
 
     expect(
       service,
-      contains('homi.householdSync.pending.v$_pendingJournalVersion.$uid.$householdId'),
+      contains(r'homi.householdSync.pending.v$_pendingJournalVersion.$uid.$householdId'),
       reason:
           'Pending Household mutations must survive process death and remain scoped to the signed-in user and Household.',
     );

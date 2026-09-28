@@ -66,6 +66,10 @@ class _RoutinesPageState extends State<RoutinesPage>
       const <String, TrustedPersonPreference>{};
   List<HouseholdTask> _sharedTasks = const <HouseholdTask>[];
   String? _cloudMessage;
+  bool _createTaskBusy = false;
+  bool _createRoutineBusy = false;
+  final Map<String, String> _taskActionById = <String, String>{};
+  final Map<String, String> _routineActionById = <String, String>{};
 
   static const _examples = <_RoutineTemplate>[
     _RoutineTemplate(
@@ -238,6 +242,43 @@ class _RoutinesPageState extends State<RoutinesPage>
       );
     }
     return result;
+  }
+
+  Future<void> _runTaskAction(
+    HouseholdTask task,
+    String action,
+    Future<void> Function() operation,
+  ) async {
+    if (_taskActionById.containsKey(task.id)) return;
+    setState(() {
+      _taskActionById[task.id] = action;
+      _cloudMessage = null;
+    });
+    try {
+      await operation();
+    } catch (error) {
+      if (mounted) setState(() => _cloudMessage = _taskError(error));
+    } finally {
+      if (mounted) {
+        setState(() => _taskActionById.remove(task.id));
+      }
+    }
+  }
+
+  Future<void> _runRoutineAction(
+    RoutineItem item,
+    String action,
+    Future<void> Function() operation,
+  ) async {
+    if (_routineActionById.containsKey(item.id)) return;
+    setState(() => _routineActionById[item.id] = action);
+    try {
+      await operation();
+    } finally {
+      if (mounted) {
+        setState(() => _routineActionById.remove(item.id));
+      }
+    }
   }
 
   Future<void> _addTask() async {

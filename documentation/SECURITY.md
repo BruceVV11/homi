@@ -237,12 +237,14 @@ Privacy/location revoke/local erase/Household leave where permitted remain indep
 
 ## Firestore security gates
 
-0.13 adds two billing boundary tests to the existing 23. The governed emulator suite is expected to contain exactly **25/25** tests:
+The governed emulator harness now declares exactly **26/26** tests:
 
-- 13 established server-boundary tests;
+- 14 server-boundary tests, including the verified-location boundary;
 - 8 canonical Household/data-plane tests;
 - 2 canonical shared-task query tests;
 - 2 Homi+ billing tests.
+
+`scripts/test-firestore-security.sh` fails closed if the declared test count is not exactly 26 before starting the emulator.
 
 The billing tests prove:
 
@@ -258,9 +260,9 @@ The dependency-loaded pure Node policy suite is expected to contain **17/17** te
 
 The source includes `check_policy_test_count.js`; the Functions `pretest` refuses to run a stale suite unless those two policy files declare exactly 17 tests.
 
-An earlier source-level pure-policy preflight passed **16/16** under Node 22 before the exact Household paid-capacity regression test was added. The current candidate requires **17/17** and has not yet been claimed against the exact post-fix head.
+The deployed 0.13 backend baseline has passed the current **17/17** pure policy suite under Node 22. Build 22 changes no Functions or Firestore Rules, so it does not require another backend deployment.
 
-0.13 adds six billing exports to the 0.12 expected 37, giving an exact expected Functions surface of **43**.
+The governed Functions surface remains exactly **43** exports.
 
 The deploy helper refuses billing deployment until it proves:
 
@@ -286,15 +288,11 @@ Enforcement must not activate until real Play Internal Testing proves purchase, 
 
 ## Production security/compliance gates still required
 
-- 0.12 exact-head merge/governed Firebase deployment and runtime acceptance;
-- final 0.13 Windows analyzer/tests plus Node 22 / 17 policy / 43-export / Firestore 25 gates;
-- real Play product/base-plan catalog and Play API access;
-- RTDN Pub/Sub setup;
-- store-installed billing lifecycle proof including out-of-app resubscribe/account resolution;
-- permanent release signing / Play App Signing fingerprints;
-- Play-installed Google Sign-In;
-- production Maps/Places restrictions;
+- final Build 22 Windows analyzer/tests and Play Internal Testing acceptance;
+- governed Firestore **26/26** emulator gate before a rules change or public-launch security sign-off;
+- remaining Homi+ lifecycle proof, including restore/reinstall, cancellation/grace/hold/expiry, Duo/Household coverage and replacement-lineage cases;
+- paid enforcement only after that lifecycle gate is accepted;
 - Play Integrity App Check and staged Firestore App Check enforcement after valid release-client metrics;
 - Cloud Billing budgets/alerts/monitoring;
 - public Privacy Policy, Terms and external account-deletion resources;
-- Google Play Data Safety and background-location disclosure/declaration/review evidence.
+- Google Play Data Safety and background-location declaration/review video using the Build 22 disclosure flow.

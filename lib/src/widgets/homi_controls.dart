@@ -134,6 +134,73 @@ Future<bool> showHomiConfirmSheet(
   return result == true;
 }
 
+class HomiBlockingProgressOverlay extends StatelessWidget {
+  const HomiBlockingProgressOverlay({
+    required this.label,
+    this.detail,
+    super.key,
+  });
+
+  final String label;
+  final String? detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Material(
+        color: HomiColors.slate.withValues(alpha: 0.26),
+        child: IgnorePointer(
+          child: Center(
+            child: Container(
+              margin: const EdgeInsets.all(28),
+              constraints: const BoxConstraints(maxWidth: 320),
+              padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
+              decoration: BoxDecoration(
+                color: HomiColors.cream,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: const [
+                  BoxShadow(
+                    blurRadius: 26,
+                    offset: Offset(0, 12),
+                    color: Color(0x22000000),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 34,
+                    height: 34,
+                    child: CircularProgressIndicator(strokeWidth: 3),
+                  ),
+                  const SizedBox(height: 13),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (detail != null) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      detail!,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class HomiActionLabel extends StatelessWidget {
   const HomiActionLabel({
     required this.busy,

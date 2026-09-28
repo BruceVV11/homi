@@ -291,14 +291,18 @@ class _RoutinesPageState extends State<RoutinesPage>
         actorUid: widget.actorUid,
       ),
     );
-    if (draft == null) return;
+    if (draft == null || _createTaskBusy) return;
 
     final personal = widget.actorUid == null ||
         draft.assigneeUid == widget.actorUid;
     final householdUids = _householdMemberUids;
 
-    if (!personal && householdUids.isNotEmpty) {
-      try {
+    setState(() {
+      _createTaskBusy = true;
+      _cloudMessage = null;
+    });
+    try {
+      if (!personal && householdUids.isNotEmpty) {
         await widget.sharedTaskService.createHouseholdTask(
           title: draft.title,
           householdMemberUids: householdUids,
@@ -307,15 +311,14 @@ class _RoutinesPageState extends State<RoutinesPage>
           notes: draft.notes,
           dueAt: draft.dueAt,
         );
-      } catch (error) {
-        if (mounted) {
-          setState(() => _cloudMessage = _taskError(error));
-        }
+      } else {
+        await widget.onAddTask(draft);
       }
-      return;
+    } catch (error) {
+      if (mounted) setState(() => _cloudMessage = _taskError(error));
+    } finally {
+      if (mounted) setState(() => _createTaskBusy = false);
     }
-
-    await widget.onAddTask(draft);
   }
 
   String _taskError(Object error) {
@@ -338,7 +341,13 @@ class _RoutinesPageState extends State<RoutinesPage>
       showDragHandle: true,
       builder: (context) => _RoutineEditorSheet(template: template),
     );
-    if (draft != null) await widget.onAdd(draft);
+    if (draft == null || _createRoutineBusy) return;
+    setState(() => _createRoutineBusy = true);
+    try {
+      await widget.onAdd(draft);
+    } finally {
+      if (mounted) setState(() => _createRoutineBusy = false);
+    }
   }
 
   Future<void> _removeTask(HouseholdTask task) async {
@@ -352,17 +361,17 @@ class _RoutinesPageState extends State<RoutinesPage>
       destructive: true,
     );
     if (!confirmed) return;
-    if (task.shared) {
-      try {
-        await widget.sharedTaskService.removeTask(task.id);
-      } catch (_) {
-        if (mounted) {
-          setState(() => _cloudMessage = 'Homi could not remove that shared task.');
+    await _runTaskAction(
+      task,
+      'remove',
+      () async {
+        if (task.shared) {
+          await widget.sharedTaskService.removeTask(task.id);
+        } else {
+          await widget.onRemoveTask(task.id);
         }
-      }
-    } else {
-      await widget.onRemoveTask(task.id);
-    }
+      },
+    );
   }
 
   Future<void> _removeRoutine(RoutineItem item) async {
@@ -376,21 +385,27 @@ class _RoutinesPageState extends State<RoutinesPage>
       icon: Icons.delete_outline_rounded,
       destructive: true,
     );
-    if (confirmed) await widget.onRemove(item.id);
+    if (confirmed) {
+      await _runRoutineAction(
+        item,
+        'remove',
+        () => widget.onRemove(item.id),
+      );
+    }
   }
 
   Future<void> _toggleTask(HouseholdTask task) async {
-    if (task.shared) {
-      try {
-        await widget.sharedTaskService.toggleTask(task);
-      } catch (_) {
-        if (mounted) {
-          setState(() => _cloudMessage = 'Homi could not update that shared task.');
+    await _runTaskAction(
+      task,
+      'toggle',
+      () async {
+        if (task.shared) {
+          await widget.sharedTaskService.toggleTask(task);
+        } else {
+          await widget.onToggleTask(task.id);
         }
-      }
-    } else {
-      await widget.onToggleTask(task.id);
-    }
+      },
+    );
   }
 
   void _showTasksInfo() {

@@ -888,7 +888,7 @@ _InfoContent _content(HomiInfoTopic topic) {
         sections: [
           _SectionContent('What stays on your phone', [
             'Homi can be used without creating an account. Local Tasks, Routines, Supplies, Home items, maintenance history and utility readings stay on the device unless a specific sharing feature says otherwise.',
-            'Signing out does not silently erase those local household records.',
+            'Signing out does not silently erase those local household records. Homi treats local-only household data, cached location/check-in state and device registration preferences as device-local and excludes them from Android app backup and device-to-device transfer.',
           ]),
           _SectionContent('What uses the cloud', [
             'When you sign in and use cloud features, Homi may store account/profile identity, your Homi connection code, trusted connections, private relationship preferences, canonical Household membership/invitations, specifically shared household Tasks, notification device registration, location-sharing permissions, and your latest shared location/battery status.',
@@ -899,8 +899,9 @@ _InfoContent _content(HomiInfoTopic topic) {
             'A Household is separate from a trusted People connection. Joining requires an explicit invitation and acceptance. One account can belong to one shared Household at a time, and leaving/removal does not automatically change a person’s separate location-sharing choices.',
           ]),
           _SectionContent('Location data', [
-            'Location is sensitive. Homi only shares it with connected people you explicitly choose. Background updates require separate permission and Android keeps a visible notification while live updates are active.',
-            'Homi stores the latest location state for sharing rather than building a default long-term travel history.',
+            'Homi collects location data to enable Live Location sharing and Home or Work arrival check-ins even when Homi is closed or not in use. Background location is used only while one of those features is turned on.',
+            'Live Location is shared only with connected people you explicitly choose. Arrival check-ins are sent only to the recipients you choose. Android keeps a visible notification while background location is active.',
+            'Homi stores the latest location state for sharing rather than building a default long-term travel history. Exact saved Home or Work details are shared only when you separately enable that option for selected recipients.',
           ]),
           _SectionContent('Notifications', [
             'If you enable notifications, Homi stores a device push token and your notification-category choices so Firebase Cloud Messaging can route messages to that device. The token identifies an app installation for delivery; Homi does not need to put your household notes or location coordinates inside developer announcement messages.',

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -22,6 +23,11 @@ import 'household_service.dart';
 /// The first owner of a brand-new empty Household may import the device's
 /// existing Home/Routine/Supply data once, because that is the safe migration
 /// from the pre-0.12 single-device model.
+///
+/// Cloud mutations are journaled locally before they are sent. A rejected or
+/// interrupted Firestore write therefore remains explicitly pending across an
+/// app restart, and a later authoritative cloud snapshot cannot silently
+/// replace the user's unsynced local edit.
 class HouseholdDataSyncService {
   HouseholdDataSyncService({
     required this.firebaseReady,
@@ -30,6 +36,7 @@ class HouseholdDataSyncService {
 
   static const _lastHouseholdKey = 'homi.householdSync.lastHouseholdId';
   static const _schemaVersion = 1;
+  static const _pendingJournalVersion = 1;
 
   final bool firebaseReady;
   final HomiAppController controller;
@@ -44,6 +51,8 @@ class HouseholdDataSyncService {
   HomiHousehold? _household;
   bool _classified = false;
   bool _disposed = false;
+  bool _retryInProgress = false;
+  int _mutationSerial = 0;
 
   final Map<HouseholdDataDomain, Set<String>> _sharedIds = {
     for (final domain in HouseholdDataDomain.values) domain: <String>{},
@@ -57,6 +66,9 @@ class HouseholdDataSyncService {
   final Map<HouseholdDataDomain, Set<String>> _pendingDeletes = {
     for (final domain in HouseholdDataDomain.values) domain: <String>{},
   };
+  final Map<String, _PendingHouseholdMutation> _pendingMutations =
+      <String, _PendingHouseholdMutation>{};
+  final Set<String> _pendingSendInFlightKeys = <String>{};
 
   Future<void> start() async {
     if (!firebaseReady || _user == null || _disposed) return;
@@ -90,6 +102,9 @@ class HouseholdDataSyncService {
     _dataSubscription = null;
     _household = household;
     _classified = false;
+    _retryInProgress = false;
+    _pendingMutations.clear();
+    _pendingSendInFlightKeys.clear();
     for (final domain in HouseholdDataDomain.values) {
       _sharedIds[domain]!.clear();
       _privateLegacyIds[domain]!.clear();
@@ -97,9 +112,14 @@ class HouseholdDataSyncService {
       _pendingDeletes[domain]!.clear();
     }
 
-    if (household == null || _user == null) return;
+    final user = _user;
+    if (household == null || user == null) return;
     await _loadPersistedSharedIds(household.id);
-    if (_disposed || controller.localOnly || _household?.id != household.id) {
+    await _loadPendingMutations(user.uid, household.id);
+    if (_disposed ||
+        controller.localOnly ||
+        _household?.id != household.id ||
+        _user?.uid != user.uid) {
       return;
     }
 
@@ -144,7 +164,8 @@ class HouseholdDataSyncService {
 
       final canImportLegacy = lastHouseholdId == null &&
           household.ownerUid == user.uid &&
-          snapshot.docs.isEmpty;
+          snapshot.docs.isEmpty &&
+          _pendingMutations.isEmpty;
 
       if (canImportLegacy) {
         try {
@@ -163,6 +184,10 @@ class HouseholdDataSyncService {
       await _persistAllSharedIds(household.id);
       controller.bindHouseholdDataSink(_handleLocalMutation);
 
+      if (_pendingMutations.isNotEmpty) {
+        unawaited(_retryPendingMutations(household.id, user.uid));
+      }
+
       if (canImportLegacy) {
         // The import commit is now queued/acknowledged. Wait for Firestore's
         // next snapshot instead of applying the pre-import empty snapshot and
@@ -172,10 +197,12 @@ class HouseholdDataSyncService {
     }
 
     // Cloud documents always graduate a matching legacy ID into shared state.
+    // Pending mutation markers are cleared only after the exact Firestore
+    // operation succeeds; merely seeing the same ID in a cloud snapshot is not
+    // proof that the latest local payload was accepted.
     for (final domain in HouseholdDataDomain.values) {
       final cloudIds = parsed.idsFor(domain);
       _privateLegacyIds[domain]!.removeAll(cloudIds);
-      _pendingUpserts[domain]!.removeAll(cloudIds);
 
       if (!snapshot.metadata.isFromCache) {
         final nextShared = <String>{...cloudIds, ..._pendingUpserts[domain]!};
@@ -185,13 +212,14 @@ class HouseholdDataSyncService {
       } else {
         _sharedIds[domain]!.addAll(cloudIds);
       }
-
-      final deleted = _pendingDeletes[domain]!;
-      deleted.removeWhere((id) => !cloudIds.contains(id));
     }
 
     await _persistAllSharedIds(household.id);
     await _applyParsedSnapshot(parsed);
+
+    if (!snapshot.metadata.isFromCache && _pendingMutations.isNotEmpty) {
+      unawaited(_retryPendingMutations(household.id, user.uid));
+    }
   }
 
   void _classifyPrivateLegacyIds(_ParsedHouseholdData parsed) {
@@ -200,6 +228,7 @@ class HouseholdDataSyncService {
       final knownShared = <String>{
         ..._sharedIds[domain]!,
         ...parsed.idsFor(domain),
+        ..._pendingUpserts[domain]!,
       };
       _privateLegacyIds[domain]!
         ..clear()
@@ -280,32 +309,166 @@ class HouseholdDataSyncService {
     // a future explicit merge choice. Editing one must not silently upload it.
     if (_privateLegacyIds[mutation.domain]!.contains(mutation.itemId)) return;
 
-    final ref = _recordRef(household.id, mutation.domain, mutation.itemId);
-    if (mutation.delete) {
-      _pendingUpserts[mutation.domain]!.remove(mutation.itemId);
-      _pendingDeletes[mutation.domain]!.add(mutation.itemId);
-      _sharedIds[mutation.domain]!.remove(mutation.itemId);
-      await _persistSharedIds(household.id, mutation.domain);
-      await ref.delete();
+    final payload = mutation.delete ? null : mutation.payload;
+    if (!mutation.delete && payload == null) return;
+
+    final pending = _PendingHouseholdMutation(
+      domain: mutation.domain,
+      itemId: mutation.itemId,
+      delete: mutation.delete,
+      payload: payload,
+      mutationId: _newMutationId(),
+    );
+
+    await _replacePendingMutation(user.uid, household.id, pending);
+
+    if (pending.delete) {
+      _sharedIds[pending.domain]!.remove(pending.itemId);
+    } else {
+      _sharedIds[pending.domain]!.add(pending.itemId);
+    }
+    await _persistSharedIds(household.id, pending.domain);
+
+    await _sendPendingMutation(
+      householdId: household.id,
+      uid: user.uid,
+      pending: pending,
+    );
+  }
+
+  String _newMutationId() {
+    final serial = _mutationSerial++;
+    return '${DateTime.now().microsecondsSinceEpoch}-$serial';
+  }
+
+  Future<void> _replacePendingMutation(
+    String uid,
+    String householdId,
+    _PendingHouseholdMutation pending,
+  ) async {
+    _pendingMutations[pending.key] = pending;
+    _pendingUpserts[pending.domain]!.remove(pending.itemId);
+    _pendingDeletes[pending.domain]!.remove(pending.itemId);
+    if (pending.delete) {
+      _pendingDeletes[pending.domain]!.add(pending.itemId);
+    } else {
+      _pendingUpserts[pending.domain]!.add(pending.itemId);
+    }
+    await _persistPendingMutations(uid, householdId);
+  }
+
+  Future<void> _sendPendingMutation({
+    required String householdId,
+    required String uid,
+    required _PendingHouseholdMutation pending,
+  }) async {
+    if (_disposed ||
+        controller.localOnly ||
+        _household?.id != householdId ||
+        _user?.uid != uid) {
       return;
     }
 
-    final payload = mutation.payload;
-    if (payload == null) return;
-    _pendingDeletes[mutation.domain]!.remove(mutation.itemId);
-    _pendingUpserts[mutation.domain]!.add(mutation.itemId);
-    _sharedIds[mutation.domain]!.add(mutation.itemId);
-    await _persistSharedIds(household.id, mutation.domain);
-    await ref.set(
-      _cloudDocument(
-        _CloudRecord(
-          domain: mutation.domain,
-          itemId: mutation.itemId,
-          payload: payload,
-        ),
-        user.uid,
-      ),
-    );
+    if (!_pendingSendInFlightKeys.add(pending.key)) return;
+
+    try {
+      final current = _pendingMutations[pending.key];
+      if (current == null || current.mutationId != pending.mutationId) return;
+
+      final ref = _recordRef(householdId, pending.domain, pending.itemId);
+      if (pending.delete) {
+        await ref.delete();
+      } else {
+        final payload = pending.payload;
+        if (payload == null) return;
+        await ref.set(
+          _cloudDocument(
+            _CloudRecord(
+              domain: pending.domain,
+              itemId: pending.itemId,
+              payload: payload,
+            ),
+            uid,
+          ),
+        );
+      }
+
+      await _clearPendingMutationIfCurrent(uid, householdId, pending);
+    } finally {
+      _pendingSendInFlightKeys.remove(pending.key);
+
+      // If another edit for the same record arrived while this write was in
+      // flight, send that newer journal entry next rather than allowing an
+      // older completion to win remotely.
+      final latest = _pendingMutations[pending.key];
+      if (latest != null &&
+          latest.mutationId != pending.mutationId &&
+          !_disposed &&
+          !controller.localOnly &&
+          _household?.id == householdId &&
+          _user?.uid == uid) {
+        unawaited(
+          _sendPendingMutation(
+            householdId: householdId,
+            uid: uid,
+            pending: latest,
+          ).catchError((_) {}),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearPendingMutationIfCurrent(
+    String uid,
+    String householdId,
+    _PendingHouseholdMutation completed,
+  ) async {
+    final current = _pendingMutations[completed.key];
+    if (current == null || current.mutationId != completed.mutationId) return;
+
+    _pendingMutations.remove(completed.key);
+    _pendingUpserts[completed.domain]!.remove(completed.itemId);
+    _pendingDeletes[completed.domain]!.remove(completed.itemId);
+    await _persistPendingMutations(uid, householdId);
+  }
+
+  Future<void> _retryPendingMutations(
+    String householdId,
+    String uid,
+  ) async {
+    if (_retryInProgress ||
+        _disposed ||
+        controller.localOnly ||
+        _household?.id != householdId ||
+        _user?.uid != uid) {
+      return;
+    }
+
+    _retryInProgress = true;
+    try {
+      final pending =
+          _pendingMutations.values.toList(growable: false);
+      for (final mutation in pending) {
+        if (_disposed ||
+            controller.localOnly ||
+            _household?.id != householdId ||
+            _user?.uid != uid) {
+          return;
+        }
+        try {
+          await _sendPendingMutation(
+            householdId: householdId,
+            uid: uid,
+            pending: mutation,
+          );
+        } catch (_) {
+          // Keep the journal entry. It will retry on a later authoritative
+          // snapshot or on the next app/session startup.
+        }
+      }
+    } finally {
+      _retryInProgress = false;
+    }
   }
 
   DocumentReference<Map<String, dynamic>> _recordRef(
@@ -455,6 +618,9 @@ class HouseholdDataSyncService {
   String _sharedIdsKey(String householdId, HouseholdDataDomain domain) =>
       'homi.householdSync.$householdId.${domain.cloudValue}.sharedIds';
 
+  String _pendingMutationsKey(String uid, String householdId) =>
+      'homi.householdSync.pending.v$_pendingJournalVersion.$uid.$householdId';
+
   Future<void> _loadPersistedSharedIds(String householdId) async {
     for (final domain in HouseholdDataDomain.values) {
       final stored = _prefs?.getStringList(_sharedIdsKey(householdId, domain)) ??
@@ -463,6 +629,52 @@ class HouseholdDataSyncService {
         ..clear()
         ..addAll(stored.where((id) => id.trim().isNotEmpty));
     }
+  }
+
+  Future<void> _loadPendingMutations(
+    String uid,
+    String householdId,
+  ) async {
+    _pendingMutations.clear();
+    for (final domain in HouseholdDataDomain.values) {
+      _pendingUpserts[domain]!.clear();
+      _pendingDeletes[domain]!.clear();
+    }
+
+    final stored =
+        _prefs?.getStringList(_pendingMutationsKey(uid, householdId)) ??
+            const <String>[];
+    var droppedMalformedEntry = false;
+
+    for (final raw in stored) {
+      try {
+        final pending = _PendingHouseholdMutation.decode(raw);
+        _pendingMutations[pending.key] = pending;
+        if (pending.delete) {
+          _pendingDeletes[pending.domain]!.add(pending.itemId);
+        } else {
+          _pendingUpserts[pending.domain]!.add(pending.itemId);
+        }
+      } catch (_) {
+        droppedMalformedEntry = true;
+      }
+    }
+
+    if (droppedMalformedEntry) {
+      await _persistPendingMutations(uid, householdId);
+    }
+  }
+
+  Future<void> _persistPendingMutations(
+    String uid,
+    String householdId,
+  ) async {
+    final values = _pendingMutations.values.toList(growable: false)
+      ..sort((a, b) => a.key.compareTo(b.key));
+    await _prefs?.setStringList(
+      _pendingMutationsKey(uid, householdId),
+      values.map((item) => item.encode()).toList(growable: false),
+    );
   }
 
   Future<void> _persistSharedIds(
@@ -477,6 +689,70 @@ class HouseholdDataSyncService {
     for (final domain in HouseholdDataDomain.values) {
       await _persistSharedIds(householdId, domain);
     }
+  }
+}
+
+class _PendingHouseholdMutation {
+  const _PendingHouseholdMutation({
+    required this.domain,
+    required this.itemId,
+    required this.delete,
+    required this.payload,
+    required this.mutationId,
+  });
+
+  final HouseholdDataDomain domain;
+  final String itemId;
+  final bool delete;
+  final Map<String, dynamic>? payload;
+  final String mutationId;
+
+  String get key => '${domain.cloudValue}--$itemId';
+
+  String encode() => jsonEncode(<String, dynamic>{
+        'domain': domain.cloudValue,
+        'itemId': itemId,
+        'delete': delete,
+        'payload': payload,
+        'mutationId': mutationId,
+      });
+
+  static _PendingHouseholdMutation decode(String raw) {
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) throw const FormatException('Pending mutation map.');
+    final map = Map<String, dynamic>.from(decoded);
+    final domainValue = map['domain'];
+    final itemId = map['itemId'];
+    final delete = map['delete'];
+    final mutationId = map['mutationId'];
+    if (domainValue is! String ||
+        itemId is! String ||
+        itemId.trim().isEmpty ||
+        delete is! bool ||
+        mutationId is! String ||
+        mutationId.trim().isEmpty) {
+      throw const FormatException('Pending mutation fields.');
+    }
+
+    final domain = HouseholdDataDomainValue.fromCloudValue(domainValue);
+    if (domain == null) throw const FormatException('Pending mutation domain.');
+
+    Map<String, dynamic>? payload;
+    if (!delete) {
+      final rawPayload = map['payload'];
+      if (rawPayload is! Map) {
+        throw const FormatException('Pending mutation payload.');
+      }
+      payload = Map<String, dynamic>.from(rawPayload);
+    }
+
+    return _PendingHouseholdMutation(
+      domain: domain,
+      itemId: itemId,
+      delete: delete,
+      payload: payload,
+      mutationId: mutationId,
+    );
   }
 }
 

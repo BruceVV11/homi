@@ -31,8 +31,8 @@ void main() {
       contains('class HomiBlockingProgressOverlay extends StatelessWidget'),
     );
     expect(people, contains('HomiActionLabel('));
-    expect(routines, contains("_taskActionById[task.id]"));
-    expect(routines, contains("_routineActionById[item.id]"));
+    expect(routines, contains('_taskActionById[task.id]'));
+    expect(routines, contains('_routineActionById[item.id]'));
     expect(household, contains('HomiBlockingProgressOverlay('));
     expect(account, contains('HomiBlockingProgressOverlay('));
     expect(profile, contains('HomiBlockingProgressOverlay('));

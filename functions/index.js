@@ -1232,12 +1232,18 @@ exports.onConnectionAccepted = onDocumentUpdated(
       const recipientUid = after.recipientUid;
       if (!initiatorUid || !recipientUid) return;
       const recipientName = after.aUid === recipientUid ? after.aName : after.bName;
-      await sendToUser(initiatorUid, {
-        title: "Homi connection accepted",
-        body: `${recipientName || "Your trusted person"} accepted your connection.`,
+      const result = await sendToUser(initiatorUid, {
+        title: "You’re connected on Homi",
+        body: `You and ${recipientName || "your trusted person"} are now connected. Open People to choose whether to share your location.`,
         category: "connection",
         route: "people",
-        priority: "normal",
+        priority: "important",
+      });
+      logger.info("Connection accepted notification delivery", {
+        connectionId: event.params.connectionId,
+        eligibleCount: result.eligibleCount,
+        successCount: result.successCount,
+        failureCount: result.failureCount,
       });
     },
 );

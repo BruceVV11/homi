@@ -86,6 +86,26 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.notificationService.localStateReady) {
+      return Scaffold(
+        backgroundColor: HomiColors.cream,
+        appBar: AppBar(
+          title: const Text('Notifications'),
+          backgroundColor: HomiColors.cream,
+          surfaceTintColor: Colors.transparent,
+        ),
+        body: const SafeArea(
+          top: false,
+          child: Center(
+            child: HomiBlockingProgressOverlay(
+              label: 'Loading notification preferences…',
+              detail: 'Homi is restoring this phone’s saved settings.',
+            ),
+          ),
+        ),
+      );
+    }
+
     final preferences = _preferences;
     final active = preferences.enabled &&
         widget.notificationService.osPermissionGranted;

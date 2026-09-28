@@ -21,7 +21,7 @@ void main() {
 
   test('release preparation preserves the Homi notification icon', () {
     final script = File(
-      'tool/prepare_android_notification_release.ps1',
+      'tool/prepare_android_release.ps1',
     ).readAsStringSync();
 
     expect(script, contains('tools:keep="@drawable/homi_notification"'));

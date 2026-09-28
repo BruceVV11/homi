@@ -17,7 +17,8 @@ class NotificationSettingsPage extends StatefulWidget {
       _NotificationSettingsPageState();
 }
 
-class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
+class _NotificationSettingsPageState extends State<NotificationSettingsPage>
+    with WidgetsBindingObserver {
   bool _busy = false;
   String? _message;
 
@@ -27,13 +28,22 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     widget.notificationService.addListener(_refresh);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.notificationService.removeListener(_refresh);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      widget.notificationService.refreshPermissionState();
+    }
   }
 
   void _refresh() {
@@ -71,6 +81,23 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
 
   Future<void> _save(HomiNotificationPreferences value) async {
     await widget.notificationService.updatePreferences(value);
+  }
+
+  Future<void> _retryPushDelivery() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    final ready = await widget.notificationService.refreshDeviceRegistration();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _message = ready
+          ? 'Remote notification delivery is ready on this device.'
+          : widget.notificationService.pushRegistrationError ??
+              'Homi could not register this device for remote notifications yet.';
+    });
   }
 
   @override
@@ -170,6 +197,15 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Text(_message!),
+              ),
+            ],
+            if (active) ...[
+              const SizedBox(height: 12),
+              _PushDeliveryStatusCard(
+                ready: widget.notificationService.pushRegistrationReady,
+                busy: widget.notificationService.pushRegistrationInFlight,
+                error: widget.notificationService.pushRegistrationError,
+                onRetry: _busy ? null : _retryPushDelivery,
               ),
             ],
             const SizedBox(height: 22),
@@ -287,14 +323,17 @@ class _PreferenceCard extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 9),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: canToggle ? () => onChanged!(!value) : null,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-            child: Row(
-              children: [
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 180),
+        opacity: canToggle ? 1 : 0.42,
+        child: Card(
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: canToggle ? () => onChanged!(!value) : null,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+              child: Row(
+                children: [
                 Container(
                   width: 42,
                   height: 42,
@@ -319,14 +358,92 @@ class _PreferenceCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Switch(
-                  value: value,
-                  onChanged: canToggle ? onChanged : null,
-                ),
-              ],
+                  Switch(
+                    value: value,
+                    onChanged: canToggle ? onChanged : null,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PushDeliveryStatusCard extends StatelessWidget {
+  const _PushDeliveryStatusCard({
+    required this.ready,
+    required this.busy,
+    required this.error,
+    required this.onRetry,
+  });
+
+  final bool ready;
+  final bool busy;
+  final String? error;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = busy
+        ? 'Connecting remote notifications…'
+        : ready
+            ? 'Remote notifications ready'
+            : 'Remote notifications need attention';
+    final message = busy
+        ? 'Homi is registering this phone securely for connection, Household and account notifications.'
+        : ready
+            ? 'This phone is registered to receive Homi push notifications.'
+            : error ??
+                'Homi has permission to notify you, but this phone has not completed remote notification registration yet.';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: ready
+            ? HomiColors.sage.withValues(alpha: 0.14)
+            : HomiColors.peach.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: HomiColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (busy)
+            const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.4),
+            )
+          else
+            Icon(
+              ready
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.notifications_off_outlined,
+              color: ready ? const Color(0xFF6F8B65) : HomiColors.coral,
+            ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                const SizedBox(height: 4),
+                Text(message, style: Theme.of(context).textTheme.bodyMedium),
+                if (!ready && !busy && onRetry != null) ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Retry notification delivery'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

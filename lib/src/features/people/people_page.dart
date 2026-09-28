@@ -494,15 +494,15 @@ class _PeoplePageState extends State<PeoplePage>
       ),
     );
     if (result == null) return;
-    try {
-      await widget.trustedPeopleService.setPreference(
+    await _runConnectionAction(
+      connection,
+      'relationship',
+      () => widget.trustedPeopleService.setPreference(
         otherUid: otherUid,
         relationship: result.relationship,
         scope: result.scope,
-      );
-    } catch (error) {
-      if (mounted) setState(() => _error = _friendly(error));
-    }
+      ),
+    );
   }
 
   Future<void> _openSafety() async {
@@ -857,8 +857,12 @@ class _PeoplePageState extends State<PeoplePage>
         location: _locations[otherUid],
         theyShareToMe: _theyShareToMe[otherUid] == true,
         shareStream: widget.trustedPeopleService.watchMyShareTo(otherUid),
-        onSetMyShare: (active) =>
-            widget.trustedPeopleService.setMyLocationShare(otherUid, active),
+        action: _connectionActionById[connection.id],
+        onSetMyShare: (active) => _runConnectionAction(
+          connection,
+          active ? 'share' : 'stop_share',
+          () => widget.trustedPeopleService.setMyLocationShare(otherUid, active),
+        ),
         onEditRelationship: () => _editPreference(connection),
         onShowLocation: _locations[otherUid] == null
             ? null
@@ -1964,6 +1968,7 @@ class _TrustedPersonCard extends StatelessWidget {
     required this.onShowLocation,
     required this.onFocusLocation,
     required this.onRemove,
+    required this.action,
   });
 
   final TrustedConnection connection;
@@ -1977,6 +1982,7 @@ class _TrustedPersonCard extends StatelessWidget {
   final Future<void> Function()? onShowLocation;
   final VoidCallback? onFocusLocation;
   final Future<void> Function() onRemove;
+  final String? action;
 
   @override
   Widget build(BuildContext context) {
@@ -2032,16 +2038,30 @@ class _TrustedPersonCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: onEditRelationship,
-                  icon: const Icon(Icons.tune_rounded, size: 17),
-                  label: const Text('Edit'),
+                TextButton(
+                  onPressed: action == null ? onEditRelationship : null,
+                  child: HomiActionLabel(
+                    busy: action == 'relationship',
+                    label: 'Edit',
+                    busyLabel: 'Saving',
+                    icon: Icons.tune_rounded,
+                  ),
                 ),
-                IconButton(
-                  tooltip: 'Remove connection',
-                  onPressed: onRemove,
-                  icon: const Icon(Icons.more_vert_rounded),
-                ),
+                if (action == 'remove')
+                  const SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Padding(
+                      padding: EdgeInsets.all(10),
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    ),
+                  )
+                else
+                  IconButton(
+                    tooltip: 'Remove connection',
+                    onPressed: action == null ? onRemove : null,
+                    icon: const Icon(Icons.more_vert_rounded),
+                  ),
               ],
             ),
             const SizedBox(height: 12),
@@ -2063,10 +2083,16 @@ class _TrustedPersonCard extends StatelessWidget {
                     initialData: false,
                     builder: (context, snapshot) {
                       final sharing = snapshot.data == true;
+                      final changingShare =
+                          action == 'share' || action == 'stop_share';
                       return FilledButton(
-                        onPressed: () => onSetMyShare(!sharing),
-                        child: Text(
-                          sharing ? 'Stop my share' : 'Share mine',
+                        onPressed:
+                            action == null ? () => onSetMyShare(!sharing) : null,
+                        child: HomiActionLabel(
+                          busy: changingShare,
+                          label: sharing ? 'Stop my share' : 'Share mine',
+                          busyLabel:
+                              action == 'stop_share' ? 'Stopping' : 'Sharing',
                         ),
                       );
                     },

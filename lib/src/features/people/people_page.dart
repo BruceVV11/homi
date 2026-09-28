@@ -417,8 +417,19 @@ class _PeoplePageState extends State<PeoplePage>
   }
 
   Future<void> _turnOffLiveSharing() async {
-    await widget.locationService.stopContinuousSharing();
-    if (mounted) setState(() => _liveSharingActive = false);
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.locationService.stopContinuousSharing();
+      if (mounted) setState(() => _liveSharingActive = false);
+    } catch (error) {
+      if (mounted) setState(() => _error = _friendly(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _connectWithCode() async {
@@ -1764,10 +1775,14 @@ class _LocationStatusCard extends StatelessWidget {
             if (snapshot == null)
               SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
+                child: FilledButton(
                   onPressed: busy ? null : onEnableLocation,
-                  icon: const Icon(Icons.location_on_outlined),
-                  label: Text(busy ? 'Checking…' : 'Enable my location'),
+                  child: HomiActionLabel(
+                    busy: busy,
+                    label: 'Enable my location',
+                    busyLabel: 'Checking location',
+                    icon: Icons.location_on_outlined,
+                  ),
                 ),
               )
             else
@@ -1783,13 +1798,21 @@ class _LocationStatusCard extends StatelessWidget {
                   Expanded(
                     child: liveSharing
                         ? FilledButton(
-                            onPressed: onTurnOffLive,
-                            child: const Text('Stop live updates'),
+                            onPressed: busy ? null : onTurnOffLive,
+                            child: HomiActionLabel(
+                              busy: busy,
+                              label: 'Stop live updates',
+                              busyLabel: 'Stopping',
+                            ),
                           )
                         : FilledButton(
                             onPressed: busy ? null : onTurnOnLive,
-                            child: Text(
-                              signedIn ? 'Live updates' : 'Sign in for live',
+                            child: HomiActionLabel(
+                              busy: busy,
+                              label:
+                                  signedIn ? 'Live updates' : 'Sign in for live',
+                              busyLabel: 'Starting',
+                              icon: Icons.location_searching_rounded,
                             ),
                           ),
                   ),

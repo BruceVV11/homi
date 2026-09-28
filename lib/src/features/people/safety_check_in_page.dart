@@ -13,6 +13,7 @@ import '../../services/location_status_service.dart';
 import '../../services/trusted_people_service.dart';
 import '../../theme/homi_theme.dart';
 import '../../widgets/emergency_call_section.dart';
+import '../../widgets/homi_background_location_disclosure.dart';
 import '../../widgets/homi_controls.dart';
 
 class SafetyCheckInPage extends StatefulWidget {
@@ -156,6 +157,11 @@ class _SafetyCheckInPageState extends State<SafetyCheckInPage> {
       setState(() => _message =
           'Set Home or Work and choose at least one trusted person before turning arrival check-ins on.');
       return;
+    }
+
+    if (value) {
+      final disclosed = await showHomiBackgroundLocationDisclosure(context);
+      if (!mounted || !disclosed) return;
     }
 
     setState(() {

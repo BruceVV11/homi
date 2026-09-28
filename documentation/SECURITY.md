@@ -1,9 +1,9 @@
 # Homi security architecture
 
-Date: 2026-09-27
-Current development candidate: `0.13.0+17`
-Branch: `homi-0.13-billing-entitlements`
-Stacked base: accepted 0.12 merge `6a97eb23956da97cfe8266008c0827a303eec72c`
+Date: 2026-09-28
+Current development candidate: `0.13.4+22`
+Branch: `homi-0.13.4-final-hardening`
+Accepted device baseline: Build 21 main `41ed58d6300c3a837bfc010a0d1fd34cc6bce669`
 
 Homi handles trusted relationships, precise location, Shared Household records and Google Play subscription state. A modified client is treated as hostile. UI visibility and local purchase callbacks are convenience state only; authorization belongs in Firebase Authentication, App Check, Cloud Functions, Firestore rules, Google Play verification and least-privilege IAM.
 
@@ -21,6 +21,9 @@ Homi handles trusted relationships, precise location, Shared Household records a
 - account deletion removes Homi-side billing mappings and raw stored tokens without falsely representing Play subscription cancellation;
 - privacy exits remain available regardless of paid state;
 - high-frequency/location/billing mutation surfaces retain server-side abuse bounds;
+- unsynced local Household edits remain durable until the exact Firestore mirror succeeds;
+- device-local Homi state is excluded from Android cloud backup and device-to-device transfer;
+- background-location permission is preceded by Homi's prominent in-app disclosure;
 - release scripts fail closed on wrong project/runtime/export/test/provider identity.
 
 ## Permanent backend identity
@@ -76,6 +79,26 @@ A People label cannot manufacture Household access. Household membership also do
 Allowed domains are `routine`, `supply`, `homeThing`, `homeEvent`, and `utilityReading`. Rules enforce deterministic document identity, a fixed/versioned envelope, authenticated actor and server request timestamp.
 
 The safe first-sync strategy remains unchanged: an authoritative non-cache empty server collection is required for the narrow first-owner import; unmatched data on a member joining another/existing Household remains private legacy data rather than being silently uploaded. Explicit local-only mode suppresses this synchronizer.
+
+Build 22 adds a device-local pending mutation journal before Firestore writes. The journal is scoped to the signed-in UID and canonical Household. Pending upserts and deletes remain protected from authoritative snapshot replacement across process death and clear only after the exact matching Firestore operation succeeds. A newer edit for the same item cannot be cleared by an older in-flight completion.
+
+## Device-local storage and Android backup boundary
+
+Homi intentionally keeps several categories of state device-local, including local-only Household records, cached location/check-in state, notification/device registration preferences and pending Household sync intent.
+
+The Android host is intentionally untracked, so `tool/prepare_android_release.ps1` applies the release boundary before each AAB build:
+
+- `android:allowBackup="false"`;
+- Android 11-and-lower `fullBackupContent` exclusions;
+- Android 12+ `dataExtractionRules` exclusions for cloud backup and device-to-device transfer;
+- all private app files/databases/SharedPreferences and device-protected equivalents excluded;
+- the established notification drawable preservation/default FCM icon preparation retained.
+
+This prevents local Homi state or device-specific registration state from being silently restored onto another device. Cloud-backed identity and canonical collaboration state are restored through authenticated Homi/Firebase flows instead.
+
+## Background-location disclosure boundary
+
+Before Homi may request background location for Live Location or Arrival Check-ins, Build 22 presents a branded prominent disclosure explaining that location is collected for those features even when Homi is closed or not in use, how sharing is scoped, and that either feature can be turned off. Declining the disclosure does not change Android permissions or enable background behavior.
 
 ## Shared one-off Tasks
 
@@ -214,12 +237,14 @@ Privacy/location revoke/local erase/Household leave where permitted remain indep
 
 ## Firestore security gates
 
-0.13 adds two billing boundary tests to the existing 23. The governed emulator suite is expected to contain exactly **25/25** tests:
+The governed emulator harness now declares exactly **26/26** tests:
 
-- 13 established server-boundary tests;
+- 14 server-boundary tests, including the verified-location boundary;
 - 8 canonical Household/data-plane tests;
 - 2 canonical shared-task query tests;
 - 2 Homi+ billing tests.
+
+`scripts/test-firestore-security.sh` fails closed if the declared test count is not exactly 26 before starting the emulator.
 
 The billing tests prove:
 
@@ -235,9 +260,9 @@ The dependency-loaded pure Node policy suite is expected to contain **17/17** te
 
 The source includes `check_policy_test_count.js`; the Functions `pretest` refuses to run a stale suite unless those two policy files declare exactly 17 tests.
 
-An earlier source-level pure-policy preflight passed **16/16** under Node 22 before the exact Household paid-capacity regression test was added. The current candidate requires **17/17** and has not yet been claimed against the exact post-fix head.
+The deployed 0.13 backend baseline has passed the current **17/17** pure policy suite under Node 22. Build 22 changes no Functions or Firestore Rules, so it does not require another backend deployment.
 
-0.13 adds six billing exports to the 0.12 expected 37, giving an exact expected Functions surface of **43**.
+The governed Functions surface remains exactly **43** exports.
 
 The deploy helper refuses billing deployment until it proves:
 
@@ -263,15 +288,11 @@ Enforcement must not activate until real Play Internal Testing proves purchase, 
 
 ## Production security/compliance gates still required
 
-- 0.12 exact-head merge/governed Firebase deployment and runtime acceptance;
-- final 0.13 Windows analyzer/tests plus Node 22 / 17 policy / 43-export / Firestore 25 gates;
-- real Play product/base-plan catalog and Play API access;
-- RTDN Pub/Sub setup;
-- store-installed billing lifecycle proof including out-of-app resubscribe/account resolution;
-- permanent release signing / Play App Signing fingerprints;
-- Play-installed Google Sign-In;
-- production Maps/Places restrictions;
+- final Build 22 Windows analyzer/tests and Play Internal Testing acceptance;
+- governed Firestore **26/26** emulator gate before a rules change or public-launch security sign-off;
+- remaining Homi+ lifecycle proof, including restore/reinstall, cancellation/grace/hold/expiry, Duo/Household coverage and replacement-lineage cases;
+- paid enforcement only after that lifecycle gate is accepted;
 - Play Integrity App Check and staged Firestore App Check enforcement after valid release-client metrics;
 - Cloud Billing budgets/alerts/monitoring;
 - public Privacy Policy, Terms and external account-deletion resources;
-- Google Play Data Safety and background-location disclosure/declaration/review evidence.
+- Google Play Data Safety and background-location declaration/review video using the Build 22 disclosure flow.

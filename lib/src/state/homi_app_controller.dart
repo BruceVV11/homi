@@ -678,15 +678,24 @@ class HomiAppController extends ChangeNotifier {
     homeEvents = <HomeEvent>[];
     utilityReadings = <UtilityReading>[];
 
-    await Future.wait(<Future<bool>>[
-      _prefs?.remove(_quickItemsKey) ?? Future<bool>.value(false),
-      _prefs?.remove(_tasksKey) ?? Future<bool>.value(false),
-      _prefs?.remove(_routinesKey) ?? Future<bool>.value(false),
-      _prefs?.remove(_suppliesKey) ?? Future<bool>.value(false),
-      _prefs?.remove(_homeThingsKey) ?? Future<bool>.value(false),
-      _prefs?.remove(_homeEventsKey) ?? Future<bool>.value(false),
-      _prefs?.remove(_utilityReadingsKey) ?? Future<bool>.value(false),
-    ]);
+    final prefs = _prefs;
+    if (prefs != null) {
+      final householdSyncKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('homi.householdSync.'))
+          .toList(growable: false);
+
+      await Future.wait(<Future<bool>>[
+        prefs.remove(_quickItemsKey),
+        prefs.remove(_tasksKey),
+        prefs.remove(_routinesKey),
+        prefs.remove(_suppliesKey),
+        prefs.remove(_homeThingsKey),
+        prefs.remove(_homeEventsKey),
+        prefs.remove(_utilityReadingsKey),
+        ...householdSyncKeys.map(prefs.remove),
+      ]);
+    }
     notifyListeners();
   }
 

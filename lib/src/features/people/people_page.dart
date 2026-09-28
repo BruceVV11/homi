@@ -15,6 +15,7 @@ import '../../services/household_service.dart';
 import '../../services/location_status_service.dart';
 import '../../services/trusted_people_service.dart';
 import '../../theme/homi_theme.dart';
+import '../../widgets/homi_background_location_disclosure.dart';
 import '../../widgets/homi_controls.dart';
 import '../../widgets/homi_page.dart';
 import 'people_map_page.dart';
@@ -386,6 +387,10 @@ class _PeoplePageState extends State<PeoplePage>
       return;
     }
     if (_busy) return;
+
+    final disclosed = await showHomiBackgroundLocationDisclosure(context);
+    if (!mounted || !disclosed) return;
+
     setState(() {
       _busy = true;
       _error = null;

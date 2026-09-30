@@ -66,9 +66,8 @@ Future<void> _bootstrapHomi() async {
   }
 
   if (_sentrySmokeTest && _sentryDsn.isNotEmpty) {
-    await Sentry.captureMessage(
-      'Concept Lab Sentry smoke test',
-      level: SentryLevel.info,
+    await Sentry.captureException(
+      StateError('Concept Lab Sentry smoke test'),
     );
   }
 

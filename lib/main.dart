@@ -3,14 +3,38 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'src/app.dart';
 import 'src/services/emergency_region_service.dart';
 import 'src/services/notification_service.dart';
 
+const _sentryDsn = String.fromEnvironment('SENTRY_DSN');
+const _sentryEnvironment = String.fromEnvironment(
+  'SENTRY_ENVIRONMENT',
+  defaultValue: 'development',
+);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  if (_sentryDsn.isEmpty) {
+    await _bootstrapHomi();
+    return;
+  }
+
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = _sentryDsn;
+      options.environment = _sentryEnvironment;
+      options.sendDefaultPii = false;
+      options.tracesSampleRate = 0.1;
+    },
+    appRunner: _bootstrapHomi,
+  );
+}
+
+Future<void> _bootstrapHomi() async {
   // Emergency numbers are an offline safety preference and must remain
   // available even when Firebase cannot initialize.
   await EmergencyRegionService.instance.initialize();
@@ -29,8 +53,11 @@ Future<void> main() async {
           : const AndroidPlayIntegrityProvider(),
     );
     firebaseReady = true;
-  } catch (error) {
+  } catch (error, stackTrace) {
     firebaseError = error;
+    if (_sentryDsn.isNotEmpty) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+    }
   }
 
   runApp(

@@ -34,6 +34,10 @@ Future<void> main() async {
       options.environment = _sentryEnvironment;
       options.sendDefaultPii = false;
       options.tracesSampleRate = 0.1;
+      if (_sentrySmokeTest) {
+        options.debug = true;
+        options.diagnosticLevel = SentryLevel.debug;
+      }
     },
     appRunner: _bootstrapHomi,
   );
@@ -65,16 +69,19 @@ Future<void> _bootstrapHomi() async {
     }
   }
 
-  if (_sentrySmokeTest && _sentryDsn.isNotEmpty) {
-    await Sentry.captureException(
-      StateError('Concept Lab Sentry smoke test'),
-    );
-  }
-
   runApp(
     HomiApp(
       firebaseReady: firebaseReady,
       firebaseError: firebaseError,
     ),
   );
+
+  if (_sentrySmokeTest && _sentryDsn.isNotEmpty) {
+    await Future<void>.delayed(const Duration(seconds: 2));
+    final eventId = await Sentry.captureException(
+      StateError('Concept Lab Sentry smoke test'),
+    );
+    debugPrint('SENTRY_SMOKE_EVENT_ID=$eventId');
+    await Future<void>.delayed(const Duration(seconds: 5));
+  }
 }

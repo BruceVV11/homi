@@ -18,6 +18,7 @@ const _sentryEnvironment = String.fromEnvironment(
   'SENTRY_ENVIRONMENT',
   defaultValue: kReleaseMode ? 'production' : 'development',
 );
+const _sentrySmokeTest = bool.fromEnvironment('SENTRY_SMOKE_TEST');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,6 +63,13 @@ Future<void> _bootstrapHomi() async {
     if (_sentryDsn.isNotEmpty) {
       await Sentry.captureException(error, stackTrace: stackTrace);
     }
+  }
+
+  if (_sentrySmokeTest && _sentryDsn.isNotEmpty) {
+    await Sentry.captureMessage(
+      'Concept Lab Sentry smoke test',
+      level: SentryLevel.info,
+    );
   }
 
   runApp(

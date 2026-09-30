@@ -23,6 +23,11 @@ tasks:
     cmds:
       - fvm flutter run
 
+  sentry-smoke:
+    desc: Launch Homi and emit one controlled Sentry development event
+    cmds:
+      - fvm flutter run --dart-define=SENTRY_SMOKE_TEST=true
+
   maestro:
     desc: Run Homi device smoke tests
     cmds:

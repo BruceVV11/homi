@@ -1,0 +1,35 @@
+version: '3'
+
+tasks:
+  default:
+    desc: Show available Homi tasks
+    cmds:
+      - task --list
+
+  setup:
+    desc: Install the pinned Flutter SDK and project packages
+    cmds:
+      - fvm install
+      - fvm flutter pub get
+
+  check:
+    desc: Run Homi analyzer and tests with the pinned Flutter SDK
+    cmds:
+      - fvm flutter analyze
+      - fvm flutter test
+
+  run:
+    desc: Run Homi with the pinned Flutter SDK
+    cmds:
+      - fvm flutter run
+
+  maestro:
+    desc: Run Homi device smoke tests
+    cmds:
+      - maestro test .maestro
+
+  release-prep:
+    desc: Run the existing Homi Android release hardening step
+    platforms: [windows]
+    cmds:
+      - powershell -ExecutionPolicy Bypass -File tool/prepare_android_release.ps1

@@ -9,7 +9,7 @@ tasks:
   setup:
     desc: Install the pinned Flutter SDK and project packages
     cmds:
-      - powershell -NoProfile -Command "$v=(Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock' -Name AllowDevelopmentWithoutDevLicense -ErrorAction SilentlyContinue).AllowDevelopmentWithoutDevLicense; if($v -ne 1){Write-Error 'Windows Developer Mode is required for FVM project symlinks. Enable Settings > System > Advanced > For developers > Developer Mode, then reopen the terminal.'; exit 1}"
+      - powershell -NoProfile -Command "if((Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock' -Name 'AllowDevelopmentWithoutDevLicense' -ErrorAction SilentlyContinue) -ne 1){Write-Error 'Windows Developer Mode is required for FVM project symlinks. Enable Settings > System > Advanced > For developers > Developer Mode, then reopen the terminal.'; exit 1}"
       - fvm install
       - fvm flutter pub get
 

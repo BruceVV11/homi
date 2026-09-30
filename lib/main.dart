@@ -9,10 +9,14 @@ import 'src/app.dart';
 import 'src/services/emergency_region_service.dart';
 import 'src/services/notification_service.dart';
 
-const _sentryDsn = String.fromEnvironment('SENTRY_DSN');
+const _defaultSentryDsn = 'https://20524d809d18b5444261c3d244dd93f8@o4512176028581888.ingest.de.sentry.io/4512177509105744';
+const _sentryDsn = String.fromEnvironment(
+  'SENTRY_DSN',
+  defaultValue: _defaultSentryDsn,
+);
 const _sentryEnvironment = String.fromEnvironment(
   'SENTRY_ENVIRONMENT',
-  defaultValue: 'development',
+  defaultValue: kReleaseMode ? 'production' : 'development',
 );
 
 Future<void> main() async {

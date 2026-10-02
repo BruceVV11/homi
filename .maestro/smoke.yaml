@@ -1,0 +1,5 @@
+appId: za.co.theconceptlab.homi
+---
+- launchApp:
+    clearState: false
+- waitForAnimationToEnd

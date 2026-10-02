@@ -1,0 +1,4 @@
+pre-push:
+  jobs:
+    - name: local-quality
+      run: task quality

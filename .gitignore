@@ -38,3 +38,10 @@ key.properties
 # OS
 .DS_Store
 Thumbs.db
+
+
+# FVM local SDK link/cache
+.fvm/
+
+# Maestro local output
+.maestro/.maestro/

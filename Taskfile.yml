@@ -1,0 +1,62 @@
+version: '3'
+
+env:
+  PUB_CACHE: 'C:\ConceptLab\.pub-cache'
+
+tasks:
+  default:
+    desc: Show available Homi tasks
+    cmds:
+      - task --list
+
+  setup:
+    desc: Install the pinned Flutter SDK and project packages
+    cmds:
+      - powershell -NoProfile -Command "New-Item -ItemType Directory -Force 'C:\ConceptLab\.pub-cache' | Out-Null"
+      - powershell -NoProfile -Command "if((Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock' -Name 'AllowDevelopmentWithoutDevLicense' -ErrorAction SilentlyContinue) -ne 1){Write-Error 'Windows Developer Mode is required for FVM project symlinks. Enable Settings > System > Advanced > For developers > Developer Mode, then reopen the terminal.'; exit 1}"
+      - fvm install
+      - fvm flutter pub get
+
+  check:
+    desc: Run Homi analyzer and tests with the pinned Flutter SDK
+    cmds:
+      - fvm flutter analyze
+      - fvm flutter test
+
+  run:
+    desc: Run Homi with the pinned Flutter SDK
+    cmds:
+      - fvm flutter run
+
+  sentry-smoke:
+    desc: Launch Homi and emit one controlled Sentry development event
+    cmds:
+      - fvm flutter run --dart-define=SENTRY_SMOKE_TEST=true
+
+  powershell-check:
+    desc: Analyse maintained PowerShell scripts
+    platforms: [windows]
+    cmds:
+      - powershell -NoProfile -Command "if(@(Invoke-ScriptAnalyzer -Path 'tool' -Recurse -Severity Error,Warning).Count -gt 0){Invoke-ScriptAnalyzer -Path 'tool' -Recurse -Severity Error,Warning | Format-Table -AutoSize; exit 1}"
+
+  quality:
+    desc: Run the local pre-push quality gate
+    cmds:
+      - task: check
+      - task: powershell-check
+
+  hooks:
+    desc: Install this repository's Lefthook Git hooks
+    cmds:
+      - lefthook install
+
+  maestro:
+    desc: Run Homi device smoke tests
+    cmds:
+      - maestro test .maestro
+
+  release-prep:
+    desc: Run the existing Homi Android release hardening step
+    platforms: [windows]
+    cmds:
+      - powershell -ExecutionPolicy Bypass -File tool/prepare_android_release.ps1

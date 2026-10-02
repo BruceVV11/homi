@@ -37,7 +37,7 @@ tasks:
     desc: Analyse maintained PowerShell scripts
     platforms: [windows]
     cmds:
-      - powershell -NoProfile -Command "Invoke-ScriptAnalyzer -Path 'tool' -Recurse -Severity Error,Warning"
+      - powershell -NoProfile -Command "if(@(Invoke-ScriptAnalyzer -Path 'tool' -Recurse -Severity Error,Warning).Count -gt 0){Invoke-ScriptAnalyzer -Path 'tool' -Recurse -Severity Error,Warning | Format-Table -AutoSize; exit 1}"
 
   quality:
     desc: Run the local pre-push quality gate

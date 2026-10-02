@@ -9,7 +9,7 @@ import 'src/app.dart';
 import 'src/services/emergency_region_service.dart';
 import 'src/services/notification_service.dart';
 
-const _defaultSentryDsn = 'https://20524d809d18b5444261c3d244dd93f8@o4512176028581888.ingest.de.sentry.io/4512177509105744';
+const _defaultSentryDsn = 'https://6a9cb3f8a3bb861c6265ff375926dc5f@o4512176028581888.ingest.de.sentry.io/4512177516838992';
 const _sentryDsn = String.fromEnvironment(
   'SENTRY_DSN',
   defaultValue: _defaultSentryDsn,

@@ -33,6 +33,23 @@ tasks:
     cmds:
       - fvm flutter run --dart-define=SENTRY_SMOKE_TEST=true
 
+  powershell-check:
+    desc: Analyse maintained PowerShell scripts
+    platforms: [windows]
+    cmds:
+      - powershell -NoProfile -Command "Invoke-ScriptAnalyzer -Path 'tool' -Recurse -Severity Error,Warning"
+
+  quality:
+    desc: Run the local pre-push quality gate
+    cmds:
+      - task: check
+      - task: powershell-check
+
+  hooks:
+    desc: Install this repository's Lefthook Git hooks
+    cmds:
+      - lefthook install
+
   maestro:
     desc: Run Homi device smoke tests
     cmds:
